@@ -1,0 +1,110 @@
+@import 'tailwindcss';
+
+/* Dark mode is driven by a class on <html> so the choice can be persisted. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-surface: #ffffff;
+  --color-surface-2: #f2f4f7;
+  --color-surface-3: #e7eaef;
+  --color-line: #d8dde4;
+  --color-ink: #1b2027;
+  --color-ink-2: #5b6570;
+  --color-accent: #2f7fd1;
+  --color-track: #e2622a;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+  --color-surface: #1c2128;
+  --color-surface-2: #161a20;
+  --color-surface-3: #252c35;
+  --color-line: #333c47;
+  --color-ink: #e6e9ee;
+  --color-ink-2: #9aa5b1;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--color-surface-2);
+  color: var(--color-ink);
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+}
+
+/* Thin scrollbars so the side panels read as tool panels, not web pages. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
+}
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border-radius: 5px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@layer components {
+  .panel {
+    background: var(--color-surface);
+    border-color: var(--color-line);
+  }
+  .tm-input {
+    @apply w-full rounded border px-2 py-1 text-[12px] outline-none transition;
+    background: var(--color-surface-2);
+    border-color: var(--color-line);
+    color: var(--color-ink);
+  }
+  .tm-input:focus {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 25%, transparent);
+  }
+  .tm-btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded border px-2.5 py-1.5 text-[12px]
+      font-medium transition select-none;
+    background: var(--color-surface-2);
+    border-color: var(--color-line);
+    color: var(--color-ink);
+  }
+  .tm-btn:hover:not(:disabled) {
+    background: var(--color-surface-3);
+  }
+  .tm-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .tm-btn-primary {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: #fff;
+  }
+  .tm-btn-primary:hover:not(:disabled) {
+    filter: brightness(1.08);
+    background: var(--color-accent);
+  }
+  .tm-label {
+    @apply text-[11px] font-medium uppercase tracking-wide;
+    color: var(--color-ink-2);
+  }
+  .tm-section {
+    @apply border-b px-3 py-3;
+    border-color: var(--color-line);
+  }
+}
