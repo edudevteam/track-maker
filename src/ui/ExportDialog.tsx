@@ -5,7 +5,7 @@ import { useProject } from '../store/useProject'
 import { Field, Section, Segmented, Toggle } from './controls'
 import { downloadBlob, exportParts, type ExportFormat, type ExportPart } from '../export/exporters'
 import { getConnectorGeometry, getTrackGeometry } from '../geometry/cache'
-import { laneOffsets } from '../geometry/parts'
+import { connectorOffsets } from '../geometry/parts'
 import { localPortFrame, pieceMatrix } from '../lib/ports'
 import { ownsConnector } from '../lib/connectors'
 import type { PortId } from '../types'
@@ -45,8 +45,8 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         const lateral = Z_AXIS.clone().applyQuaternion(frame.quaternion)
         const origin = frame.position.clone().addScaledVector(outward, -dims.connector.length / 2)
         origin.y = dims.assembly.fitClearance
-        const offsets = laneOffsets(piece, dims)
-        offsets.forEach((v, lane) => {
+        const offsets = connectorOffsets(piece, dims)
+        offsets.forEach((v, index) => {
           const local = new THREE.Matrix4().compose(
             origin.clone().addScaledVector(lateral, v),
             frame.quaternion,
@@ -55,7 +55,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           out.push({
             name:
               offsets.length > 1
-                ? `${piece.name} clip ${port.toUpperCase()} lane ${lane + 1}`
+                ? `${piece.name} clip ${port.toUpperCase()} ${index === 0 ? 'left' : 'right'}`
                 : `${piece.name} clip ${port.toUpperCase()}`,
             geometry: connGeom,
             matrix: matrix.clone().multiply(local),

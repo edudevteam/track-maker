@@ -20,6 +20,20 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.0.11] — 2026-09-09
+
+### Changed
+
+- A joint now carries at most two clips. A 1-lane piece still gets a single clip
+  on its centreline and a 2-lane piece gets one per lane, but a 3-lane, 4-lane or
+  wider piece is clipped only on its two outside lanes instead of every lane —
+  fewer parts to print and fit for no loss of hold. The underside still has a
+  T-slot on every lane centre, so a wide piece can still be clipped to narrow
+  neighbours anywhere across its width. Exported clips for a wide piece are now
+  named `left` / `right` rather than `lane 1` … `lane N`.
+
+---
+
 ## [1.0.10] — 2026-09-09
 
 ### Changed

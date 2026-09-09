@@ -92,8 +92,22 @@ export function counterSinkRadius(d: Dimensions): number {
 /** Lateral offsets of each lane's T-slot centre, in the piece's local frame. */
 export function laneOffsets(piece: Piece, d: Dimensions): number[] {
   const pitch = d.track.channelTopWidth + 2 * d.track.wallThickness
-  const half = (pitch * piece.lanes) / 2
-  return Array.from({ length: piece.lanes }, (_, i) => -half + pitch * (i + 0.5))
+  const lanes = Math.max(1, Math.round(piece.lanes))
+  const half = (pitch * lanes) / 2
+  return Array.from({ length: lanes }, (_, i) => -half + pitch * (i + 0.5))
+}
+
+/**
+ * Lateral offsets of the clips fitted at one port.
+ *
+ * The underside keeps a T-slot on every lane centre, but a joint only ever gets
+ * two clips: the outermost lanes. Three or more clips add print time and
+ * assembly fiddle without holding the joint any straighter.
+ */
+export function connectorOffsets(piece: Piece, d: Dimensions): number[] {
+  const offsets = laneOffsets(piece, d)
+  if (offsets.length <= 2) return offsets
+  return [offsets[0], offsets[offsets.length - 1]]
 }
 
 /** A simple die-cast-style car for the gravity preview. Sized to the channel width. */

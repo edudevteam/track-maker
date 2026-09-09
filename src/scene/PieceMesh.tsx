@@ -4,7 +4,7 @@ import type { ThreeEvent } from '@react-three/fiber'
 import type { Piece, PortId } from '../types'
 import { useProject } from '../store/useProject'
 import { getConnectorGeometry, getTrackGeometry } from '../geometry/cache'
-import { laneOffsets } from '../geometry/parts'
+import { connectorOffsets } from '../geometry/parts'
 import { laneWidth } from '../geometry/dimensions'
 import { localPortFrame } from '../lib/ports'
 import { ownsConnector } from '../lib/connectors'
@@ -52,13 +52,13 @@ export function PieceMesh({ piece }: { piece: Piece }) {
 
 /**
  * The clip that bridges a joint. It is centred on the port so half of it reaches
- * into the neighbouring piece, and repeated once per lane because a wide piece
- * carries one T-slot per lane.
+ * into the neighbouring piece. A 1-lane piece gets one; anything wider gets two,
+ * on the outermost lanes.
  */
 function ConnectorAt({ piece, port }: { piece: Piece; port: PortId }) {
   const dims = useProject((s) => s.dims)
   const geometry = getConnectorGeometry(dims, dims.connector.length)
-  const lanes = useMemo(() => laneOffsets(piece, dims), [piece.lanes, dims])
+  const lanes = useMemo(() => connectorOffsets(piece, dims), [piece.lanes, dims])
 
   const placement = useMemo(() => {
     const frame = localPortFrame(piece, port)
