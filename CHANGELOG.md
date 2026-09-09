@@ -20,6 +20,36 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.2.7] — 2026-09-09
+
+### Added
+
+- **A Show / Hide menu under Settings**, listing the panels that float over the
+  workplane — Selected Part(s) and All Parts. Each has its own tick, every one
+  is shown to begin with, and the menu row reads back how many are on screen.
+  Hiding both clears the left edge entirely.
+
+---
+
+## [1.2.6] — 2026-09-09
+
+### Changed
+
+- **The part details panel is now titled "Selected Part(s)"**, replacing the
+  wording introduced in 1.2.5.
+
+---
+
+## [1.2.5] — 2026-09-09
+
+### Changed
+
+- **The part details panel is now titled "Part Details (Selected)"**, so it
+  reads clearly as describing the currently selected piece rather than parts in
+  general.
+
+---
+
 ## [1.2.4] — 2026-09-09
 
 ### Added

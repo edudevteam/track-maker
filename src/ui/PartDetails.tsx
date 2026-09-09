@@ -28,7 +28,7 @@ export function PartDetails() {
   }, [hasSelection])
 
   return (
-    <Panel title="Part Details" open={open} onToggle={() => setOpen((v) => !v)}>
+    <Panel title="Selected Part(s)" open={open} onToggle={() => setOpen((v) => !v)}>
       <Properties />
     </Panel>
   )

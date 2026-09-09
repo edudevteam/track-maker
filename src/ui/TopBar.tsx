@@ -6,6 +6,8 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  Eye,
+  EyeOff,
   FilePlus2,
   FolderOpen,
   Image,
@@ -20,6 +22,7 @@ import {
   Undo2,
 } from 'lucide-react'
 import {
+  PANEL_ITEMS,
   PRINTER_PRESETS,
   TRACK_TYPES,
   VEHICLE_TYPES,
@@ -68,6 +71,8 @@ export function TopBar({
   const printer = useProject((s) => s.printer)
   const setPrinter = useProject((s) => s.setPrinter)
   const background = useProject((s) => s.background)
+  const panels = useProject((s) => s.panels)
+  const togglePanel = useProject((s) => s.togglePanel)
   const showPrintVolume = useProject((s) => s.showPrintVolume)
   const togglePrintVolume = useProject((s) => s.togglePrintVolume)
   const newProject = useProject((s) => s.newProject)
@@ -230,6 +235,22 @@ export function TopBar({
           </Submenu>
         </Submenu>
         <MenuSeparator />
+        <Submenu
+          icon={<Eye size={13} />}
+          label="Show / Hide"
+          hint={panelHint(PANEL_ITEMS.filter((p) => panels[p.value]).length, PANEL_ITEMS.length)}
+        >
+          {PANEL_ITEMS.map((p) => (
+            <CheckItem
+              key={p.value}
+              icon={<EyeOff size={13} />}
+              label={p.label}
+              checked={panels[p.value]}
+              onClick={() => togglePanel(p.value)}
+            />
+          ))}
+        </Submenu>
+        <MenuSeparator />
         <MenuItem
           icon={<Image size={13} />}
           label="Background…"
@@ -302,6 +323,13 @@ export function TopBar({
       )}
     </header>
   )
+}
+
+/** How the Show / Hide row reads when the menu is shut — all shown, or how many. */
+function panelHint(shown: number, total: number) {
+  if (shown === total) return 'All shown'
+  if (shown === 0) return 'All hidden'
+  return `${shown} of ${total} shown`
 }
 
 /** A named drop-down in the top bar. Closes on Escape, on a pick, or on a click outside. */

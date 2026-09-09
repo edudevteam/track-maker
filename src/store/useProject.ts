@@ -50,6 +50,15 @@ export const vehicleLabel = (v: VehicleType) =>
 
 export type BackgroundMode = 'theme' | 'sky' | 'solid'
 
+/** A panel that Settings ▸ Show / Hide can put on or take off the workplane. */
+export type PanelId = 'selectedPart' | 'allParts'
+
+/** The Settings ▸ Show / Hide menu, in the order the panels stack down the left edge. */
+export const PANEL_ITEMS: { value: PanelId; label: string }[] = [
+  { value: 'selectedPart', label: 'Selected Part(s)' },
+  { value: 'allParts', label: 'All Parts' },
+]
+
 /** A cool daylight gradient — enough contrast for orange track without competing with it. */
 export const DEFAULT_SKY_TOP = '#5b9bd5'
 export const DEFAULT_SKY_BOTTOM = '#dce8f2'
@@ -98,6 +107,8 @@ export interface ProjectState {
   showGrid: boolean
   showPrintVolume: boolean
   showPorts: boolean
+  /** Which workplane panels are on screen. Every one is shown to begin with. */
+  panels: Record<PanelId, boolean>
   /** Viewport backdrop. `theme` follows light/dark; `sky` draws a gradient dome. */
   background: BackgroundMode
   skyTop: string
@@ -150,6 +161,8 @@ export interface ProjectActions {
   toggleGrid: () => void
   togglePrintVolume: () => void
   togglePorts: () => void
+  /** Show or hide one of the workplane panels. */
+  togglePanel: (id: PanelId) => void
   setBackground: (mode: BackgroundMode) => void
   setSkyColors: (top: string, bottom: string) => void
   setSolidColor: (c: string) => void
@@ -240,6 +253,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
   showGrid: true,
   showPrintVolume: false,
   showPorts: true,
+  panels: { selectedPart: true, allParts: true },
   background: 'theme',
   skyTop: DEFAULT_SKY_TOP,
   skyBottom: DEFAULT_SKY_BOTTOM,
@@ -481,6 +495,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
   togglePrintVolume: () => set((s) => ({ showPrintVolume: !s.showPrintVolume })),
   togglePorts: () => set((s) => ({ showPorts: !s.showPorts })),
+  togglePanel: (id) => set((s) => ({ panels: { ...s.panels, [id]: !s.panels[id] } })),
   setBackground: (background) => set({ background }),
   setSkyColors: (skyTop, skyBottom) => set({ skyTop, skyBottom }),
   setSolidColor: (solidColor) => set({ solidColor }),

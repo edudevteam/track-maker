@@ -26,6 +26,7 @@ export function App() {
   const dropToWorkplane = useProject((s) => s.dropToWorkplane)
   const setTool = useProject((s) => s.setTool)
   const toggleGrid = useProject((s) => s.toggleGrid)
+  const panels = useProject((s) => s.panels)
 
   const dialogOpen = exporting || library || dimensions || background
 
@@ -114,11 +115,15 @@ export function App() {
       <div className="flex min-h-0 flex-1">
         <main className="relative min-w-0 flex-1">
           <Viewport />
-          {/* The panels stack down the left edge over the workplane. */}
-          <div className="absolute top-3 left-3 z-10 flex max-h-[calc(100%-24px)] w-[268px] flex-col gap-2 overflow-y-auto">
-            <PartDetails />
-            <AllParts />
-          </div>
+          {/* The panels stack down the left edge over the workplane. Settings ▸
+              Show / Hide takes any of them off; with none left the stack goes too,
+              so nothing sits over the viewport catching the pointer. */}
+          {(panels.selectedPart || panels.allParts) && (
+            <div className="absolute top-3 left-3 z-10 flex max-h-[calc(100%-24px)] w-[268px] flex-col gap-2 overflow-y-auto">
+              {panels.selectedPart && <PartDetails />}
+              {panels.allParts && <AllParts />}
+            </div>
+          )}
           <ViewTools />
           <NavHint />
         </main>
