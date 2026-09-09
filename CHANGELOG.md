@@ -20,6 +20,30 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.2.4] — 2026-09-09
+
+### Added
+
+- **A drop-to-workplane button in the toolbar**, beside Duplicate, that sits the
+  lowest point of the track flat on the workplane. With a piece selected it
+  drops the whole assembly that piece belongs to, so joints stay together;
+  with nothing selected it drops the entire build. Shortcut **D**, and it is one
+  undo step.
+
+---
+
+## [1.2.3] — 2026-09-09
+
+### Fixed
+
+- **Dragging a part with the move tool no longer makes it vanish.** The move
+  handle was throwing the part an infinite distance from the workplane the
+  instant an axis was pulled, so it left the screen and could not be brought
+  back except by undo. Parts now follow the handle, and a whole connected
+  assembly still travels together.
+
+---
+
 ## [1.2.2] — 2026-09-09
 
 ### Changed

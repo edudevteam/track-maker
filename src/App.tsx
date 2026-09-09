@@ -23,6 +23,7 @@ export function App() {
   const removeSelected = useProject((s) => s.removeSelected)
   const duplicateSelected = useProject((s) => s.duplicateSelected)
   const repeatLastPart = useProject((s) => s.repeatLastPart)
+  const dropToWorkplane = useProject((s) => s.dropToWorkplane)
   const setTool = useProject((s) => s.setTool)
   const toggleGrid = useProject((s) => s.toggleGrid)
 
@@ -74,6 +75,9 @@ export function App() {
         case 't':
           repeatLastPart()
           break
+        case 'd':
+          dropToWorkplane()
+          break
         case 'h':
           viewApi?.home()
           break
@@ -87,7 +91,17 @@ export function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [undo, redo, removeSelected, duplicateSelected, repeatLastPart, setTool, toggleGrid, dialogOpen])
+  }, [
+    undo,
+    redo,
+    removeSelected,
+    duplicateSelected,
+    repeatLastPart,
+    dropToWorkplane,
+    setTool,
+    toggleGrid,
+    dialogOpen,
+  ])
 
   return (
     <div className="flex h-full flex-col">

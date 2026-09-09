@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import {
+  ArrowDownToLine,
   Car,
   Copy,
   Link2,
@@ -83,6 +84,7 @@ export function Toolbar({ onAddPart }: { onAddPart: () => void }) {
   const repeatLastPart = useProject((s) => s.repeatLastPart)
   const duplicateSelected = useProject((s) => s.duplicateSelected)
   const removeSelected = useProject((s) => s.removeSelected)
+  const dropToWorkplane = useProject((s) => s.dropToWorkplane)
   const lastPart = useProject((s) => s.lastPart)
   const hasSelection = useProject((s) => s.selection.pieceIds.length > 0)
   const snapToPort = useProject((s) => s.snapToPort)
@@ -135,6 +137,19 @@ export function Toolbar({ onAddPart }: { onAddPart: () => void }) {
           disabled={!hasSelection}
         >
           <Copy size={15} />
+        </Action>
+        <Action
+          label="Drop to workplane"
+          hint={
+            hasSelection
+              ? 'Sit the bottom of the selected assembly on the workplane'
+              : 'Sit the bottom of the whole build on the workplane'
+          }
+          shortcut="D"
+          onClick={dropToWorkplane}
+          disabled={!hasPieces}
+        >
+          <ArrowDownToLine size={15} />
         </Action>
         <Action
           label="Delete"

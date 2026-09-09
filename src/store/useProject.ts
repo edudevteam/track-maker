@@ -21,6 +21,7 @@ import {
   type Dimensions,
 } from '../geometry/dimensions'
 import { transformToMate, worldPortFrame } from '../lib/ports'
+import { pieceBounds } from '../lib/printVolume'
 import { loadUnits, saveUnits } from '../lib/units'
 import type { ProjectDocument } from '../export/project'
 
@@ -130,6 +131,12 @@ export interface ProjectActions {
   updatePiece: (id: string, patch: Partial<Piece>) => void
   removeSelected: () => void
   duplicateSelected: () => void
+
+  /**
+   * Sit the lowest point of the track on the workplane. Acts on the selected
+   * assemblies, or on the whole build when nothing is selected.
+   */
+  dropToWorkplane: () => void
 
   select: (ids: string[], additive?: boolean) => void
   setAnchor: (a: GizmoAnchor) => void
@@ -364,6 +371,32 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
         }),
       )
     set({ pieces: [...pieces, ...copies], selection: { pieceIds: copies.map((c) => c.id), anchor: 'middle' } })
+  },
+
+  dropToWorkplane: () => {
+    const { pieces, selection, dims, commit } = get()
+    if (!pieces.length) return
+
+    // A joined neighbour has to come along, or the drop would pull the joint
+    // apart — so the selection grows to the assemblies it belongs to.
+    const moving = selection.pieceIds.length
+      ? new Set(selection.pieceIds.flatMap((id) => [...collectGroup(pieces, id)]))
+      : new Set(pieces.map((p) => p.id))
+    const measured = pieces.filter((p) => moving.has(p.id) && p.visible)
+    // Nothing on screen to measure: a hidden piece keeps whatever height it has.
+    if (!measured.length) return
+
+    const drop = Math.min(...measured.map((p) => pieceBounds(p, dims).min.y))
+    if (Math.abs(drop) < 1e-6) return
+
+    commit()
+    set({
+      pieces: pieces.map((p) =>
+        moving.has(p.id)
+          ? { ...p, position: [p.position[0], p.position[1] - drop, p.position[2]] as Vec3 }
+          : p,
+      ),
+    })
   },
 
   select: (ids, additive = false) =>

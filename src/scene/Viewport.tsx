@@ -142,6 +142,9 @@ function Gizmo() {
     if (!start) return
     proxy.current.updateMatrixWorld(true)
     const delta = proxy.current.matrixWorld.clone().multiply(start.matrix.clone().invert())
+    // A bad frame would otherwise push the whole assembly out to infinity, where
+    // there is nothing left on screen to drag back.
+    if (!delta.elements.every(Number.isFinite)) return
     for (const p of start.group) {
       const before = new THREE.Matrix4().compose(
         new THREE.Vector3(...p.position),
@@ -159,17 +162,26 @@ function Gizmo() {
   }
 
   return (
-    <TransformControls
-      object={proxy.current}
-      mode={tool === 'rotate' ? 'rotate' : 'translate'}
-      size={0.85}
-      onMouseDown={onMouseDown}
-      onMouseUp={() => {
-        navState.gizmoDragging = false
-        startRef.current = null
-      }}
-      onObjectChange={onChange}
-    />
+    <>
+      {/*
+        The proxy has to sit in the scene, not just in a ref. A move drag is
+        scaled by the handle's parent scale, and a parentless object reports that
+        as zero — every drag then divides by zero and throws the piece out to
+        infinity, which reads on screen as the part vanishing the moment it moves.
+      */}
+      <primitive object={proxy.current} />
+      <TransformControls
+        object={proxy.current}
+        mode={tool === 'rotate' ? 'rotate' : 'translate'}
+        size={0.85}
+        onMouseDown={onMouseDown}
+        onMouseUp={() => {
+          navState.gizmoDragging = false
+          startRef.current = null
+        }}
+        onObjectChange={onChange}
+      />
+    </>
   )
 }
 
