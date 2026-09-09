@@ -4,6 +4,7 @@ import { X } from 'lucide-react'
 import { useProject } from '../store/useProject'
 import { Field, Section, Segmented, Toggle } from './controls'
 import { downloadBlob, exportParts, type ExportFormat, type ExportPart } from '../export/exporters'
+import { safeBaseName } from '../export/project'
 import { getConnectorGeometry, getTrackGeometry } from '../geometry/cache'
 import { connectorOffsets } from '../geometry/parts'
 import { localPortFrame, pieceMatrix } from '../lib/ports'
@@ -83,8 +84,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
     setTimeout(() => {
       try {
         const blob = exportParts(parts, format, zUp)
-        const safe = projectName.trim().replace(/[^a-z0-9-_ ]/gi, '').replace(/\s+/g, '-') || 'track'
-        downloadBlob(blob, `${safe}.${format}`)
+        downloadBlob(blob, `${safeBaseName(projectName)}.${format}`)
         onClose()
       } finally {
         setBusy(false)

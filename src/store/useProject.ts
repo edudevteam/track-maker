@@ -8,6 +8,7 @@ import {
   type Dimensions,
 } from '../geometry/dimensions'
 import { transformToMate, worldPortFrame } from '../lib/ports'
+import type { ProjectDocument } from '../export/project'
 
 export const PRINTER_PRESETS: PrinterPreset[] = [
   { id: 'bambu-256', name: 'Bambu P1/X1 · 256³', size: [256, 256, 256] },
@@ -103,6 +104,8 @@ export interface ProjectActions {
   redo: () => void
   clearAll: () => void
   loadPieces: (pieces: Piece[]) => void
+  /** Replace the whole build with a project read from a `.tm.json` file. */
+  loadProject: (doc: ProjectDocument) => void
 }
 
 function makePiece(dims: Dimensions, init: Partial<Piece> = {}): Piece {
@@ -383,6 +386,27 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
     set({ pieces: [], selection: { pieceIds: [], anchor: 'middle' }, activePort: null, car: { pieceId: null, s: 0, v: 0, running: false } })
   },
   loadPieces: (pieces) => set({ pieces, selection: { pieceIds: [], anchor: 'middle' }, history: [], future: [] }),
+
+  loadProject: (doc) => {
+    const preset = PRINTER_PRESETS.find((p) => p.id === doc.printerId) ?? PRINTER_PRESETS[0]
+    set({
+      projectName: doc.name,
+      trackType: doc.trackType,
+      dims: doc.dims,
+      pieces: doc.pieces,
+      printer: preset.id === 'custom' ? { ...preset, size: doc.customPrinterSize } : preset,
+      customPrinterSize: doc.customPrinterSize,
+      gravity: doc.gravity,
+      friction: doc.friction,
+      // An opened file starts a fresh session: nothing selected, nothing to undo past.
+      selection: { pieceIds: [], anchor: 'middle' },
+      activePort: null,
+      tool: 'select',
+      car: { pieceId: null, s: 0, v: 0, running: false },
+      history: [],
+      future: [],
+    })
+  },
 }))
 
 /** Every piece reachable through links from `startId` — a connected assembly. */

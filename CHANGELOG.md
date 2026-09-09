@@ -20,6 +20,35 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.0.12] — 2026-09-09
+
+### Added
+
+- **Save and Open.** Two buttons sit next to the project name in the top bar.
+  Save writes the whole build to a `<project title>.tm.json` file in your
+  downloads — the title field supplies the filename, so "My Big Track" saves as
+  `My-Big-Track.tm.json`. Open reads one back. ⌘S and ⌘O do the same thing.
+- A saved file carries the project title, the track type, every dimension from
+  the Dims panel, all pieces with their positions, colours, clips and joints,
+  the chosen printer and build volume, and the gravity and friction settings.
+  Selection, the active tool and the undo history are session state and are not
+  saved — an opened project starts clean, with nothing selected.
+- Opening a project replaces the current build, so it asks first when there is
+  something on the workplane to lose.
+- Files stay readable across versions: a project saved before a dimension
+  existed opens with today's default for that dimension rather than failing.
+  A file that is not a Track Maker project, or one saved by a newer version
+  than you are running, is refused with a message in the top bar instead of
+  loading a broken build. A joint whose other half is missing is dropped on
+  open, so a hand-edited file cannot leave a piece clipped to nothing.
+
+### Changed
+
+- The printing export and the save file now build their filename the same way,
+  so `My-Big-Track.3mf` and `My-Big-Track.tm.json` land side by side.
+
+---
+
 ## [1.0.11] — 2026-09-09
 
 ### Changed
