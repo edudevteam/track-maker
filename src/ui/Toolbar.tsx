@@ -19,6 +19,30 @@ import { BuildDetails } from './BuildDetails'
 import { Tooltip } from './controls'
 import type { ToolId } from '../types'
 
+/** A steering wheel drawn in the lucide style — lucide has no icon for one. */
+function SteeringWheel({ size = 15 }: { size?: number }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="3" />
+      <path d="M2 12h7" />
+      <path d="M15 12h7" />
+      <path d="M12 15v7" />
+    </svg>
+  )
+}
+
 interface ModeSpec {
   id: ToolId
   icon: typeof MousePointer2
@@ -143,6 +167,10 @@ export function Toolbar({ onAddPart }: { onAddPart: () => void }) {
       </Group>
 
       <Group>
+        <BuildDetails />
+      </Group>
+
+      <Group>
         <Latch
           label={`${vehicleLabel(vehicle)} on the track`}
           hint={
@@ -158,7 +186,21 @@ export function Toolbar({ onAddPart }: { onAddPart: () => void }) {
         >
           <Car size={15} />
         </Latch>
-        <BuildDetails />
+        <Tooltip title="Simulator" body="Under development.">
+          <button
+            aria-label="Simulator"
+            aria-disabled
+            onClick={() => {}}
+            className="grid h-[34px] w-[34px] place-items-center rounded border opacity-45 transition"
+            style={{
+              background: 'var(--color-surface-2)',
+              borderColor: 'var(--color-line)',
+              color: 'var(--color-ink)',
+            }}
+          >
+            <SteeringWheel />
+          </button>
+        </Tooltip>
       </Group>
 
       <div className="flex min-w-0 flex-1 items-center pl-1">

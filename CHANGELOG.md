@@ -20,6 +20,36 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.2.2] — 2026-09-09
+
+### Changed
+
+- **The build details button now stands in its own toolbar group**, with the car
+  and the steering wheel boxed together beside it, so the readout reads apart
+  from the two vehicle buttons.
+
+---
+
+## [1.2.1] — 2026-09-09
+
+### Added
+
+- **A steering wheel button sits to the right of the car in the toolbar** — the
+  simulator toggle. It is dimmed and does nothing yet; hovering it says
+  "Simulator — under development."
+
+---
+
+## [1.2.0] — 2026-09-09
+
+### Changed
+
+- **The build details button now sits to the left of the car button** in the
+  toolbar, so the pair reads details first, vehicle second. The details panel
+  still opens beneath its button.
+
+---
+
 ## [1.1.20] — 2026-09-09
 
 ### Added
