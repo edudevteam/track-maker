@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import {
+  Car,
   Copy,
   Link2,
   Link2Off,
@@ -13,7 +14,7 @@ import {
   Trash2,
   Undo2,
 } from 'lucide-react'
-import { useProject } from '../store/useProject'
+import { useProject, vehicleLabel } from '../store/useProject'
 import { Tooltip } from './controls'
 import type { ToolId } from '../types'
 
@@ -61,6 +62,10 @@ export function Toolbar({ onAddPart }: { onAddPart: () => void }) {
   const hasSelection = useProject((s) => s.selection.pieceIds.length > 0)
   const snapToPort = useProject((s) => s.snapToPort)
   const setSnapToPort = useProject((s) => s.setSnapToPort)
+  const vehicle = useProject((s) => s.vehicle)
+  const showVehicle = useProject((s) => s.showVehicle)
+  const toggleVehicle = useProject((s) => s.toggleVehicle)
+  const hasPieces = useProject((s) => s.pieces.length > 0)
 
   return (
     <div
@@ -136,6 +141,24 @@ export function Toolbar({ onAddPart }: { onAddPart: () => void }) {
         </Latch>
       </Group>
 
+      <Group>
+        <Latch
+          label={`${vehicleLabel(vehicle)} on the track`}
+          hint={
+            showVehicle
+              ? 'Shown — click to hide it. It keeps its place on the track.'
+              : hasPieces
+                ? 'Hidden — click to show it and let it run.'
+                : 'Add a part first, then the vehicle has somewhere to sit.'
+          }
+          active={showVehicle}
+          disabled={!hasPieces}
+          onClick={toggleVehicle}
+        >
+          <Car size={15} />
+        </Latch>
+      </Group>
+
       <div className="flex min-w-0 flex-1 items-center pl-1">
         <p className="truncate text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
           {[...MODES, ...JOINTS].find((t) => t.id === tool)?.hint}
@@ -191,6 +214,7 @@ function Latch({
   hint,
   shortcut,
   active,
+  disabled,
   onClick,
   children,
 }: {
@@ -198,6 +222,7 @@ function Latch({
   hint: string
   shortcut?: string
   active: boolean
+  disabled?: boolean
   onClick: () => void
   children: ReactNode
 }) {
@@ -206,8 +231,9 @@ function Latch({
       <button
         aria-label={label}
         aria-pressed={active}
+        disabled={disabled}
         onClick={onClick}
-        className="grid h-[34px] w-[34px] place-items-center rounded border transition"
+        className="grid h-[34px] w-[34px] place-items-center rounded border transition disabled:opacity-45"
         style={{
           background: active ? 'var(--color-accent)' : 'var(--color-surface-2)',
           borderColor: active ? 'var(--color-accent)' : 'var(--color-line)',

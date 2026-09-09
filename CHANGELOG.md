@@ -20,6 +20,38 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.1.1] — 2026-09-09
+
+### Added
+
+- **A Settings menu** in the top bar, next to File. It holds **Track** and
+  **Vehicle**, each opening a list of its own to the right when the pointer rests
+  on it. Track offers **Car** and **Train**; Vehicle offers **Die Cast** and
+  **1/48" RC**. Only Car and Die Cast are built out — the other two are listed as
+  "soon" and cannot be picked yet. A tick marks what is in force.
+- **A vehicle button in the toolbar**, at the right-hand end of the strip. It
+  shows and hides whichever vehicle is chosen in Settings ▸ Vehicle. The first
+  time it is switched on the vehicle is dropped at the start of the build and set
+  running; hiding it parks it where it stands, so switching it back on carries on
+  from there. It greys out until there is a part on the workplane, and names the
+  chosen vehicle on hover.
+- The chosen vehicle is saved with the project, so an opened file comes back with
+  the same one. A file saved before Settings existed opens as a car track with
+  the die-cast vehicle.
+
+### Removed
+
+- **The left panel is gone.** Its Car section — "Drop car on track", with Run,
+  Pause and Remove — is replaced by the toolbar's vehicle button, and the
+  workplane now runs the full width from the toolbar to the right panel. The
+  **Browser** list of bodies went with the panel; parts are still picked in the
+  workplane and edited in the Part panel on the right.
+- **The track type drop-down is out of the top bar.** Settings ▸ Track sets it
+  now, so the title field sits alone beside the menus. The old "Marble Run"
+  option is retired — a project saved with it opens as a car track.
+
+---
+
 ## [1.1.0] — 2026-09-09
 
 ### Fixed

@@ -1,16 +1,20 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
+  Car,
+  Check,
   ChevronDown,
+  ChevronRight,
   Download,
   FilePlus2,
   FolderOpen,
   Moon,
   Redo2,
+  Route,
   Save,
   Sun,
   Undo2,
 } from 'lucide-react'
-import { useProject } from '../store/useProject'
+import { TRACK_TYPES, VEHICLE_TYPES, useProject } from '../store/useProject'
 import { useTheme } from '../store/useTheme'
 import { downloadBlob } from '../export/exporters'
 import {
@@ -20,12 +24,6 @@ import {
   projectFileName,
   projectToBlob,
 } from '../export/project'
-import type { TrackType } from '../types'
-
-const TRACK_TYPES: { value: TrackType; label: string; enabled: boolean }[] = [
-  { value: 'car', label: 'Car Track', enabled: true },
-  { value: 'marble', label: 'Marble Run', enabled: false },
-]
 
 interface Notice {
   kind: 'ok' | 'error'
@@ -37,6 +35,8 @@ export function TopBar({ onExport }: { onExport: () => void }) {
   const setProjectName = useProject((s) => s.setProjectName)
   const trackType = useProject((s) => s.trackType)
   const setTrackType = useProject((s) => s.setTrackType)
+  const vehicle = useProject((s) => s.vehicle)
+  const setVehicle = useProject((s) => s.setVehicle)
   const newProject = useProject((s) => s.newProject)
   const loadProject = useProject((s) => s.loadProject)
   const undo = useProject((s) => s.undo)
@@ -47,7 +47,8 @@ export function TopBar({ onExport }: { onExport: () => void }) {
 
   const fileInput = useRef<HTMLInputElement>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
-  const [menuOpen, setMenuOpen] = useState(false)
+  // At most one top-bar menu is down at a time.
+  const [openMenu, setOpenMenu] = useState<'file' | 'settings' | null>(null)
 
   useEffect(() => {
     if (!notice) return
@@ -124,7 +125,11 @@ export function TopBar({ onExport }: { onExport: () => void }) {
 
       <div className="h-5 w-px" style={{ background: 'var(--color-line)' }} />
 
-      <Menu label="File" open={menuOpen} onOpenChange={setMenuOpen}>
+      <Menu
+        label="File"
+        open={openMenu === 'file'}
+        onOpenChange={(v) => setOpenMenu(v ? 'file' : null)}
+      >
         <MenuItem icon={<FilePlus2 size={13} />} label="New" onClick={startNew} />
         <MenuItem
           icon={<Save size={13} />}
@@ -145,6 +150,35 @@ export function TopBar({ onExport }: { onExport: () => void }) {
         <MenuItem icon={<Redo2 size={13} />} label="Redo" shortcut="⇧⌘Z" onClick={redo} disabled={!canRedo} />
       </Menu>
 
+      <Menu
+        label="Settings"
+        open={openMenu === 'settings'}
+        onOpenChange={(v) => setOpenMenu(v ? 'settings' : null)}
+      >
+        <Submenu icon={<Route size={13} />} label="Track">
+          {TRACK_TYPES.map((t) => (
+            <ChoiceItem
+              key={t.value}
+              label={t.label}
+              checked={trackType === t.value}
+              disabled={!t.enabled}
+              onClick={() => setTrackType(t.value)}
+            />
+          ))}
+        </Submenu>
+        <Submenu icon={<Car size={13} />} label="Vehicle">
+          {VEHICLE_TYPES.map((v) => (
+            <ChoiceItem
+              key={v.value}
+              label={v.label}
+              checked={vehicle === v.value}
+              disabled={!v.enabled}
+              onClick={() => setVehicle(v.value)}
+            />
+          ))}
+        </Submenu>
+      </Menu>
+
       <div className="h-5 w-px" style={{ background: 'var(--color-line)' }} />
 
       <input
@@ -153,20 +187,6 @@ export function TopBar({ onExport }: { onExport: () => void }) {
         onChange={(e) => setProjectName(e.target.value)}
         aria-label="Project name"
       />
-
-      <select
-        className="tm-input max-w-[150px]"
-        value={trackType}
-        onChange={(e) => setTrackType(e.target.value as TrackType)}
-        aria-label="Track type"
-      >
-        {TRACK_TYPES.map((t) => (
-          <option key={t.value} value={t.value} disabled={!t.enabled}>
-            {t.label}
-            {t.enabled ? '' : ' (soon)'}
-          </option>
-        ))}
-      </select>
 
       <input
         ref={fileInput}
@@ -310,4 +330,84 @@ function MenuItem({
 
 function MenuSeparator() {
   return <div className="my-1 h-px" style={{ background: 'var(--color-line)' }} />
+}
+
+/**
+ * A menu row that opens a panel of its own to the right on hover. The panel is a
+ * child of the row's wrapper and touches it edge to edge — the gap you see is
+ * padding inside the wrapper — so the pointer can cross into it without the
+ * hover being broken.
+ */
+function Submenu({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <button
+        role="menuitem"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        // A pick closes the whole menu; opening a submenu must not.
+        onClick={(e) => {
+          e.stopPropagation()
+          setOpen((v) => !v)
+        }}
+        onFocus={() => setOpen(true)}
+        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[12px] transition
+          hover:bg-black/5 dark:hover:bg-white/5"
+        style={open ? { background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)' } : undefined}
+      >
+        <span className="shrink-0" style={{ color: 'var(--color-ink-2)' }}>
+          {icon}
+        </span>
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <ChevronRight size={13} style={{ color: 'var(--color-ink-2)' }} />
+      </button>
+      {open && (
+        <div className="absolute left-full top-0 z-50 -mt-1 pl-1">
+          <div
+            role="menu"
+            className="min-w-[150px] rounded-[6px] border p-1 shadow-lg"
+            style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}
+          >
+            {children}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** One of a set of mutually exclusive settings. The one in force carries a tick. */
+function ChoiceItem({
+  label,
+  checked,
+  disabled,
+  onClick,
+}: {
+  label: string
+  checked: boolean
+  disabled?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      role="menuitemradio"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={onClick}
+      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[12px] transition
+        enabled:hover:bg-black/5 disabled:opacity-45 dark:enabled:hover:bg-white/5"
+    >
+      <span className="w-[13px] shrink-0" style={{ color: 'var(--color-accent)' }}>
+        {checked && <Check size={13} />}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {disabled && (
+        <span className="shrink-0 text-[10px]" style={{ color: 'var(--color-ink-2)' }}>
+          soon
+        </span>
+      )}
+    </button>
+  )
 }

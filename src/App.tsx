@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { TopBar } from './ui/TopBar'
 import { Toolbar } from './ui/Toolbar'
-import { LeftPanel } from './ui/LeftPanel'
 import { RightPanel } from './ui/RightPanel'
 import { StatusBar } from './ui/StatusBar'
 import { ExportDialog } from './ui/ExportDialog'
@@ -89,7 +88,6 @@ export function App() {
       <TopBar onExport={() => setExporting(true)} />
       <Toolbar onAddPart={() => setLibrary(true)} />
       <div className="flex min-h-0 flex-1">
-        <LeftPanel />
         <main className="relative min-w-0 flex-1">
           <Viewport />
           <ViewTools />

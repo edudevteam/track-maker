@@ -34,6 +34,7 @@ const p2 = piece('p2', { kind: 'curve', links: { a: { pieceId: 'p1', port: 'b' }
 const snapshot = {
   projectName: 'My Big Track!',
   trackType: 'car' as const,
+  vehicle: 'diecast' as const,
   dims: { ...DEFAULT_DIMENSIONS, track: { ...DEFAULT_DIMENSIONS.track, totalHeight: 15.5 } },
   pieces: [p1, p2],
   printer: { id: 'prusa-mk4' },
@@ -54,6 +55,7 @@ check('pieces identical', JSON.stringify(back.pieces) === JSON.stringify(snapsho
 check('printer round-trips', back.printerId === 'prusa-mk4')
 check('friction round-trips', back.friction === 0.42)
 check('custom printer size', JSON.stringify(back.customPrinterSize) === '[200,210,220]')
+check('vehicle round-trips', back.vehicle === 'diecast')
 
 // A file written before a dimension existed picks up today's default.
 const missingDim = JSON.parse(text)
@@ -62,6 +64,15 @@ delete missingDim.gravity
 const patched = parseProject(JSON.stringify(missingDim))
 check('missing dimension falls back to default', patched.dims.connector.holeSpan === DEFAULT_DIMENSIONS.connector.holeSpan)
 check('missing gravity falls back to default', patched.gravity === 9810)
+
+// Files saved before Settings existed, and the retired 'marble' track type,
+// open as a car track with the die-cast vehicle rather than failing.
+const legacy = JSON.parse(text)
+legacy.trackType = 'marble'
+delete legacy.vehicle
+const opened = parseProject(JSON.stringify(legacy))
+check('retired track type falls back to car', opened.trackType === 'car')
+check('missing vehicle falls back to die cast', opened.vehicle === 'diecast')
 
 // A link to a deleted piece is dropped rather than left dangling.
 const orphan = JSON.parse(text)

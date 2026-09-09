@@ -11,6 +11,7 @@ import type {
   ToolId,
   TrackType,
   Vec3,
+  VehicleType,
 } from '../types'
 import {
   DEFAULT_CONNECTOR_COLOR,
@@ -28,6 +29,21 @@ export const PRINTER_PRESETS: PrinterPreset[] = [
   { id: 'a1-mini', name: 'Bambu A1 mini · 180³', size: [180, 180, 180] },
   { id: 'custom', name: 'Custom', size: [256, 256, 256] },
 ]
+
+/** The Settings ▸ Track menu. Only the car track is built out so far. */
+export const TRACK_TYPES: { value: TrackType; label: string; enabled: boolean }[] = [
+  { value: 'car', label: 'Car', enabled: true },
+  { value: 'train', label: 'Train', enabled: false },
+]
+
+/** The Settings ▸ Vehicle menu — what rides the track in the preview. */
+export const VEHICLE_TYPES: { value: VehicleType; label: string; enabled: boolean }[] = [
+  { value: 'diecast', label: 'Die Cast', enabled: true },
+  { value: 'rc48', label: '1/48" RC', enabled: false },
+]
+
+export const vehicleLabel = (v: VehicleType) =>
+  VEHICLE_TYPES.find((x) => x.value === v)?.label ?? 'Vehicle'
 
 export type BackgroundMode = 'theme' | 'sky' | 'solid'
 
@@ -54,6 +70,8 @@ export interface AddOptions {
 export interface ProjectState {
   projectName: string
   trackType: TrackType
+  /** Which vehicle the preview rides — picked in Settings ▸ Vehicle. */
+  vehicle: VehicleType
   dims: Dimensions
 
   pieces: Piece[]
@@ -78,6 +96,8 @@ export interface ProjectState {
   customPrinterSize: Vec3
 
   car: CarState
+  /** Whether the vehicle is drawn on the track. Hiding it parks it where it stands. */
+  showVehicle: boolean
   gravity: number
   friction: number
 
@@ -88,6 +108,7 @@ export interface ProjectState {
 export interface ProjectActions {
   setProjectName: (n: string) => void
   setTrackType: (t: TrackType) => void
+  setVehicle: (v: VehicleType) => void
   setDims: (patch: Partial<Dimensions>) => void
   setDimValue: (group: keyof Dimensions, field: string, value: number) => void
   resetDims: () => void
@@ -119,6 +140,8 @@ export interface ProjectActions {
 
   setCar: (patch: Partial<CarState>) => void
   dropCar: () => void
+  /** Show or hide the vehicle, dropping it on the track the first time it is shown. */
+  toggleVehicle: () => void
   setGravity: (g: number) => void
   setFriction: (f: number) => void
 
@@ -185,6 +208,7 @@ function freeSpot(pieces: Piece[]): Vec3 {
 export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
   projectName: 'Untitled Track',
   trackType: 'car',
+  vehicle: 'diecast',
   dims: DEFAULT_DIMENSIONS,
 
   pieces: [],
@@ -205,6 +229,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
   customPrinterSize: [256, 256, 256],
 
   car: { pieceId: null, s: 0, v: 0, running: false },
+  showVehicle: false,
   gravity: 9810,
   friction: 0.35,
 
@@ -213,6 +238,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
 
   setProjectName: (projectName) => set({ projectName }),
   setTrackType: (trackType) => set({ trackType }),
+  setVehicle: (vehicle) => set({ vehicle }),
   setDims: (patch) => set((s) => ({ dims: { ...s.dims, ...patch } })),
   setDimValue: (group, field, value) =>
     set((s) => ({
@@ -425,6 +451,20 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
     const first = pieces.find((p) => !p.links.a) ?? pieces[0]
     set({ car: { pieceId: first?.id ?? null, s: 2, v: 0, running: true } })
   },
+  toggleVehicle: () => {
+    const { showVehicle, car, pieces, dropCar } = get()
+    if (showVehicle) {
+      // Hiding parks it: it keeps its place on the track and picks up from there.
+      set({ showVehicle: false, car: { ...car, running: false } })
+      return
+    }
+    const parked = car.pieceId && pieces.some((p) => p.id === car.pieceId)
+    if (parked) set({ showVehicle: true, car: { ...car, running: true } })
+    else {
+      dropCar()
+      set({ showVehicle: true })
+    }
+  },
   setGravity: (gravity) => set({ gravity }),
   setFriction: (friction) => set({ friction }),
 
@@ -451,8 +491,9 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       lastPart: null,
       tool: 'select',
       car: { pieceId: null, s: 0, v: 0, running: false },
-      // Dimensions, printer and view settings are workshop setup, not part of
-      // the build, so a new project keeps them.
+      showVehicle: false,
+      // Dimensions, printer, the chosen vehicle and view settings are workshop
+      // setup, not part of the build, so a new project keeps them.
       history: [],
       future: [],
     }),
@@ -462,6 +503,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
     set({
       projectName: doc.name,
       trackType: doc.trackType,
+      vehicle: doc.vehicle,
       dims: doc.dims,
       pieces: doc.pieces,
       printer: preset.id === 'custom' ? { ...preset, size: doc.customPrinterSize } : preset,
@@ -474,6 +516,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       lastPart: null,
       tool: 'select',
       car: { pieceId: null, s: 0, v: 0, running: false },
+      showVehicle: false,
       history: [],
       future: [],
     })

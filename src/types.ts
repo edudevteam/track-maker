@@ -1,7 +1,10 @@
 export type Vec3 = [number, number, number]
 
 /** Which family of parts the project is building. */
-export type TrackType = 'car' | 'marble'
+export type TrackType = 'car' | 'train'
+
+/** Which vehicle rides the track in the preview. */
+export type VehicleType = 'diecast' | 'rc48'
 
 /** The two ends of every piece. `a` is the local origin end, `b` the far end. */
 export type PortId = 'a' | 'b'

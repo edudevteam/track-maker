@@ -1,4 +1,4 @@
-import type { Piece, PieceKind, PortId, PortLink, TrackType, Vec3 } from '../types'
+import type { Piece, PieceKind, PortId, PortLink, TrackType, Vec3, VehicleType } from '../types'
 import {
   DEFAULT_CONNECTOR_COLOR,
   DEFAULT_DIMENSIONS,
@@ -21,6 +21,7 @@ export interface ProjectDocument {
   savedAt: string
   name: string
   trackType: TrackType
+  vehicle: VehicleType
   dims: Dimensions
   pieces: Piece[]
   printerId: string
@@ -32,6 +33,7 @@ export interface ProjectDocument {
 export interface ProjectSnapshot {
   projectName: string
   trackType: TrackType
+  vehicle: VehicleType
   dims: Dimensions
   pieces: Piece[]
   printer: { id: string }
@@ -48,6 +50,7 @@ export function serializeProject(s: ProjectSnapshot): ProjectDocument {
     savedAt: new Date().toISOString(),
     name: s.projectName,
     trackType: s.trackType,
+    vehicle: s.vehicle,
     dims: s.dims,
     pieces: s.pieces,
     printerId: s.printer.id,
@@ -203,7 +206,10 @@ export function parseProject(text: string): ProjectDocument {
     app: str(raw.app, 'unknown'),
     savedAt: str(raw.savedAt, ''),
     name: str(raw.name, 'Untitled Track'),
-    trackType: raw.trackType === 'marble' ? 'marble' : 'car',
+    // Anything we do not recognise — including the old 'marble' track type —
+    // opens as a car track with the die-cast vehicle.
+    trackType: raw.trackType === 'train' ? 'train' : 'car',
+    vehicle: raw.vehicle === 'rc48' ? 'rc48' : 'diecast',
     dims: mergeDims(raw.dims),
     pieces,
     printerId: str(raw.printerId, 'bambu-256'),

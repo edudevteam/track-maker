@@ -21,6 +21,7 @@ export function Car() {
   const dims = useProject((s) => s.dims)
   const pieces = useProject((s) => s.pieces)
   const car = useProject((s) => s.car)
+  const showVehicle = useProject((s) => s.showVehicle)
   const gravity = useProject((s) => s.gravity)
   const friction = useProject((s) => s.friction)
   const setCar = useProject((s) => s.setCar)
@@ -29,7 +30,7 @@ export function Car() {
   const geometry = getCarGeometry(dims)
 
   useFrame((_, rawDelta) => {
-    if (!car.pieceId || !group.current) return
+    if (!showVehicle || !car.pieceId || !group.current) return
     const dt = Math.min(rawDelta, 1 / 30)
     const piece = pieces.find((p) => p.id === car.pieceId)
     if (!piece) {
@@ -97,7 +98,7 @@ export function Car() {
     group.current.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), heading)
   })
 
-  if (!car.pieceId) return null
+  if (!showVehicle || !car.pieceId) return null
 
   return (
     <group ref={group}>
