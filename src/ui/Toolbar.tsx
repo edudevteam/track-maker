@@ -15,6 +15,7 @@ import {
   Undo2,
 } from 'lucide-react'
 import { useProject, vehicleLabel } from '../store/useProject'
+import { BuildDetails } from './BuildDetails'
 import { Tooltip } from './controls'
 import type { ToolId } from '../types'
 
@@ -46,7 +47,7 @@ const JOINTS: ModeSpec[] = [
 
 /**
  * The horizontal ribbon under the top bar: history, the parts button, the
- * modal tools and the joint tools, each in its own labelled group.
+ * modal tools, the joint tools and the build readout, each in its own group.
  */
 export function Toolbar({ onAddPart }: { onAddPart: () => void }) {
   const tool = useProject((s) => s.tool)
@@ -83,7 +84,7 @@ export function Toolbar({ onAddPart }: { onAddPart: () => void }) {
 
       <Group>
         <Tooltip title="Parts library" body="Pick a part and its width, then drop it on the workplane" shortcut="A">
-          <button className="tm-btn tm-btn-primary h-[34px] px-2.5" onClick={onAddPart}>
+          <button className="tm-btn tm-btn-orange h-[34px] px-2.5" onClick={onAddPart}>
             <Plus size={14} /> Add Part
           </button>
         </Tooltip>
@@ -157,6 +158,7 @@ export function Toolbar({ onAddPart }: { onAddPart: () => void }) {
         >
           <Car size={15} />
         </Latch>
+        <BuildDetails />
       </Group>
 
       <div className="flex min-w-0 flex-1 items-center pl-1">

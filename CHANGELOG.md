@@ -20,6 +20,117 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.1.20] — 2026-09-09
+
+### Added
+
+- **Preset length buttons under Part Details ▸ Length**, the same 50 / 100 / 150
+  / 200 run offered in the parts library, so a straight can be set to a common
+  length in one click instead of typed. The number field stays for anything in
+  between, and the button matching the piece's current length is outlined.
+
+---
+
+## [1.1.19] — 2026-09-09
+
+### Changed
+
+- **The toolbar's Add Part button is now the orange of the app icon** instead of
+  blue, so the one button that starts a piece stands apart from the blue used
+  for active tools and dialog confirmations. Every other primary button keeps
+  its blue.
+
+---
+
+## [1.1.18] — 2026-09-09
+
+### Fixed
+
+- **Track width can no longer read below one lane.** The spinner arrows stop at
+  1 instead of stepping to 0, and typing 0 or a negative number snaps the field
+  straight back to 1 — before, the piece stayed one lane wide but the box showed
+  the number you typed. The same holds at the top of the range, 8 lanes, and in
+  the parts library's width field. Every other number field now stops its arrows
+  at its own limits too.
+
+---
+
+## [1.1.17] — 2026-09-09
+
+### Changed
+
+- **Track width in Part Details is typed in as a number**, up to eight lanes,
+  instead of picked from 1 / 2 / 3 buttons. It matches the width field in the
+  parts library, so a piece dropped at four or more lanes can be edited the same
+  way it was made.
+
+---
+
+## [1.1.16] — 2026-09-09
+
+### Added
+
+- **An All Parts box under Part Details**, listing every piece on the workplane.
+  Each row has a checkbox for gathering a selection without clicking pieces in
+  the viewport, an eye for hiding a piece from the scene, and a pencil for
+  renaming it — the part type stays in parentheses after the name, so a renamed
+  piece still says whether it is a Straight or a Curve. Clicking a row's name
+  selects just that piece; double-clicking it renames too. The title bar shows
+  the piece count and collapses the list.
+
+---
+
+## [1.1.15] — 2026-09-09
+
+### Changed
+
+- **The part settings float over the workplane instead of being docked to the
+  right edge.** They sit in a box in the top-left corner titled **Part Details**,
+  which collapses to its title bar when nothing is selected and opens again the
+  moment a piece is picked. Clicking the title bar opens or closes it by hand.
+  The workplane now runs the full width of the window.
+- **Track width is picked by number — 1, 2 or 3** — rather than
+  Single / 2× / 3× / 4×. A piece already built wider than three lanes keeps its
+  own width as a fourth choice, so nothing added from the parts library loses its
+  setting.
+
+---
+
+## [1.1.14] — 2026-09-09
+
+### Changed
+
+- **Build details reads out on hover instead of opening a dialog.** Point at the
+  toolbar button and the panel hangs under it with the footprint, height, piece
+  count, printer and plates needed; move onto the panel and it stays up, so the
+  custom build volume fields are still there to type in. It closes as soon as
+  the pointer leaves both.
+- **The button wears a clipboard-list icon** rather than the box, which read as
+  another print-box toggle.
+
+---
+
+## [1.1.13] — 2026-09-09
+
+### Added
+
+- **A Build details button in the toolbar**, next to the vehicle. Clicking it
+  pops up the footprint, height, piece count, printer and plates needed, along
+  with the custom build volume fields when the printer is set to Custom.
+
+### Changed
+
+- **The right panel is only the selected part now.** It has no tab strip — the
+  Part / Build pair is gone and the panel shows the part's settings straight
+  away, under a plain "Part" heading.
+
+### Removed
+
+- **The Build tab in the right panel.** Everything it showed is in the Build
+  details popup.
+
+---
+
 ## [1.1.12] — 2026-09-09
 
 ### Changed

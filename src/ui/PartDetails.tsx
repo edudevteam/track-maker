@@ -1,36 +1,36 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Copy, Trash2 } from 'lucide-react'
 import { useProject } from '../store/useProject'
-import { ColorInput, Field, NumberInput, Section, Segmented, Toggle } from './controls'
+import { ColorInput, Field, NumberInput, Panel, Section, Segmented, Toggle } from './controls'
 import { LengthInput, useUnits } from './units'
-import { computePrintVolume } from '../lib/printVolume'
+import { LENGTH_PRESETS, MAX_LANES } from './PartsLibrary'
 import { laneWidth } from '../geometry/dimensions'
 import type { GizmoAnchor, Vec3 } from '../types'
 
-type Tab = 'properties' | 'build'
+/**
+ * The selected part's settings, floating over the workplane rather than docked
+ * to a side. It collapses to its title bar when nothing is selected and opens
+ * again as soon as a piece is picked, so an empty panel never takes up room.
+ *
+ * Build size lives in the toolbar's Build details.
+ */
+export function PartDetails() {
+  const hasSelection = useProject((s) => s.selection.pieceIds.length > 0)
+  const [open, setOpen] = useState(hasSelection)
+  const wasSelected = useRef(hasSelection)
 
-export function RightPanel() {
-  const [tab, setTab] = useState<Tab>('properties')
+  // Selecting a piece opens the box, deselecting closes it — but only on the
+  // change, so a manual toggle sticks until the selection moves on.
+  useEffect(() => {
+    if (hasSelection === wasSelected.current) return
+    wasSelected.current = hasSelection
+    setOpen(hasSelection)
+  }, [hasSelection])
+
   return (
-    <aside
-      className="flex w-[268px] shrink-0 flex-col overflow-hidden border-l"
-      style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}
-    >
-      <div className="border-b p-2" style={{ borderColor: 'var(--color-line)' }}>
-        <Segmented<Tab>
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: 'properties', label: 'Part' },
-            { value: 'build', label: 'Build' },
-          ]}
-        />
-      </div>
-      <div className="flex-1 overflow-y-auto">
-        {tab === 'properties' && <Properties />}
-        {tab === 'build' && <BuildTab />}
-      </div>
-    </aside>
+    <Panel title="Part Details" open={open} onToggle={() => setOpen((v) => !v)}>
+      <Properties />
+    </Panel>
   )
 }
 
@@ -43,7 +43,7 @@ function Properties() {
   const duplicateSelected = useProject((s) => s.duplicateSelected)
   const commit = useProject((s) => s.commit)
   const dims = useProject((s) => s.dims)
-  const { fmt } = useUnits()
+  const { fmt, val } = useUnits()
 
   const selected = pieces.filter((p) => selection.pieceIds.includes(p.id))
   const piece = selected[0]
@@ -100,11 +100,16 @@ function Properties() {
       </Section>
 
       <Section title="Shape">
-        <Field label="Track width">
-          <Segmented
+        <Field label="Track width" hint="Whole lanes.">
+          <NumberInput
             value={piece.lanes}
-            onChange={(lanes) => set({ lanes })}
-            options={[1, 2, 3, 4].map((n) => ({ value: n, label: n === 1 ? 'Single' : `${n}×` }))}
+            onChange={(v) => set({ lanes: Math.max(1, Math.round(v)) })}
+            step={1}
+            min={1}
+            max={MAX_LANES}
+            digits={0}
+            clampWhileTyping
+            suffix="×"
           />
         </Field>
         <p className="mb-2 text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
@@ -113,15 +118,29 @@ function Properties() {
         </p>
 
         {piece.kind === 'straight' ? (
-          <Field label="Length" hint="Connector ends keep their width, so joins still fit.">
-            <LengthInput
-              value={piece.length}
-              min={20}
-              max={600}
-              step={5}
-              onChange={(length) => set({ length })}
-            />
-          </Field>
+          <>
+            <Field label="Length" hint="Connector ends keep their width, so joins still fit.">
+              <LengthInput
+                value={piece.length}
+                min={20}
+                max={600}
+                step={5}
+                onChange={(length) => set({ length })}
+              />
+            </Field>
+            <div className="mb-2 grid grid-cols-4 gap-1">
+              {LENGTH_PRESETS.map((l) => (
+                <button
+                  key={l}
+                  className="tm-btn px-0"
+                  style={piece.length === l ? { borderColor: 'var(--color-accent)' } : undefined}
+                  onClick={() => set({ length: l })}
+                >
+                  {val(l, 0)}
+                </button>
+              ))}
+            </div>
+          </>
         ) : (
           <>
             <Field label="Radius">
@@ -195,81 +214,5 @@ function Properties() {
         </div>
       </Section>
     </>
-  )
-}
-
-function BuildTab() {
-  const printer = useProject((s) => s.printer)
-  const customSize = useProject((s) => s.customPrinterSize)
-  const setCustomSize = useProject((s) => s.setCustomPrinterSize)
-  const pieces = useProject((s) => s.pieces)
-  const dims = useProject((s) => s.dims)
-  const { suffix, val } = useUnits()
-
-  const result = useMemo(
-    () => computePrintVolume(pieces, dims, printer.size),
-    [pieces, dims, printer.size],
-  )
-
-  return (
-    <>
-      {printer.id === 'custom' && (
-        <Section title="Custom build volume">
-          <div className="grid grid-cols-3 gap-1.5">
-            {(['X', 'Y (height)', 'Z'] as const).map((label, i) => (
-              <Field key={label} label={label}>
-                <LengthInput
-                  value={customSize[i]}
-                  step={5}
-                  min={20}
-                  onChange={(v) => {
-                    const next = [...customSize] as Vec3
-                    next[i] = v
-                    setCustomSize(next)
-                  }}
-                />
-              </Field>
-            ))}
-          </div>
-        </Section>
-      )}
-
-      <Section title="Build size">
-        {result.bounds ? (
-          <dl className="space-y-1 text-[12px]">
-            <Row
-              label="Footprint"
-              value={`${val(result.size[0], 1)} × ${val(result.size[2], 1)} ${suffix}`}
-            />
-            <Row label="Height" value={`${val(result.size[1], 1)} ${suffix}`} />
-            <Row label="Pieces" value={String(pieces.length)} />
-            <Row label="Printer" value={printer.name} />
-            <Row
-              label="Plates needed"
-              value={`${result.cells.length} × ${val(printer.size[0], 0)}×${val(
-                printer.size[2],
-                0,
-              )}×${val(printer.size[1], 0)}${suffix}`}
-            />
-          </dl>
-        ) : (
-          <p className="text-[12px]" style={{ color: 'var(--color-ink-2)' }}>
-            Add track to see how much build volume it needs.
-          </p>
-        )}
-        <p className="mt-2 text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
-          The printer and the print-box preview are set in Settings ▸ Print.
-        </p>
-      </Section>
-    </>
-  )
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-2">
-      <dt style={{ color: 'var(--color-ink-2)' }}>{label}</dt>
-      <dd className="font-medium">{value}</dd>
-    </div>
   )
 }

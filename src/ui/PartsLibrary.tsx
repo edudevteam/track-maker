@@ -7,11 +7,12 @@ import { laneWidth } from '../geometry/dimensions'
 import type { PartSpec, PieceKind } from '../types'
 
 /** Lanes are free-typed, so they need sane bounds. Widths are whole lanes. */
-const MAX_LANES = 8
+export const MAX_LANES = 8
 /** A straight still has to hold a connector pocket at each end. Millimetres. */
 const MIN_STRAIGHT_LENGTH = 20
 const MAX_STRAIGHT_LENGTH = 1000
-const LENGTH_PRESETS = [50, 100, 150, 200]
+/** The common straight lengths, offered here and in Part Details. Millimetres. */
+export const LENGTH_PRESETS = [50, 100, 150, 200]
 const CURVE_ANGLES = [15, 30, 45, 90]
 
 type Turn = 'left' | 'right'
@@ -24,7 +25,7 @@ const CATALOGUE: { kind: PieceKind; name: string; blurb: string }[] = [
 /**
  * The pop-up parts library. Pick a part, set its width — and its length or
  * sweep — then drop it on the workplane. Everything else about the piece is
- * edited afterwards in the Part panel on the right.
+ * edited afterwards in the floating Part Details box.
  */
 export function PartsLibrary({ onClose }: { onClose: () => void }) {
   const addPiece = useProject((s) => s.addPiece)
@@ -141,6 +142,8 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
                 step={1}
                 min={1}
                 max={MAX_LANES}
+                digits={0}
+                clampWhileTyping
                 suffix="×"
               />
             </Field>

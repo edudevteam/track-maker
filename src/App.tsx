@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { TopBar } from './ui/TopBar'
 import { Toolbar } from './ui/Toolbar'
-import { RightPanel } from './ui/RightPanel'
+import { PartDetails } from './ui/PartDetails'
+import { AllParts } from './ui/AllParts'
 import { StatusBar } from './ui/StatusBar'
 import { ExportDialog } from './ui/ExportDialog'
 import { DimensionsDialog } from './ui/DimensionsDialog'
@@ -99,10 +100,14 @@ export function App() {
       <div className="flex min-h-0 flex-1">
         <main className="relative min-w-0 flex-1">
           <Viewport />
+          {/* The panels stack down the left edge over the workplane. */}
+          <div className="absolute top-3 left-3 z-10 flex max-h-[calc(100%-24px)] w-[268px] flex-col gap-2 overflow-y-auto">
+            <PartDetails />
+            <AllParts />
+          </div>
           <ViewTools />
           <NavHint />
         </main>
-        <RightPanel />
       </div>
       <StatusBar />
       {exporting && <ExportDialog onClose={() => setExporting(false)} />}

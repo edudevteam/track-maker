@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import { createPortal } from 'react-dom'
+import { ChevronDown } from 'lucide-react'
 
 /** How long the pointer has to rest on a control before its tooltip appears. */
 const TOOLTIP_DELAY_MS = 260
@@ -158,6 +159,7 @@ export function NumberInput({
   max,
   suffix,
   digits = 3,
+  clampWhileTyping = false,
 }: {
   value: number
   onChange: (v: number) => void
@@ -167,12 +169,24 @@ export function NumberInput({
   suffix?: string
   /** Decimal places the displayed value is rounded to. */
   digits?: number
+  /**
+   * Snap the displayed text to the bounds as it is typed, so an out-of-range
+   * number never even shows. Only for narrow ranges — on a wide one it would
+   * fight you, jumping "1" to the minimum before you reach "150".
+   */
+  clampWhileTyping?: boolean
 }) {
   const [text, setText] = useState(String(value))
   const [focused, setFocused] = useState(false)
   const round = (v: number) => {
     const f = 10 ** digits
     return Math.round(v * f) / f
+  }
+  const clamp = (v: number) => {
+    let n = v
+    if (min !== undefined) n = Math.max(min, n)
+    if (max !== undefined) n = Math.min(max, n)
+    return n
   }
 
   useEffect(() => {
@@ -182,10 +196,7 @@ export function NumberInput({
   const commit = (raw: string) => {
     const n = Number(raw)
     if (raw.trim() === '' || Number.isNaN(n)) return
-    let v = n
-    if (min !== undefined) v = Math.max(min, v)
-    if (max !== undefined) v = Math.min(max, v)
-    onChange(v)
+    onChange(clamp(n))
   }
 
   return (
@@ -194,6 +205,8 @@ export function NumberInput({
         className="tm-input"
         type="number"
         step={step}
+        min={min}
+        max={max}
         value={text}
         onFocus={() => setFocused(true)}
         onBlur={() => {
@@ -202,8 +215,11 @@ export function NumberInput({
           setText(String(round(value)))
         }}
         onChange={(e) => {
-          setText(e.target.value)
-          commit(e.target.value)
+          const raw = e.target.value
+          const n = Number(raw)
+          const outOfRange = raw.trim() !== '' && !Number.isNaN(n) && clamp(n) !== n
+          setText(clampWhileTyping && outOfRange ? String(clamp(n)) : raw)
+          commit(raw)
         }}
         style={suffix ? { paddingRight: 30 } : undefined}
       />
@@ -320,6 +336,58 @@ export function ColorInput({
           if (/^#[0-9a-fA-F]{0,6}$/.test(v)) onChange(v)
         }}
       />
+    </div>
+  )
+}
+
+/**
+ * A box that floats over the workplane with a title bar you click to open or
+ * close it. The panels stack down the left edge; each one caps its own height so
+ * a long list scrolls inside the box rather than pushing the ones below it off
+ * screen.
+ */
+export function Panel({
+  title,
+  open,
+  onToggle,
+  count,
+  bodyClassName = 'max-h-[42vh]',
+  children,
+}: {
+  title: string
+  open: boolean
+  onToggle: () => void
+  /** Shown greyed after the title — e.g. how many rows the list holds. */
+  count?: number
+  bodyClassName?: string
+  children: ReactNode
+}) {
+  return (
+    <div
+      className="flex shrink-0 flex-col overflow-hidden rounded-[6px] border shadow-lg"
+      style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}
+    >
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={onToggle}
+        className="flex shrink-0 items-center gap-1.5 px-3 py-2.5 text-left text-[12px] font-semibold
+          transition hover:bg-black/5 dark:hover:bg-white/5"
+        style={open ? { borderBottom: '1px solid var(--color-line)' } : undefined}
+      >
+        <ChevronDown
+          size={13}
+          className="transition-transform"
+          style={{ transform: open ? undefined : 'rotate(-90deg)' }}
+        />
+        {title}
+        {count !== undefined && (
+          <span className="font-normal" style={{ color: 'var(--color-ink-2)' }}>
+            {count}
+          </span>
+        )}
+      </button>
+      {open && <div className={`overflow-y-auto ${bodyClassName}`}>{children}</div>}
     </div>
   )
 }

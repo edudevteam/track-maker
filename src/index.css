@@ -99,6 +99,16 @@ body {
     filter: brightness(1.08);
     background: var(--color-accent);
   }
+  /* Matches the app icon's orange, so the main Add Part button reads as the logo. */
+  .tm-btn-orange {
+    background: var(--color-track);
+    border-color: var(--color-track);
+    color: #fff;
+  }
+  .tm-btn-orange:hover:not(:disabled) {
+    filter: brightness(1.08);
+    background: var(--color-track);
+  }
   .tm-label {
     @apply text-[11px] font-medium uppercase tracking-wide;
     color: var(--color-ink-2);
