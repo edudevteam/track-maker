@@ -22,7 +22,6 @@ export function App() {
   const redo = useProject((s) => s.redo)
   const removeSelected = useProject((s) => s.removeSelected)
   const duplicateSelected = useProject((s) => s.duplicateSelected)
-  const repeatLastPart = useProject((s) => s.repeatLastPart)
   const dropToWorkplane = useProject((s) => s.dropToWorkplane)
   const setTool = useProject((s) => s.setTool)
   const toggleGrid = useProject((s) => s.toggleGrid)
@@ -73,9 +72,6 @@ export function App() {
         case 'a':
           setLibrary(true)
           break
-        case 't':
-          repeatLastPart()
-          break
         case 'd':
           dropToWorkplane()
           break
@@ -97,7 +93,6 @@ export function App() {
     redo,
     removeSelected,
     duplicateSelected,
-    repeatLastPart,
     dropToWorkplane,
     setTool,
     toggleGrid,

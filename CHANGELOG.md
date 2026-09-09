@@ -20,6 +20,33 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.2.9] — 2026-09-09
+
+### Removed
+
+- **The repeat-last-part tool**, along with its **T** shortcut. Duplicate now
+  lays a copy onto the highlighted end and moves the highlight to the new open
+  end, so pressing it again grows the track the same way repeat did — with the
+  part you picked rather than whichever part was added last.
+
+---
+
+## [1.2.8] — 2026-09-09
+
+### Changed
+
+- **Duplicate now joins the copy onto the highlighted end** instead of always
+  dropping it loose beside the original. Click an open end, press Duplicate, and
+  the copy lands on that end already clipped together — joining a start end
+  extends the track backwards. With no end highlighted (or snapping switched
+  off) it still lands loose, 60 mm to the side.
+- **Duplicating several joined pieces keeps them joined.** Copying a run of
+  track hands back a run of track, moved as one, rather than a pile of loose
+  parts. The far end of the new run becomes the highlighted end, so Duplicate or
+  Repeat can keep the chain growing.
+
+---
+
 ## [1.2.7] — 2026-09-09
 
 ### Added

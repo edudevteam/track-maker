@@ -3,7 +3,6 @@ import * as THREE from 'three'
 import type {
   CarState,
   GizmoAnchor,
-  PartSpec,
   Piece,
   PieceKind,
   PortId,
@@ -20,7 +19,7 @@ import {
   DEFAULT_TRACK_COLOR,
   type Dimensions,
 } from '../geometry/dimensions'
-import { transformToMate, worldPortFrame } from '../lib/ports'
+import { pieceMatrix, transformToMate, worldPortFrame } from '../lib/ports'
 import { pieceBounds } from '../lib/printVolume'
 import { loadUnits, saveUnits } from '../lib/units'
 import type { ProjectDocument } from '../export/project'
@@ -101,8 +100,6 @@ export interface ProjectState {
   snapToPort: boolean
   /** Free port a new piece will attach to. */
   activePort: { pieceId: string; port: PortId } | null
-  /** The last part added, so the repeat tool can lay another one down. */
-  lastPart: PartSpec | null
 
   showGrid: boolean
   showPrintVolume: boolean
@@ -137,8 +134,6 @@ export interface ProjectActions {
   resetDims: () => void
 
   addPiece: (init?: Partial<Piece>, opts?: AddOptions) => string
-  /** Another of the last part added, joined onto the open end of the build. */
-  repeatLastPart: () => string | null
   updatePiece: (id: string, patch: Partial<Piece>) => void
   removeSelected: () => void
   duplicateSelected: () => void
@@ -208,26 +203,11 @@ function makePiece(dims: Dimensions, init: Partial<Piece> = {}): Piece {
   }
 }
 
-/** What the repeat tool needs to lay down another of the same part. */
-function specOf(p: Piece): PartSpec {
-  const { kind, lanes, length, radius, angleDeg, name } = p
-  return { kind, lanes, length, radius, angleDeg, name }
-}
-
 /** The given end, or null when it is missing or already joined. */
 function freePort(pieces: Piece[], at: { pieceId: string; port: PortId } | null) {
   if (!at) return null
   const piece = pieces.find((p) => p.id === at.pieceId)
   return piece && !piece.links[at.port] ? at : null
-}
-
-/** The open end of the most recently added piece — `b` first, since builds run a → b. */
-function newestFreePort(pieces: Piece[]) {
-  for (let i = pieces.length - 1; i >= 0; i--) {
-    const p = pieces[i]
-    for (const port of ['b', 'a'] as PortId[]) if (!p.links[port]) return { pieceId: p.id, port }
-  }
-  return null
 }
 
 /** Somewhere clear of existing geometry, so an unsnapped piece lands where you can see it. */
@@ -248,7 +228,6 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
   tool: 'select',
   snapToPort: true,
   activePort: null,
-  lastPart: null,
 
   showGrid: true,
   showPrintVolume: false,
@@ -287,7 +266,6 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
     const state = get()
     state.commit()
     const piece = makePiece(state.dims, init)
-    const lastPart = specOf(piece)
 
     const target = opts.attachTo !== undefined ? opts.attachTo : state.snapToPort ? state.activePort : null
     if (target) {
@@ -314,7 +292,6 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
           ],
           selection: { pieceIds: [piece.id], anchor: 'middle' },
           activePort: { pieceId: piece.id, port: 'b' },
-          lastPart,
         }))
         return piece.id
       }
@@ -325,18 +302,8 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       pieces: [...s.pieces, piece],
       selection: { pieceIds: [piece.id], anchor: 'middle' },
       activePort: { pieceId: piece.id, port: 'b' },
-      lastPart,
     }))
     return piece.id
-  },
-
-  repeatLastPart: () => {
-    const { lastPart, pieces, activePort, addPiece } = get()
-    if (!lastPart) return null
-    // The highlighted end wins when it is still free; otherwise take the newest
-    // open end, which is where the build was last growing.
-    const target = freePort(pieces, activePort) ?? newestFreePort(pieces)
-    return addPiece({ ...lastPart }, { attachTo: target })
   },
 
   updatePiece: (id, patch) =>
@@ -370,20 +337,84 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
   },
 
   duplicateSelected: () => {
-    const { selection, pieces, dims, commit } = get()
-    if (!selection.pieceIds.length) return
+    const { selection, pieces, dims, snapToPort, activePort, commit } = get()
+    const sources = pieces.filter((p) => selection.pieceIds.includes(p.id))
+    if (!sources.length) return
     commit()
-    const copies = pieces
-      .filter((p) => selection.pieceIds.includes(p.id))
-      .map((p) =>
-        makePiece(dims, {
-          ...p,
-          name: `${p.name} copy`,
-          position: [p.position[0], p.position[1], p.position[2] + 60],
-          links: { a: null, b: null },
-          connectors: { a: false, b: false },
-        }),
-      )
+
+    const idMap = new Map<string, string>()
+    const copies = sources.map((p) => {
+      const copy = makePiece(dims, {
+        ...p,
+        name: `${p.name} copy`,
+        links: { a: null, b: null },
+        connectors: { a: false, b: false },
+      })
+      idMap.set(p.id, copy.id)
+      return copy
+    })
+    // A joint between two copied pieces is copied too, so duplicating a run of
+    // track hands back a run of track rather than a pile of loose parts.
+    copies.forEach((copy, i) => {
+      for (const port of ['a', 'b'] as PortId[]) {
+        const link = sources[i].links[port]
+        const twin = link && idMap.get(link.pieceId)
+        if (link && twin) {
+          copy.links[port] = { pieceId: twin, port: link.port }
+          copy.connectors[port] = sources[i].connectors[port]
+        }
+      }
+    })
+
+    // The highlighted end wins, exactly as it does when a part is added from
+    // the library: the copy is laid onto it instead of parked to one side.
+    const target = snapToPort ? freePort(pieces, activePort) : null
+    const host = target && pieces.find((p) => p.id === target.pieceId)
+    if (target && host) {
+      // Joining onto an end grows the build the way the track runs, so a copy
+      // meets a `b` end with its `a` end and vice versa.
+      const want: PortId = target.port === 'a' ? 'b' : 'a'
+      const other: PortId = want === 'a' ? 'b' : 'a'
+      const mate =
+        copies.filter((c) => !c.links[want]).map((c) => ({ piece: c, port: want }))[0] ??
+        copies.filter((c) => !c.links[other]).map((c) => ({ piece: c, port: other }))[0]
+
+      if (mate) {
+        const frame = worldPortFrame(host, target.port)
+        const t = transformToMate(mate.piece, mate.port, frame)
+        // Every copy rides the same transform, so the joints made above hold.
+        const delta = pieceMatrix({ ...mate.piece, position: t.position, rotation: t.rotation }).multiply(
+          pieceMatrix(mate.piece).invert(),
+        )
+        copies.forEach((c) => Object.assign(c, applyMatrix(c, delta)))
+        mate.piece.links[mate.port] = { pieceId: host.id, port: target.port }
+        mate.piece.connectors[mate.port] = true
+
+        const openEnd = copies.find((c) => !c.links[target.port])
+        set({
+          pieces: [
+            ...pieces.map((p) =>
+              p.id === host.id
+                ? {
+                    ...p,
+                    links: { ...p.links, [target.port]: { pieceId: mate.piece.id, port: mate.port } },
+                    connectors: { ...p.connectors, [target.port]: true },
+                  }
+                : p,
+            ),
+            ...copies,
+          ],
+          selection: { pieceIds: copies.map((c) => c.id), anchor: 'middle' },
+          activePort: openEnd ? { pieceId: openEnd.id, port: target.port } : null,
+        })
+        return
+      }
+    }
+
+    // Nothing highlighted to join onto: the copy lands clear of the original.
+    copies.forEach((c) => {
+      c.position = [c.position[0], c.position[1], c.position[2] + 60]
+    })
     set({ pieces: [...pieces, ...copies], selection: { pieceIds: copies.map((c) => c.id), anchor: 'middle' } })
   },
 
@@ -552,7 +583,6 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       pieces: [],
       selection: { pieceIds: [], anchor: 'middle' },
       activePort: null,
-      lastPart: null,
       tool: 'select',
       car: { pieceId: null, s: 0, v: 0, running: false },
       showVehicle: false,
@@ -577,7 +607,6 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       // An opened file starts a fresh session: nothing selected, nothing to undo past.
       selection: { pieceIds: [], anchor: 'middle' },
       activePort: null,
-      lastPart: null,
       tool: 'select',
       car: { pieceId: null, s: 0, v: 0, running: false },
       showVehicle: false,

@@ -10,7 +10,6 @@ import {
   Move,
   Plus,
   Redo2,
-  Repeat2,
   Rotate3d,
   Trash2,
   Undo2,
@@ -81,11 +80,9 @@ export function Toolbar({ onAddPart }: { onAddPart: () => void }) {
   const redo = useProject((s) => s.redo)
   const canUndo = useProject((s) => s.history.length > 0)
   const canRedo = useProject((s) => s.future.length > 0)
-  const repeatLastPart = useProject((s) => s.repeatLastPart)
   const duplicateSelected = useProject((s) => s.duplicateSelected)
   const removeSelected = useProject((s) => s.removeSelected)
   const dropToWorkplane = useProject((s) => s.dropToWorkplane)
-  const lastPart = useProject((s) => s.lastPart)
   const hasSelection = useProject((s) => s.selection.pieceIds.length > 0)
   const snapToPort = useProject((s) => s.snapToPort)
   const setSnapToPort = useProject((s) => s.setSnapToPort)
@@ -121,17 +118,8 @@ export function Toolbar({ onAddPart }: { onAddPart: () => void }) {
           <Mode key={t.id} {...t} active={tool === t.id} onClick={() => setTool(t.id)} />
         ))}
         <Action
-          label="Repeat last part"
-          hint="Another of the last part added, joined onto the open end"
-          shortcut="T"
-          onClick={repeatLastPart}
-          disabled={!lastPart}
-        >
-          <Repeat2 size={15} />
-        </Action>
-        <Action
           label="Duplicate"
-          hint="Copy the selection, loose and unjoined"
+          hint="Copy the selection onto the highlighted end, or loose when none is picked"
           shortcut="⌘D"
           onClick={duplicateSelected}
           disabled={!hasSelection}
