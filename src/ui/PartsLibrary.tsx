@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import { useProject } from '../store/useProject'
 import { Field, NumberInput, Segmented } from './controls'
+import { LengthInput, useUnits } from './units'
 import { laneWidth } from '../geometry/dimensions'
 import type { PartSpec, PieceKind } from '../types'
 
@@ -31,6 +32,7 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
   const snapToPort = useProject((s) => s.snapToPort)
   const activePort = useProject((s) => s.activePort)
   const pieces = useProject((s) => s.pieces)
+  const { fmt, val } = useUnits()
 
   const [kind, setKind] = useState<PieceKind>('straight')
   const [lanes, setLanes] = useState(1)
@@ -41,7 +43,7 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
 
   const spec: PartSpec =
     kind === 'straight'
-      ? { kind, lanes, length, radius, angleDeg, name: `Straight ${length}mm` }
+      ? { kind, lanes, length, radius, angleDeg, name: `Straight ${fmt(length, 0)}` }
       : {
           kind,
           lanes,
@@ -120,7 +122,7 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
           <div className="min-w-0 flex-1 p-3">
             <Preview kind={kind} lanes={lanes} angleDeg={angleDeg} turn={turn} />
 
-            <Field label="Width · lanes" hint={`${(laneWidth(dims.track) * lanes).toFixed(2)}mm across${lanes > 1 ? ' · inner walls removed' : ''}`}>
+            <Field label="Width · lanes" hint={`${fmt(laneWidth(dims.track) * lanes)} across${lanes > 1 ? ' · inner walls removed' : ''}`}>
               <div className="mb-1.5 grid grid-cols-4 gap-1">
                 {[1, 2, 3, 4].map((n) => (
                   <button
@@ -153,22 +155,21 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
                       style={length === l ? { borderColor: 'var(--color-accent)' } : undefined}
                       onClick={() => setLength(l)}
                     >
-                      {l}
+                      {val(l, 0)}
                     </button>
                   ))}
                 </div>
-                <NumberInput
+                <LengthInput
                   value={length}
                   onChange={setLength}
                   step={5}
                   min={MIN_STRAIGHT_LENGTH}
                   max={MAX_STRAIGHT_LENGTH}
-                  suffix="mm"
                 />
               </Field>
             ) : (
               <>
-                <Field label={`Radius · ${radius}mm`}>
+                <Field label={`Radius · ${fmt(radius, 0)}`}>
                   <input
                     type="range"
                     min={60}

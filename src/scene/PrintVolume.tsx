@@ -4,6 +4,7 @@ import { Text } from '@react-three/drei'
 import { useProject } from '../store/useProject'
 import { computePrintVolume } from '../lib/printVolume'
 import { useTheme } from '../store/useTheme'
+import { formatValue, unitSuffix } from '../lib/units'
 
 /**
  * Wraps the assembly in printer-sized boxes so you can read off how many build
@@ -13,6 +14,7 @@ export function PrintVolume() {
   const pieces = useProject((s) => s.pieces)
   const dims = useProject((s) => s.dims)
   const printer = useProject((s) => s.printer)
+  const units = useProject((s) => s.units)
   const theme = useTheme((s) => s.theme)
 
   const result = useMemo(
@@ -57,7 +59,11 @@ export function PrintVolume() {
             anchorX="left"
             anchorY="bottom"
           >
-            {`Plate ${i + 1} · ${sx}×${sz}×${sy}mm`}
+            {`Plate ${i + 1} · ${formatValue(sx, units, 0)}×${formatValue(
+              sz,
+              units,
+              0,
+            )}×${formatValue(sy, units, 0)}${unitSuffix(units)}`}
           </Text>
         </group>
       ))}

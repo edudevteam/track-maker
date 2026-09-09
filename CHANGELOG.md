@@ -20,6 +20,106 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.1.6] — 2026-09-09
+
+### Added
+
+- **A navigation hint in the bottom-right of the workplane** — the word
+  **Workplane** beside a small drawing of a mouse. Hold a button to move the
+  camera and that button lights up on the drawing while the move is named on a
+  badge above it: left drag reads **Rotate**, right drag **Pan**, and the wheel
+  (or a middle drag) **Zoom**. A plain left click to pick a part lights nothing,
+  and neither does dragging the move/rotate handle, so the hint only ever
+  reports a camera move that is really happening. It is a read-out, not a
+  control: the pointer passes straight through it to the workplane behind.
+
+---
+
+## [1.1.5] — 2026-09-09
+
+### Added
+
+- **Units in the Settings menu**, above Dimensions: pick **Millimetre (mm)** or
+  **Inch (in)** and every length in the app is written and typed in that unit —
+  the Dimensions dialog and its warnings, the Part panel's length, radius and
+  X/Y/Z, the parts library's width, length and radius, the Build tab's footprint,
+  height and plate size, the plate labels in the viewport, the grid-cell note and
+  the unit shown in the status bar. The choice is remembered between sessions.
+  Inch fields carry an extra decimal place and step in hundredths and quarters
+  rather than tenths of a millimetre, and a value that has only been rounded for
+  display is left alone, so switching units back and forth never nudges a
+  dimension.
+
+### Changed
+
+- **The track itself is still built in millimetres** whatever the display unit —
+  the choice changes what you read and type, not the parts. Exported 3MF files
+  stay in millimetres, so slicers open them at the right size as before.
+- **Dimensions… now carries a sliders icon** in the Settings menu, leaving the
+  ruler to the new Units row.
+
+### Fixed
+
+- **Dragging a piece by its move or rotate handle no longer reads as an orbit.**
+  The navigation hint in the corner of the workplane is told the handle has the
+  pointer, so it stops reporting a camera rotation that never happened.
+
+---
+
+## [1.1.4] — 2026-09-09
+
+### Changed
+
+- **The note at the top of the Dimensions dialog now says what the dialog is**
+  rather than where the numbers came from. It no longer cites the Fusion sketch
+  folder, which nobody using the app can open; instead it explains that these are
+  the measurements every part is built from — the track's cross-section, the
+  joining clip, and how tightly the two fit — and that they apply to the whole
+  build, so changing one rebuilds every piece on save. The Reset button's hover
+  text drops the same jargon.
+
+---
+
+## [1.1.3] — 2026-09-09
+
+### Added
+
+- **Dimensions moved into the Settings menu**, below Print, as **Dimensions…**.
+  It opens a dialog holding the same three groups as before — Track profile,
+  Connector clip and Assembly — laid out two fields to a row, with the warning
+  banner and the derived lane pitch / channel floor / straight wall readout kept.
+  Nothing you type reaches the build until you press **Save**: **Cancel** (or
+  Escape, or clicking away) throws the edits away and leaves every piece as it
+  was, so a half-typed number no longer rebuilds the track. **Reset to defaults**
+  puts every field back to the CAD value, and it too waits for Save.
+
+### Removed
+
+- **The right panel's Dims tab is gone** — its fields now live in
+  Settings ▸ Dimensions. The panel is down to Part, View and Build.
+
+---
+
+## [1.1.2] — 2026-09-09
+
+### Added
+
+- **A Print section in the Settings menu**, below Track and Vehicle. It holds
+  **Wrap track in print boxes** — the on/off preview that draws one box per build
+  plate around the track — and **Printer**, which opens the list of build volumes
+  (Bambu P1/X1, Prusa MK4, Ender 3, Bambu A1 mini, Custom) to the right. The
+  printer in force is named under the Printer row and carries a tick in the list.
+
+### Changed
+
+- **The right panel's Print tab is now called Build.** It reports what the build
+  needs — footprint, height, piece count, the chosen printer, and how many plates
+  it takes — and no longer sets anything, apart from the three size fields that
+  appear when the printer is set to Custom. A line at the foot points to
+  Settings ▸ Print for the printer and the print-box preview.
+
+---
+
 ## [1.1.1] — 2026-09-09
 
 ### Added

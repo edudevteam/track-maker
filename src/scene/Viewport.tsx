@@ -129,6 +129,7 @@ function Gizmo() {
   if (tool !== 'move' && tool !== 'rotate') return null
 
   const onMouseDown = () => {
+    navState.gizmoDragging = true
     commit()
     const group = collectGroup(pieces, piece.id)
     startRef.current = {
@@ -164,7 +165,10 @@ function Gizmo() {
       mode={tool === 'rotate' ? 'rotate' : 'translate'}
       size={0.85}
       onMouseDown={onMouseDown}
-      onMouseUp={() => (startRef.current = null)}
+      onMouseUp={() => {
+        navState.gizmoDragging = false
+        startRef.current = null
+      }}
       onObjectChange={onChange}
     />
   )
@@ -266,6 +270,14 @@ export const HOME_CAMERA = new THREE.Vector3(240, 190, 260)
 
 /** Set by the live Canvas; the toolbar calls into it. */
 export let viewApi: ViewApi | null = null
+
+/**
+ * Shared with the navigation hint in the corner of the workplane. Dragging the
+ * move/rotate handle is a left-button drag on the same canvas as an orbit, so
+ * the hint needs to know the handle has the pointer or it reports a camera
+ * rotation that never happened.
+ */
+export const navState = { gizmoDragging: false }
 
 export const VIEW_DIRECTIONS: Record<string, THREE.Vector3> = {
   Top: new THREE.Vector3(0, 1, 0.0001),

@@ -4,14 +4,17 @@ import { Toolbar } from './ui/Toolbar'
 import { RightPanel } from './ui/RightPanel'
 import { StatusBar } from './ui/StatusBar'
 import { ExportDialog } from './ui/ExportDialog'
+import { DimensionsDialog } from './ui/DimensionsDialog'
 import { PartsLibrary } from './ui/PartsLibrary'
 import { Viewport, viewApi } from './scene/Viewport'
 import { ViewTools } from './ui/ViewTools'
+import { NavHint } from './ui/NavHint'
 import { useProject } from './store/useProject'
 
 export function App() {
   const [exporting, setExporting] = useState(false)
   const [library, setLibrary] = useState(false)
+  const [dimensions, setDimensions] = useState(false)
   const undo = useProject((s) => s.undo)
   const redo = useProject((s) => s.redo)
   const removeSelected = useProject((s) => s.removeSelected)
@@ -20,7 +23,7 @@ export function App() {
   const setTool = useProject((s) => s.setTool)
   const toggleGrid = useProject((s) => s.toggleGrid)
 
-  const dialogOpen = exporting || library
+  const dialogOpen = exporting || library || dimensions
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -85,18 +88,20 @@ export function App() {
 
   return (
     <div className="flex h-full flex-col">
-      <TopBar onExport={() => setExporting(true)} />
+      <TopBar onExport={() => setExporting(true)} onOpenDimensions={() => setDimensions(true)} />
       <Toolbar onAddPart={() => setLibrary(true)} />
       <div className="flex min-h-0 flex-1">
         <main className="relative min-w-0 flex-1">
           <Viewport />
           <ViewTools />
+          <NavHint />
         </main>
         <RightPanel />
       </div>
       <StatusBar />
       {exporting && <ExportDialog onClose={() => setExporting(false)} />}
       {library && <PartsLibrary onClose={() => setLibrary(false)} />}
+      {dimensions && <DimensionsDialog onClose={() => setDimensions(false)} />}
     </div>
   )
 }

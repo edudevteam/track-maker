@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
+  Box,
   Car,
   Check,
   ChevronDown,
@@ -8,14 +9,18 @@ import {
   FilePlus2,
   FolderOpen,
   Moon,
+  Printer,
   Redo2,
   Route,
+  Ruler,
   Save,
+  SlidersHorizontal,
   Sun,
   Undo2,
 } from 'lucide-react'
-import { TRACK_TYPES, VEHICLE_TYPES, useProject } from '../store/useProject'
+import { PRINTER_PRESETS, TRACK_TYPES, VEHICLE_TYPES, useProject } from '../store/useProject'
 import { useTheme } from '../store/useTheme'
+import { UNIT_OPTIONS, unitLabel } from '../lib/units'
 import { downloadBlob } from '../export/exporters'
 import {
   PROJECT_FILE_EXT,
@@ -30,13 +35,25 @@ interface Notice {
   text: string
 }
 
-export function TopBar({ onExport }: { onExport: () => void }) {
+export function TopBar({
+  onExport,
+  onOpenDimensions,
+}: {
+  onExport: () => void
+  onOpenDimensions: () => void
+}) {
   const projectName = useProject((s) => s.projectName)
   const setProjectName = useProject((s) => s.setProjectName)
   const trackType = useProject((s) => s.trackType)
   const setTrackType = useProject((s) => s.setTrackType)
   const vehicle = useProject((s) => s.vehicle)
   const setVehicle = useProject((s) => s.setVehicle)
+  const units = useProject((s) => s.units)
+  const setUnits = useProject((s) => s.setUnits)
+  const printer = useProject((s) => s.printer)
+  const setPrinter = useProject((s) => s.setPrinter)
+  const showPrintVolume = useProject((s) => s.showPrintVolume)
+  const togglePrintVolume = useProject((s) => s.togglePrintVolume)
   const newProject = useProject((s) => s.newProject)
   const loadProject = useProject((s) => s.loadProject)
   const undo = useProject((s) => s.undo)
@@ -177,6 +194,42 @@ export function TopBar({ onExport }: { onExport: () => void }) {
             />
           ))}
         </Submenu>
+        <Submenu icon={<Printer size={13} />} label="Print">
+          <CheckItem
+            icon={<Box size={13} />}
+            label="Wrap track in print boxes"
+            checked={showPrintVolume}
+            onClick={togglePrintVolume}
+          />
+          <MenuSeparator />
+          <Submenu icon={<Printer size={13} />} label="Printer" hint={printer.name}>
+            {PRINTER_PRESETS.map((p) => (
+              <ChoiceItem
+                key={p.id}
+                label={p.name}
+                checked={printer.id === p.id}
+                onClick={() => setPrinter(p.id)}
+              />
+            ))}
+          </Submenu>
+        </Submenu>
+        <MenuSeparator />
+        <Submenu icon={<Ruler size={13} />} label="Units" hint={unitLabel(units)}>
+          {UNIT_OPTIONS.map((u) => (
+            <ChoiceItem
+              key={u.value}
+              label={u.label}
+              checked={units === u.value}
+              onClick={() => setUnits(u.value)}
+            />
+          ))}
+        </Submenu>
+        <MenuItem
+          icon={<SlidersHorizontal size={13} />}
+          label="Dimensions…"
+          hint="Track profile, clip and assembly"
+          onClick={onOpenDimensions}
+        />
       </Menu>
 
       <div className="h-5 w-px" style={{ background: 'var(--color-line)' }} />
@@ -338,7 +391,18 @@ function MenuSeparator() {
  * padding inside the wrapper — so the pointer can cross into it without the
  * hover being broken.
  */
-function Submenu({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
+function Submenu({
+  icon,
+  label,
+  hint,
+  children,
+}: {
+  icon: ReactNode
+  label: string
+  /** What the submenu currently resolves to, shown under the label. */
+  hint?: string
+  children: ReactNode
+}) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -360,7 +424,14 @@ function Submenu({ icon, label, children }: { icon: ReactNode; label: string; ch
         <span className="shrink-0" style={{ color: 'var(--color-ink-2)' }}>
           {icon}
         </span>
-        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate">{label}</span>
+          {hint && (
+            <span className="block truncate text-[10px]" style={{ color: 'var(--color-ink-2)' }}>
+              {hint}
+            </span>
+          )}
+        </span>
         <ChevronRight size={13} style={{ color: 'var(--color-ink-2)' }} />
       </button>
       {open && (
@@ -375,6 +446,37 @@ function Submenu({ icon, label, children }: { icon: ReactNode; label: string; ch
         </div>
       )}
     </div>
+  )
+}
+
+/** A setting that is simply on or off. A tick sits where the icon would, when on. */
+function CheckItem({
+  icon,
+  label,
+  checked,
+  onClick,
+}: {
+  icon: ReactNode
+  label: string
+  checked: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      role="menuitemcheckbox"
+      aria-checked={checked}
+      onClick={onClick}
+      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[12px] transition
+        hover:bg-black/5 dark:hover:bg-white/5"
+    >
+      <span
+        className="w-[13px] shrink-0"
+        style={{ color: checked ? 'var(--color-accent)' : 'var(--color-ink-2)' }}
+      >
+        {checked ? <Check size={13} /> : icon}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+    </button>
   )
 }
 

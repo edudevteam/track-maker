@@ -41,7 +41,7 @@ non-zero non-manifold edge count or a volume that misses the analytic value as a
 bug, not noise.
 
 Dimensions are millimetres. Every track and connector dimension is a runtime
-parameter in `src/geometry/dimensions.ts`, editable from the Dims panel — prefer
+parameter in `src/geometry/dimensions.ts`, editable from Settings ▸ Dimensions — prefer
 adding a parameter over hardcoding a value.
 
 ## Stack

@@ -175,8 +175,16 @@ export interface DimensionWarning {
   message: string
 }
 
-/** Sanity checks surfaced in the Dimensions panel rather than thrown. */
-export function validateDimensions(d: Dimensions): DimensionWarning[] {
+/** How a length is written into a warning. Defaults to millimetres. */
+export type LengthFormatter = (mm: number) => string
+
+const asMillimetres: LengthFormatter = (mm) => `${mm.toFixed(2)}mm`
+
+/**
+ * Sanity checks surfaced in the Dimensions dialog rather than thrown. `fmt`
+ * writes the lengths, so the warnings read in whichever unit the UI is showing.
+ */
+export function validateDimensions(d: Dimensions, fmt: LengthFormatter = asMillimetres): DimensionWarning[] {
   const w: DimensionWarning[] = []
   const t = d.track
   const c = d.connector
@@ -186,37 +194,37 @@ export function validateDimensions(d: Dimensions): DimensionWarning[] {
   if (wanted + t.slotCeiling > slab) {
     w.push({
       field: 'slabThickness',
-      message: `A ${c.bodyHeight.toFixed(2)}mm clip plus a ${t.slotCeiling.toFixed(
-        2,
-      )}mm ceiling needs a ${(wanted + t.slotCeiling).toFixed(2)}mm slab, but the slab is ${slab.toFixed(
-        2,
-      )}mm. The slot is being clamped, so the clip will not seat fully.`,
+      message: `A ${fmt(c.bodyHeight)} clip plus a ${fmt(t.slotCeiling)} ceiling needs a ${fmt(
+        wanted + t.slotCeiling,
+      )} slab, but the slab is ${fmt(slab)}. The slot is being clamped, so the clip will not seat fully.`,
     })
   }
   if (wallStraightHeight(t) < 1) {
     w.push({
       field: 'totalHeight',
-      message: `Slab (${slab.toFixed(2)}mm) and ramp (${t.rampHeight.toFixed(
-        2,
-      )}mm) leave no straight wall inside a ${t.totalHeight.toFixed(2)}mm profile.`,
+      message: `Slab (${fmt(slab)}) and ramp (${fmt(
+        t.rampHeight,
+      )}) leave no straight wall inside a ${fmt(t.totalHeight)} profile.`,
     })
   }
   if (c.bodyWidth >= t.slotMouthWidth) {
     w.push({
       field: 'bodyWidth',
-      message: `Connector body (${c.bodyWidth}mm) will not pass the slot mouth (${t.slotMouthWidth}mm).`,
+      message: `Connector body (${fmt(c.bodyWidth)}) will not pass the slot mouth (${fmt(
+        t.slotMouthWidth,
+      )}).`,
     })
   }
   if (c.wingSpan > t.slotOuterWidth) {
     w.push({
       field: 'wingSpan',
-      message: `Wings (${c.wingSpan}mm) are wider than the undercut (${t.slotOuterWidth}mm).`,
+      message: `Wings (${fmt(c.wingSpan)}) are wider than the undercut (${fmt(t.slotOuterWidth)}).`,
     })
   }
   if (t.slotOuterWidth >= laneWidth(t)) {
     w.push({
       field: 'slotOuterWidth',
-      message: `Slot (${t.slotOuterWidth}mm) is wider than the lane pitch (${laneWidth(t).toFixed(2)}mm).`,
+      message: `Slot (${fmt(t.slotOuterWidth)}) is wider than the lane pitch (${fmt(laneWidth(t))}).`,
     })
   }
   if (c.counterSinkDia <= c.holeDia) {

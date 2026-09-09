@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { Grid3x3, Package, Target } from 'lucide-react'
 import { useProject } from '../store/useProject'
 import { VIEW_DIRECTIONS, viewApi } from '../scene/Viewport'
+import { unitSuffix } from '../lib/units'
 
 export function StatusBar() {
   const showGrid = useProject((s) => s.showGrid)
@@ -12,6 +13,7 @@ export function StatusBar() {
   const togglePorts = useProject((s) => s.togglePorts)
   const pieces = useProject((s) => s.pieces)
   const snapToPort = useProject((s) => s.snapToPort)
+  const units = useProject((s) => s.units)
 
   const openEnds = pieces.reduce((n, p) => n + (p.links.a ? 0 : 1) + (p.links.b ? 0 : 1), 0)
 
@@ -51,7 +53,7 @@ export function StatusBar() {
 
       <span style={{ color: 'var(--color-ink-2)' }}>
         {pieces.length} piece{pieces.length === 1 ? '' : 's'} · {openEnds} open end
-        {openEnds === 1 ? '' : 's'} · snap {snapToPort ? 'on' : 'off'} · mm
+        {openEnds === 1 ? '' : 's'} · snap {snapToPort ? 'on' : 'off'} · {unitSuffix(units)}
       </span>
     </footer>
   )

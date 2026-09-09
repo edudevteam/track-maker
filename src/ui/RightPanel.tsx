@@ -1,18 +1,18 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, Copy, RotateCcw, Trash2 } from 'lucide-react'
+import { Copy, Trash2 } from 'lucide-react'
 import {
   useProject,
-  PRINTER_PRESETS,
   DEFAULT_SKY_TOP,
   DEFAULT_SKY_BOTTOM,
   type BackgroundMode,
 } from '../store/useProject'
 import { ColorInput, Field, NumberInput, Section, Segmented, Toggle } from './controls'
+import { LengthInput, useUnits } from './units'
 import { computePrintVolume } from '../lib/printVolume'
-import { floorTopY, laneWidth, validateDimensions, wallStraightHeight } from '../geometry/dimensions'
+import { laneWidth } from '../geometry/dimensions'
 import type { GizmoAnchor, Vec3 } from '../types'
 
-type Tab = 'properties' | 'dimensions' | 'view' | 'print'
+type Tab = 'properties' | 'view' | 'build'
 
 export function RightPanel() {
   const [tab, setTab] = useState<Tab>('properties')
@@ -27,17 +27,15 @@ export function RightPanel() {
           onChange={setTab}
           options={[
             { value: 'properties', label: 'Part' },
-            { value: 'dimensions', label: 'Dims' },
             { value: 'view', label: 'View' },
-            { value: 'print', label: 'Print' },
+            { value: 'build', label: 'Build' },
           ]}
         />
       </div>
       <div className="flex-1 overflow-y-auto">
         {tab === 'properties' && <Properties />}
-        {tab === 'dimensions' && <DimensionsTab />}
         {tab === 'view' && <ViewTab />}
-        {tab === 'print' && <PrintTab />}
+        {tab === 'build' && <BuildTab />}
       </div>
     </aside>
   )
@@ -52,6 +50,7 @@ function Properties() {
   const duplicateSelected = useProject((s) => s.duplicateSelected)
   const commit = useProject((s) => s.commit)
   const dims = useProject((s) => s.dims)
+  const { fmt } = useUnits()
 
   const selected = pieces.filter((p) => selection.pieceIds.includes(p.id))
   const piece = selected[0]
@@ -116,30 +115,28 @@ function Properties() {
           />
         </Field>
         <p className="mb-2 text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
-          {(laneWidth(dims.track) * piece.lanes).toFixed(2)}mm across
+          {fmt(laneWidth(dims.track) * piece.lanes)} across
           {piece.lanes > 1 ? ' · inner walls removed' : ''}
         </p>
 
         {piece.kind === 'straight' ? (
           <Field label="Length" hint="Connector ends keep their width, so joins still fit.">
-            <NumberInput
+            <LengthInput
               value={piece.length}
               min={20}
               max={600}
               step={5}
-              suffix="mm"
               onChange={(length) => set({ length })}
             />
           </Field>
         ) : (
           <>
             <Field label="Radius">
-              <NumberInput
+              <LengthInput
                 value={piece.radius}
                 min={40}
                 max={800}
                 step={5}
-                suffix="mm"
                 onChange={(radius) => set({ radius })}
               />
             </Field>
@@ -191,7 +188,7 @@ function Properties() {
         <div className="grid grid-cols-3 gap-1.5">
           {(['X', 'Y', 'Z'] as const).map((axis, i) => (
             <Field key={axis} label={axis}>
-              <NumberInput
+              <LengthInput
                 value={piece.position[i]}
                 step={1}
                 onChange={(v) => {
@@ -203,134 +200,6 @@ function Properties() {
             </Field>
           ))}
         </div>
-      </Section>
-    </>
-  )
-}
-
-const TRACK_FIELDS: { key: string; label: string; step?: number; suffix?: string }[] = [
-  { key: 'totalHeight', label: 'Overall height' },
-  { key: 'wallThickness', label: 'Wall thickness' },
-  { key: 'channelTopWidth', label: 'Channel width (top)' },
-  { key: 'slabThickness', label: 'Slab thickness' },
-  { key: 'rampHeight', label: 'Ramp height' },
-  { key: 'wallAngleDeg', label: 'Wall angle', step: 1, suffix: '°' },
-  { key: 'slotOuterWidth', label: 'T-slot undercut width' },
-  { key: 'slotMouthWidth', label: 'T-slot mouth width' },
-  { key: 'slotCeiling', label: 'Material above slot' },
-]
-
-const CONNECTOR_FIELDS: { key: string; label: string; step?: number; suffix?: string }[] = [
-  { key: 'length', label: 'Clip length', step: 1 },
-  { key: 'bodyWidth', label: 'Body width' },
-  { key: 'bodyHeight', label: 'Body height' },
-  { key: 'wingSpan', label: 'Wing span' },
-  { key: 'wingThickness', label: 'Wing thickness' },
-  { key: 'wingChamfer', label: 'Wing chamfer' },
-  { key: 'wingAngleDeg', label: 'Wing angle', step: 1, suffix: '°' },
-  { key: 'endChamfer', label: 'End chamfer' },
-  { key: 'holeCount', label: 'Hole count', step: 1, suffix: '' },
-  { key: 'holeSpan', label: 'Hole span', step: 1 },
-  { key: 'holeDia', label: 'Hole Ø' },
-  { key: 'counterSinkDia', label: 'Countersink Ø' },
-  { key: 'counterSinkDepth', label: 'Countersink depth' },
-  { key: 'innerRingHeight', label: 'Inner ring height' },
-]
-
-function DimensionsTab() {
-  const dims = useProject((s) => s.dims)
-  const setDimValue = useProject((s) => s.setDimValue)
-  const resetDims = useProject((s) => s.resetDims)
-  const warnings = useMemo(() => validateDimensions(dims), [dims])
-
-  return (
-    <>
-      <div className="tm-section">
-        <p className="text-[11.5px]" style={{ color: 'var(--color-ink-2)' }}>
-          Read from the Fusion sketches in <code>Plan/media/</code>. A few values were inferred from
-          the 2D views — correct anything that doesn't match your part and every piece rebuilds.
-        </p>
-        {warnings.map((w) => (
-          <div
-            key={w.field}
-            className="mt-2 flex gap-1.5 rounded border p-2 text-[11px]"
-            style={{ borderColor: '#d97706', background: 'color-mix(in srgb, #d97706 12%, transparent)' }}
-          >
-            <AlertTriangle size={13} className="mt-[1px] shrink-0" />
-            <span>{w.message}</span>
-          </div>
-        ))}
-      </div>
-
-      <Section
-        title="Track profile"
-        action={
-          <button className="tm-btn px-1.5 py-1" title="Reset to the CAD values" onClick={resetDims}>
-            <RotateCcw size={12} />
-          </button>
-        }
-      >
-        {TRACK_FIELDS.map((f) => (
-          <Field key={f.key} label={f.label}>
-            <NumberInput
-              value={(dims.track as unknown as Record<string, number>)[f.key]}
-              step={f.step ?? 0.1}
-              min={0}
-              suffix={f.suffix ?? 'mm'}
-              onChange={(v) => setDimValue('track', f.key, v)}
-            />
-          </Field>
-        ))}
-        <p className="text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
-          Lane pitch {laneWidth(dims.track).toFixed(3)}mm · channel floor at{' '}
-          {floorTopY(dims.track).toFixed(3)}mm · straight wall{' '}
-          {wallStraightHeight(dims.track).toFixed(3)}mm
-        </p>
-      </Section>
-
-      <Section title="Connector clip">
-        {CONNECTOR_FIELDS.map((f) => (
-          <Field key={f.key} label={f.label}>
-            <NumberInput
-              value={(dims.connector as unknown as Record<string, number>)[f.key]}
-              step={f.step ?? 0.1}
-              min={0}
-              suffix={f.suffix ?? 'mm'}
-              onChange={(v) => setDimValue('connector', f.key, v)}
-            />
-          </Field>
-        ))}
-      </Section>
-
-      <Section title="Assembly">
-        <Field label="Connector inset" hint="How far the clip reaches into each piece.">
-          <NumberInput
-            value={dims.assembly.connectorInset}
-            step={1}
-            min={5}
-            suffix="mm"
-            onChange={(v) => setDimValue('assembly', 'connectorInset', v)}
-          />
-        </Field>
-        <Field label="Fit clearance" hint="Slop between clip and slot so prints assemble.">
-          <NumberInput
-            value={dims.assembly.fitClearance}
-            step={0.05}
-            min={0}
-            max={1}
-            suffix="mm"
-            onChange={(v) => setDimValue('assembly', 'fitClearance', v)}
-          />
-        </Field>
-        <Field label="Default straight length">
-          <NumberInput
-            value={dims.assembly.defaultStraightLength}
-            step={5}
-            min={20}
-            suffix="mm"
-            onChange={(v) => setDimValue('assembly', 'defaultStraightLength', v)}
-          />
-        </Field>
       </Section>
     </>
   )
@@ -355,11 +224,17 @@ function ViewTab() {
   const setSkyColors = useProject((s) => s.setSkyColors)
   const solidColor = useProject((s) => s.solidColor)
   const setSolidColor = useProject((s) => s.setSolidColor)
+  const { fmt } = useUnits()
 
   return (
     <>
       <Section title="Display">
-        <Toggle checked={showGrid} onChange={toggleGrid} label="Grid" hint="Ground plane, 10mm cells." />
+        <Toggle
+          checked={showGrid}
+          onChange={toggleGrid}
+          label="Grid"
+          hint={`Ground plane, ${fmt(10, 0)} cells.`}
+        />
         <Toggle
           checked={showPorts}
           onChange={togglePorts}
@@ -417,15 +292,13 @@ function ViewTab() {
   )
 }
 
-function PrintTab() {
+function BuildTab() {
   const printer = useProject((s) => s.printer)
-  const setPrinter = useProject((s) => s.setPrinter)
   const customSize = useProject((s) => s.customPrinterSize)
   const setCustomSize = useProject((s) => s.setCustomPrinterSize)
-  const showPrintVolume = useProject((s) => s.showPrintVolume)
-  const togglePrintVolume = useProject((s) => s.togglePrintVolume)
   const pieces = useProject((s) => s.pieces)
   const dims = useProject((s) => s.dims)
+  const { suffix, val } = useUnits()
 
   const result = useMemo(
     () => computePrintVolume(pieces, dims, printer.size),
@@ -434,27 +307,12 @@ function PrintTab() {
 
   return (
     <>
-      <Section title="Print area preview">
-        <Toggle
-          checked={showPrintVolume}
-          onChange={togglePrintVolume}
-          label="Wrap track in print boxes"
-          hint="One box per build plate, added as the track grows."
-        />
-        <Field label="Printer">
-          <select className="tm-input" value={printer.id} onChange={(e) => setPrinter(e.target.value)}>
-            {PRINTER_PRESETS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        {printer.id === 'custom' && (
+      {printer.id === 'custom' && (
+        <Section title="Custom build volume">
           <div className="grid grid-cols-3 gap-1.5">
             {(['X', 'Y (height)', 'Z'] as const).map((label, i) => (
               <Field key={label} label={label}>
-                <NumberInput
+                <LengthInput
                   value={customSize[i]}
                   step={5}
                   min={20}
@@ -467,18 +325,25 @@ function PrintTab() {
               </Field>
             ))}
           </div>
-        )}
-      </Section>
+        </Section>
+      )}
 
       <Section title="Build size">
         {result.bounds ? (
           <dl className="space-y-1 text-[12px]">
-            <Row label="Footprint" value={`${result.size[0].toFixed(1)} × ${result.size[2].toFixed(1)} mm`} />
-            <Row label="Height" value={`${result.size[1].toFixed(1)} mm`} />
+            <Row
+              label="Footprint"
+              value={`${val(result.size[0], 1)} × ${val(result.size[2], 1)} ${suffix}`}
+            />
+            <Row label="Height" value={`${val(result.size[1], 1)} ${suffix}`} />
             <Row label="Pieces" value={String(pieces.length)} />
+            <Row label="Printer" value={printer.name} />
             <Row
               label="Plates needed"
-              value={`${result.cells.length} × ${printer.size[0]}×${printer.size[2]}×${printer.size[1]}mm`}
+              value={`${result.cells.length} × ${val(printer.size[0], 0)}×${val(
+                printer.size[2],
+                0,
+              )}×${val(printer.size[1], 0)}${suffix}`}
             />
           </dl>
         ) : (
@@ -486,6 +351,9 @@ function PrintTab() {
             Add track to see how much build volume it needs.
           </p>
         )}
+        <p className="mt-2 text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
+          The printer and the print-box preview are set in Settings ▸ Print.
+        </p>
       </Section>
     </>
   )

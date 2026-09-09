@@ -6,6 +6,12 @@ export type TrackType = 'car' | 'train'
 /** Which vehicle rides the track in the preview. */
 export type VehicleType = 'diecast' | 'rc48'
 
+/**
+ * The unit lengths are shown and typed in. Only a display choice — every stored
+ * dimension, position and geometry value stays in millimetres.
+ */
+export type Unit = 'mm' | 'in'
+
 /** The two ends of every piece. `a` is the local origin end, `b` the far end. */
 export type PortId = 'a' | 'b'
 

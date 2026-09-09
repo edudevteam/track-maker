@@ -157,6 +157,7 @@ export function NumberInput({
   min,
   max,
   suffix,
+  digits = 3,
 }: {
   value: number
   onChange: (v: number) => void
@@ -164,13 +165,19 @@ export function NumberInput({
   min?: number
   max?: number
   suffix?: string
+  /** Decimal places the displayed value is rounded to. */
+  digits?: number
 }) {
   const [text, setText] = useState(String(value))
   const [focused, setFocused] = useState(false)
+  const round = (v: number) => {
+    const f = 10 ** digits
+    return Math.round(v * f) / f
+  }
 
   useEffect(() => {
     if (!focused) setText(String(round(value)))
-  }, [value, focused])
+  }, [value, focused, digits])
 
   const commit = (raw: string) => {
     const n = Number(raw)
@@ -211,8 +218,6 @@ export function NumberInput({
     </div>
   )
 }
-
-const round = (v: number) => Math.round(v * 1000) / 1000
 
 export function Toggle({
   checked,

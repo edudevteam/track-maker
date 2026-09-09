@@ -10,6 +10,7 @@ import type {
   PrinterPreset,
   ToolId,
   TrackType,
+  Unit,
   Vec3,
   VehicleType,
 } from '../types'
@@ -20,6 +21,7 @@ import {
   type Dimensions,
 } from '../geometry/dimensions'
 import { transformToMate, worldPortFrame } from '../lib/ports'
+import { loadUnits, saveUnits } from '../lib/units'
 import type { ProjectDocument } from '../export/project'
 
 export const PRINTER_PRESETS: PrinterPreset[] = [
@@ -72,6 +74,11 @@ export interface ProjectState {
   trackType: TrackType
   /** Which vehicle the preview rides — picked in Settings ▸ Vehicle. */
   vehicle: VehicleType
+  /**
+   * The unit every length is shown and typed in — picked in Settings ▸ Units.
+   * Display only: the build itself is millimetres throughout.
+   */
+  units: Unit
   dims: Dimensions
 
   pieces: Piece[]
@@ -109,6 +116,7 @@ export interface ProjectActions {
   setProjectName: (n: string) => void
   setTrackType: (t: TrackType) => void
   setVehicle: (v: VehicleType) => void
+  setUnits: (u: Unit) => void
   setDims: (patch: Partial<Dimensions>) => void
   setDimValue: (group: keyof Dimensions, field: string, value: number) => void
   resetDims: () => void
@@ -209,6 +217,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
   projectName: 'Untitled Track',
   trackType: 'car',
   vehicle: 'diecast',
+  units: loadUnits(),
   dims: DEFAULT_DIMENSIONS,
 
   pieces: [],
@@ -239,6 +248,10 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
   setProjectName: (projectName) => set({ projectName }),
   setTrackType: (trackType) => set({ trackType }),
   setVehicle: (vehicle) => set({ vehicle }),
+  setUnits: (units) => {
+    saveUnits(units)
+    set({ units })
+  },
   setDims: (patch) => set((s) => ({ dims: { ...s.dims, ...patch } })),
   setDimValue: (group, field, value) =>
     set((s) => ({
