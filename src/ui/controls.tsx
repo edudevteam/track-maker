@@ -1,4 +1,136 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
+import { createPortal } from 'react-dom'
+
+/** How long the pointer has to rest on a control before its tooltip appears. */
+const TOOLTIP_DELAY_MS = 260
+/** Keep the bubble this far off the trigger and off the window edges. */
+const TOOLTIP_GAP = 8
+const TOOLTIP_MARGIN = 8
+
+/**
+ * A hover/focus tooltip that renders to `document.body`, so it is never clipped
+ * by the scrolling side panels. Shows a bold title, an optional shortcut key and
+ * a one-line description of what the control does.
+ */
+export function Tooltip({
+  title,
+  body,
+  shortcut,
+  placement = 'bottom',
+  className,
+  children,
+}: {
+  title: string
+  body?: string
+  shortcut?: string
+  placement?: 'top' | 'bottom'
+  className?: string
+  children: ReactNode
+}) {
+  const anchorRef = useRef<HTMLSpanElement>(null)
+  const bubbleRef = useRef<HTMLDivElement>(null)
+  const timer = useRef<number | undefined>(undefined)
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null)
+
+  const hide = useCallback(() => {
+    window.clearTimeout(timer.current)
+    setAt(null)
+  }, [])
+
+  const place = useCallback(() => {
+    const r = anchorRef.current?.getBoundingClientRect()
+    if (!r) return
+    setAt({
+      x: r.left + r.width / 2,
+      y: placement === 'bottom' ? r.bottom + TOOLTIP_GAP : r.top - TOOLTIP_GAP,
+    })
+  }, [placement])
+
+  const show = useCallback(() => {
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(place, TOOLTIP_DELAY_MS)
+  }, [place])
+
+  useEffect(() => () => window.clearTimeout(timer.current), [])
+
+  // Anything that moves the trigger out from under the pointer dismisses it.
+  useEffect(() => {
+    if (!at) return
+    window.addEventListener('scroll', hide, true)
+    window.addEventListener('resize', hide)
+    return () => {
+      window.removeEventListener('scroll', hide, true)
+      window.removeEventListener('resize', hide)
+    }
+  }, [at, hide])
+
+  // Nudge the bubble back inside the window if centring pushed it off an edge.
+  useLayoutEffect(() => {
+    const el = bubbleRef.current
+    if (!el || !at) return
+    const r = el.getBoundingClientRect()
+    let dx = 0
+    if (r.left < TOOLTIP_MARGIN) dx = TOOLTIP_MARGIN - r.left
+    else if (r.right > window.innerWidth - TOOLTIP_MARGIN)
+      dx = window.innerWidth - TOOLTIP_MARGIN - r.right
+    if (dx) el.style.transform = `translate(calc(-50% + ${dx}px), ${placement === 'top' ? '-100%' : '0'})`
+  }, [at, placement])
+
+  return (
+    <span
+      ref={anchorRef}
+      className={className}
+      onPointerEnter={(e) => e.pointerType === 'mouse' && show()}
+      onPointerLeave={hide}
+      onPointerDown={hide}
+      onFocus={place}
+      onBlur={hide}
+    >
+      {children}
+      {at &&
+        createPortal(
+          <div
+            ref={bubbleRef}
+            role="tooltip"
+            className="pointer-events-none fixed z-50 max-w-[210px] rounded-[5px] border px-2 py-1.5 shadow-lg"
+            style={{
+              left: at.x,
+              top: at.y,
+              transform: `translate(-50%, ${placement === 'top' ? '-100%' : '0'})`,
+              background: 'var(--color-surface)',
+              borderColor: 'var(--color-line)',
+              color: 'var(--color-ink)',
+            }}
+          >
+            <span className="flex items-baseline gap-1.5">
+              <span className="text-[11.5px] font-semibold">{title}</span>
+              {shortcut && (
+                <span
+                  className="rounded-[3px] px-1 font-mono text-[10px]"
+                  style={{ background: 'var(--color-surface-2)', color: 'var(--color-ink-2)' }}
+                >
+                  {shortcut}
+                </span>
+              )}
+            </span>
+            {body && (
+              <span className="mt-0.5 block text-[10.5px] leading-snug" style={{ color: 'var(--color-ink-2)' }}>
+                {body}
+              </span>
+            )}
+          </div>,
+          document.body,
+        )}
+    </span>
+  )
+}
 
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (

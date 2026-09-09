@@ -118,7 +118,8 @@ function makePiece(dims: Dimensions, init: Partial<Piece> = {}): Piece {
     position: init.position ?? [0, 0, 0],
     rotation: init.rotation ?? [0, 0, 0],
     color: init.color ?? DEFAULT_TRACK_COLOR,
-    connectors: init.connectors ?? { a: true, b: true },
+    // A loose piece carries no clips. They are fitted when a joint is made.
+    connectors: init.connectors ?? { a: false, b: false },
     connectorColor: init.connectorColor ?? DEFAULT_CONNECTOR_COLOR,
     links: init.links ?? { a: null, b: null },
     visible: init.visible ?? true,
@@ -183,11 +184,16 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
         piece.position = t.position
         piece.rotation = t.rotation
         piece.links = { a: { pieceId: host.id, port: target.port }, b: null }
+        piece.connectors = { ...piece.connectors, a: true }
         set((s) => ({
           pieces: [
             ...s.pieces.map((p) =>
               p.id === host.id
-                ? { ...p, links: { ...p.links, [target.port]: { pieceId: piece.id, port: 'a' as PortId } } }
+                ? {
+                    ...p,
+                    links: { ...p.links, [target.port]: { pieceId: piece.id, port: 'a' as PortId } },
+                    connectors: { ...p.connectors, [target.port]: true },
+                  }
                 : p,
             ),
             piece,
@@ -219,13 +225,20 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
     set({
       pieces: pieces
         .filter((p) => !gone.has(p.id))
-        .map((p) => ({
-          ...p,
-          links: {
-            a: p.links.a && gone.has(p.links.a.pieceId) ? null : p.links.a,
-            b: p.links.b && gone.has(p.links.b.pieceId) ? null : p.links.b,
-          },
-        })),
+        .map((p) => {
+          const orphaned = (port: PortId) => !!p.links[port] && gone.has(p.links[port]!.pieceId)
+          return {
+            ...p,
+            links: {
+              a: orphaned('a') ? null : p.links.a,
+              b: orphaned('b') ? null : p.links.b,
+            },
+            connectors: {
+              a: orphaned('a') ? false : p.connectors.a,
+              b: orphaned('b') ? false : p.connectors.b,
+            },
+          }
+        }),
       selection: { pieceIds: [], anchor: 'middle' },
       activePort: null,
     })
@@ -243,6 +256,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
           name: `${p.name} copy`,
           position: [p.position[0], p.position[1], p.position[2] + 60],
           links: { a: null, b: null },
+          connectors: { a: false, b: false },
         }),
       )
     set({ pieces: [...pieces, ...copies], selection: { pieceIds: copies.map((c) => c.id), anchor: 'middle' } })
@@ -287,8 +301,18 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       pieces: pieces.map((p) => {
         let next = p
         if (group.has(p.id)) next = { ...p, ...applyMatrix(p, delta) }
-        if (p.id === a.pieceId) next = { ...next, links: { ...next.links, [a.port]: b } }
-        if (p.id === b.pieceId) next = { ...next, links: { ...next.links, [b.port]: a } }
+        if (p.id === a.pieceId)
+          next = {
+            ...next,
+            links: { ...next.links, [a.port]: b },
+            connectors: { ...next.connectors, [a.port]: true },
+          }
+        if (p.id === b.pieceId)
+          next = {
+            ...next,
+            links: { ...next.links, [b.port]: a },
+            connectors: { ...next.connectors, [b.port]: true },
+          }
         return next
       }),
       activePort: null,
@@ -303,8 +327,15 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
     commit()
     set({
       pieces: pieces.map((x) => {
-        if (x.id === p.pieceId) return { ...x, links: { ...x.links, [p.port]: null } }
-        if (x.id === link.pieceId) return { ...x, links: { ...x.links, [link.port]: null } }
+        // The joint is gone, so the clip goes with it.
+        if (x.id === p.pieceId)
+          return { ...x, links: { ...x.links, [p.port]: null }, connectors: { ...x.connectors, [p.port]: false } }
+        if (x.id === link.pieceId)
+          return {
+            ...x,
+            links: { ...x.links, [link.port]: null },
+            connectors: { ...x.connectors, [link.port]: false },
+          }
         return x
       }),
     })

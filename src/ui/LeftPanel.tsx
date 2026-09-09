@@ -7,24 +7,37 @@ import {
   Link2,
   Link2Off,
   Lock,
-  Move3d,
+  Move,
   MousePointer2,
   Rotate3d,
   Unlock,
 } from 'lucide-react'
 import { useProject } from '../store/useProject'
-import { Section, Segmented, Toggle } from './controls'
+import { NumberInput, Section, Toggle, Tooltip } from './controls'
 import type { ToolId } from '../types'
 
-const TOOLS: { id: ToolId; icon: typeof MousePointer2; label: string; hint: string }[] = [
-  { id: 'select', icon: MousePointer2, label: 'Select', hint: 'Click a piece to select it' },
-  { id: 'move', icon: Move3d, label: 'Move', hint: 'Drag the handle to move the assembly' },
-  { id: 'rotate', icon: Rotate3d, label: 'Rotate', hint: 'Spin the assembly about the handle' },
-  { id: 'connect', icon: Link2, label: 'Connect', hint: 'Click two ends to join them' },
-  { id: 'disconnect', icon: Link2Off, label: 'Disconnect', hint: 'Click a joined end to free it' },
+/** Shortcuts here must match the key handler in `App.tsx`. */
+const TOOLS: { id: ToolId; icon: typeof MousePointer2; label: string; hint: string; key: string }[] = [
+  { id: 'select', icon: MousePointer2, label: 'Select', hint: 'Click a piece to select it', key: 'V' },
+  { id: 'move', icon: Move, label: 'Move', hint: 'Drag the handle to move the assembly', key: 'G' },
+  { id: 'rotate', icon: Rotate3d, label: 'Rotate', hint: 'Spin the assembly about the handle', key: 'R' },
+  { id: 'connect', icon: Link2, label: 'Connect', hint: 'Click two ends to join them', key: 'C' },
+  {
+    id: 'disconnect',
+    icon: Link2Off,
+    label: 'Disconnect',
+    hint: 'Click a joined end to free it',
+    key: 'X',
+  },
 ]
 
 const CURVE_ANGLES = [15, 30, 45, 90]
+
+/** Lanes are free-typed now, so they need sane bounds. Widths are whole lanes. */
+const MAX_LANES = 8
+/** A straight still has to hold a connector pocket at each end. Millimetres. */
+const MIN_STRAIGHT_LENGTH = 20
+const MAX_STRAIGHT_LENGTH = 1000
 
 export function LeftPanel() {
   const tool = useProject((s) => s.tool)
@@ -52,19 +65,21 @@ export function LeftPanel() {
             const Icon = t.icon
             const active = tool === t.id
             return (
-              <button
-                key={t.id}
-                title={`${t.label} — ${t.hint}`}
-                onClick={() => setTool(t.id)}
-                className="grid h-[34px] place-items-center rounded border transition"
-                style={{
-                  background: active ? 'var(--color-accent)' : 'var(--color-surface-2)',
-                  borderColor: active ? 'var(--color-accent)' : 'var(--color-line)',
-                  color: active ? '#fff' : 'var(--color-ink)',
-                }}
-              >
-                <Icon size={15} />
-              </button>
+              <Tooltip key={t.id} title={t.label} body={t.hint} shortcut={t.key} className="block">
+                <button
+                  aria-label={`${t.label} tool`}
+                  aria-pressed={active}
+                  onClick={() => setTool(t.id)}
+                  className="grid h-[34px] w-full place-items-center rounded border transition"
+                  style={{
+                    background: active ? 'var(--color-accent)' : 'var(--color-surface-2)',
+                    borderColor: active ? 'var(--color-accent)' : 'var(--color-line)',
+                    color: active ? '#fff' : 'var(--color-ink)',
+                  }}
+                >
+                  <Icon size={15} />
+                </button>
+              </Tooltip>
             )
           })}
         </div>
@@ -88,25 +103,36 @@ export function LeftPanel() {
 
       <Section title="Add track">
         <div className="mb-2">
-          <span className="tm-label mb-1 block">Width</span>
-          <Segmented
+          <span className="tm-label mb-1 block">Width · lanes</span>
+          <NumberInput
             value={lanes}
-            onChange={setLanes}
-            options={[1, 2, 3, 4].map((n) => ({
-              value: n,
-              label: n === 1 ? 'Single' : `${n}×`,
-              title: n === 1 ? 'Single track' : `${n} lanes wide, inner walls removed`,
-            }))}
+            onChange={(v) => setLanes(Math.max(1, Math.round(v)))}
+            step={1}
+            min={1}
+            max={MAX_LANES}
+            suffix="×"
           />
+          <p className="mt-1 text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
+            1 = single track. Wider pieces drop the inner walls, keeping one T-slot per lane.
+          </p>
         </div>
 
         <div className="mb-2">
-          <span className="tm-label mb-1 block">Straight · length</span>
-          <div className="mb-1.5 flex gap-1">
+          <span className="tm-label mb-1 block">Straight · length (mm)</span>
+          <NumberInput
+            value={length}
+            onChange={setLength}
+            step={5}
+            min={MIN_STRAIGHT_LENGTH}
+            max={MAX_STRAIGHT_LENGTH}
+            suffix="mm"
+          />
+          <div className="my-1.5 flex gap-1">
             {[50, 100, 150, 200].map((l) => (
               <button
                 key={l}
                 className="tm-btn flex-1 px-0"
+                title={`${l}mm`}
                 style={length === l ? { borderColor: 'var(--color-accent)' } : undefined}
                 onClick={() => setLength(l)}
               >

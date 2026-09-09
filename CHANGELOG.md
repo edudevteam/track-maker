@@ -20,6 +20,130 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.0.10] — 2026-09-09
+
+### Changed
+
+- A track dropped on the workplane now arrives bare — no clips on either end.
+  A clip is fitted the moment that end is joined to another piece, whether the
+  join comes from snapping a new piece onto a highlighted port or from the
+  Connect tool, and it is taken away again when the pair is disconnected or the
+  neighbour is deleted. Duplicated pieces come through bare as well.
+  The per-end connector toggles in the part panel still let you force a clip
+  onto a free end when you want to print one.
+
+---
+
+## [1.0.9] — 2026-09-09
+
+### Added
+
+- An axis indicator in the bottom-left corner of the viewport: three labelled
+  arrows — red **X**, green **Y**, blue **Z** — that turn with the camera, so the
+  current heading is readable without reading the orientation cube.
+
+### Removed
+
+- The coloured axis lines on the orientation cube. The cube now just names the
+  faces; direction is the corner indicator's job.
+
+---
+
+## [1.0.8] — 2026-09-09
+
+### Changed
+
+- The orientation cube's red X axis now runs the full width of the front bottom
+  edge, from the Front/Right/Bottom corner across to the Front/Left/Bottom
+  corner, instead of poking out past the right side of the box.
+
+### Removed
+
+- The X / Y / Z letters on the orientation cube's axis tripod. The three
+  coloured lines stand on their own — red across, green back, blue up.
+
+---
+
+## [1.0.7] — 2026-09-09
+
+### Changed
+
+- The orientation cube's axis tripod now hangs off the bottom corner shared by
+  the Front and Right faces instead of the front-left one. Blue **Z** climbs the
+  vertical edge between Front and Right, green **Y** runs back along the edge
+  between Right and Bottom, and red **X** reaches out past the right side of the
+  box. The red **X** letter sits back along its leg, just left of and below the
+  line, so it stays beside the cube rather than floating away from it.
+
+---
+
+## [1.0.6] — 2026-09-09
+
+### Changed
+
+- The ground plane and the orientation cube now follow the Fusion viewport in
+  `_plan/media/CAD-Tool-01-Full-CAD-View.png`.
+- The grid is a bounded 2.4m square with a visible border instead of a plane
+  fading away into nothing, drawn in paler greys on a near-white background,
+  with 10mm cells and 100mm sections as before.
+- Red and green axis lines run through the origin on the grid, in the CAD
+  convention: **X red** left to right, **Y green** front to back, **Z blue**
+  vertical.
+- The orientation cube is a white-grey box with thin grey edges and a soft drop
+  shadow, and it carries an X / Y / Z axis tripod at its near bottom corner in
+  the same red / green / blue. The letters sit clear of the box.
+
+---
+
+## [1.0.5] — 2026-09-09
+
+### Added
+
+- Hovering a button in the Tools row now pops up a small tooltip naming the tool,
+  showing its keyboard shortcut (Select V, Move G, Rotate R, Connect C,
+  Disconnect X) and describing in one line what it does. It appears after a short
+  pause, follows the light/dark theme, floats above the panel rather than being
+  cut off at its edge, and also shows when the button is reached by keyboard.
+
+---
+
+## [1.0.4] — 2026-09-09
+
+### Changed
+
+- The Move tool's icon in the Tools row is now the four-way crosshair — arrows
+  pointing up, down, left and right — instead of the 3D axes glyph, so it reads
+  as "drag this in any direction" at a glance.
+
+---
+
+## [1.0.3] — 2026-09-09
+
+### Changed
+
+- Track width is now a typed number of lanes instead of the Single/2×/3×/4×
+  buttons. It defaults to 1 and accepts any whole number of lanes up to 8.
+- Straight length is now a typed number field, defaulting to 100mm and accepting
+  20–1000mm. The 50 / 100 / 150 / 200 buttons stay as quick presets that fill the
+  field. The heading reads "Straight · length (mm)" and the field carries an `mm`
+  suffix, so the unit is stated where the number is entered.
+- The orientation cube's edge lines are a lighter grey in both themes — still
+  solid enough to read as a box, less heavy than the near-black outline.
+
+---
+
+## [1.0.2] — 2026-09-09
+
+### Changed
+
+- The orientation cube in the top-right of the viewport now reads as a solid
+  object instead of a faint outline. Its edges are drawn as real lines with a
+  constant on-screen thickness, the face labels are heavier, and the face and
+  edge colours carry more contrast in both light and dark mode. Clicking faces,
+  edges and corners to snap the camera works exactly as before.
+
+---
+
 ## [1.0.1] — 2026-09-08
 
 First working build. Client-side CAD tool for designing 3D-printable car track,

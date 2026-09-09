@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { Canvas, useThree } from '@react-three/fiber'
-import { Environment, GizmoHelper, GizmoViewcube, Grid, OrbitControls, TransformControls } from '@react-three/drei'
+import { Environment, GizmoHelper, OrbitControls, TransformControls } from '@react-three/drei'
 import { useProject } from '../store/useProject'
 import { useTheme } from '../store/useTheme'
 import { PieceMesh } from './PieceMesh'
 import { PrintVolume } from './PrintVolume'
 import { Car } from './Car'
 import { SkyDome } from './SkyDome'
+import { ViewCube } from './ViewCube'
+import { AxisTriad } from './AxisTriad'
+import { CadGrid } from './CadGrid'
 import { localPortFrame, pieceMidpoint, pieceQuaternion } from '../lib/ports'
 import type { Piece } from '../types'
 import { collectGroup } from '../store/useProject'
@@ -23,11 +26,10 @@ export function Viewport() {
   const skyBottom = useProject((s) => s.skyBottom)
   const solidColor = useProject((s) => s.solidColor)
 
-  const themeBg = theme === 'dark' ? '#161a20' : '#f2f4f7'
+  // Near-white in light mode, matching the Fusion viewport the grid is styled after.
+  const themeBg = theme === 'dark' ? '#161a20' : '#fafbfc'
   // The sky dome paints the backdrop itself; the clear colour just avoids a flash.
   const bg = background === 'solid' ? solidColor : themeBg
-  const gridCell = theme === 'dark' ? '#2c333d' : '#d5dae1'
-  const gridSection = theme === 'dark' ? '#3d4854' : '#b3bcc7'
 
   return (
     <Canvas
@@ -54,22 +56,7 @@ export function Viewport() {
       <directionalLight position={[-250, 200, -200]} intensity={0.35} />
       <Environment preset="city" environmentIntensity={0.25} />
 
-      {showGrid && (
-        <Grid
-          args={[4000, 4000]}
-          cellSize={10}
-          cellThickness={0.6}
-          cellColor={gridCell}
-          sectionSize={100}
-          sectionThickness={1.1}
-          sectionColor={gridSection}
-          fadeDistance={2600}
-          fadeStrength={1.2}
-          infiniteGrid
-          followCamera={false}
-          position={[0, -0.05, 0]}
-        />
-      )}
+      {showGrid && <CadGrid />}
 
       {pieces.map((p) => (
         <PieceMesh key={p.id} piece={p} />
@@ -81,12 +68,15 @@ export function Viewport() {
 
       <OrbitControls makeDefault enableDamping dampingFactor={0.12} maxDistance={6000} minDistance={20} />
       <GizmoHelper alignment="top-right" margin={[76, 76]}>
-        <GizmoViewcube
-          color={theme === 'dark' ? '#2a3038' : '#ffffff'}
-          textColor={theme === 'dark' ? '#e6e9ee' : '#333'}
-          strokeColor={theme === 'dark' ? '#4b5563' : '#c8ccd2'}
-          hoverColor="#2f7fd1"
-        />
+        <ViewCube />
+      </GizmoHelper>
+      {/*
+        A second HUD layer for the corner axis triad. Its render priority has to
+        sit above the cube's: the first layer is the one that draws the main
+        scene, and every later one just clears depth and stacks on top.
+      */}
+      <GizmoHelper alignment="bottom-left" margin={[76, 76]} renderPriority={2}>
+        <AxisTriad />
       </GizmoHelper>
       <CameraBridge />
     </Canvas>
