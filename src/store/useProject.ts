@@ -53,6 +53,9 @@ export type BackgroundMode = 'theme' | 'sky' | 'solid'
 export const DEFAULT_SKY_TOP = '#5b9bd5'
 export const DEFAULT_SKY_BOTTOM = '#dce8f2'
 
+/** A neutral grey for the plain-colour background. */
+export const DEFAULT_SOLID_COLOR = '#5b6570'
+
 let counter = 0
 const nextId = () => `p${Date.now().toString(36)}${(counter++).toString(36)}`
 
@@ -233,7 +236,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
   background: 'theme',
   skyTop: DEFAULT_SKY_TOP,
   skyBottom: DEFAULT_SKY_BOTTOM,
-  solidColor: '#5b6570',
+  solidColor: DEFAULT_SOLID_COLOR,
   printer: PRINTER_PRESETS[0],
   customPrinterSize: [256, 256, 256],
 

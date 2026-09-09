@@ -5,6 +5,7 @@ import { RightPanel } from './ui/RightPanel'
 import { StatusBar } from './ui/StatusBar'
 import { ExportDialog } from './ui/ExportDialog'
 import { DimensionsDialog } from './ui/DimensionsDialog'
+import { BackgroundDialog } from './ui/BackgroundDialog'
 import { PartsLibrary } from './ui/PartsLibrary'
 import { Viewport, viewApi } from './scene/Viewport'
 import { ViewTools } from './ui/ViewTools'
@@ -15,6 +16,7 @@ export function App() {
   const [exporting, setExporting] = useState(false)
   const [library, setLibrary] = useState(false)
   const [dimensions, setDimensions] = useState(false)
+  const [background, setBackground] = useState(false)
   const undo = useProject((s) => s.undo)
   const redo = useProject((s) => s.redo)
   const removeSelected = useProject((s) => s.removeSelected)
@@ -23,7 +25,7 @@ export function App() {
   const setTool = useProject((s) => s.setTool)
   const toggleGrid = useProject((s) => s.toggleGrid)
 
-  const dialogOpen = exporting || library || dimensions
+  const dialogOpen = exporting || library || dimensions || background
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -88,7 +90,11 @@ export function App() {
 
   return (
     <div className="flex h-full flex-col">
-      <TopBar onExport={() => setExporting(true)} onOpenDimensions={() => setDimensions(true)} />
+      <TopBar
+        onExport={() => setExporting(true)}
+        onOpenDimensions={() => setDimensions(true)}
+        onOpenBackground={() => setBackground(true)}
+      />
       <Toolbar onAddPart={() => setLibrary(true)} />
       <div className="flex min-h-0 flex-1">
         <main className="relative min-w-0 flex-1">
@@ -102,6 +108,7 @@ export function App() {
       {exporting && <ExportDialog onClose={() => setExporting(false)} />}
       {library && <PartsLibrary onClose={() => setLibrary(false)} />}
       {dimensions && <DimensionsDialog onClose={() => setDimensions(false)} />}
+      {background && <BackgroundDialog onClose={() => setBackground(false)} />}
     </div>
   )
 }

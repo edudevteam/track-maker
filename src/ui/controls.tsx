@@ -291,19 +291,30 @@ export function Segmented<T extends string | number>({
   )
 }
 
-export function ColorInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function ColorInput({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string
+  onChange: (v: string) => void
+  /** Shown greyed out and inert — the colour is still readable, just not in use. */
+  disabled?: boolean
+}) {
   return (
-    <div className="flex gap-2">
+    <div className="flex gap-2" style={disabled ? { opacity: 0.45 } : undefined}>
       <input
         type="color"
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
-        className="h-[28px] w-[38px] shrink-0 cursor-pointer rounded border bg-transparent p-[2px]"
+        className="h-[28px] w-[38px] shrink-0 rounded border bg-transparent p-[2px] enabled:cursor-pointer"
         style={{ borderColor: 'var(--color-line)' }}
       />
       <input
         className="tm-input font-mono"
         value={value}
+        disabled={disabled}
         onChange={(e) => {
           const v = e.target.value
           if (/^#[0-9a-fA-F]{0,6}$/.test(v)) onChange(v)

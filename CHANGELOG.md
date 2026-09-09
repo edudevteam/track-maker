@@ -20,6 +20,102 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.1.12] — 2026-09-09
+
+### Changed
+
+- **The Background dialog is one choice now — Single or Double.** Single paints
+  one colour behind the grid, Double blends a Top down into a Bottom. Both
+  colours are always on show; the Bottom one is greyed out and inert until Double
+  is picked, so the dialog keeps its shape either way. The first colour carries
+  across the switch, so turning Double on only adds a second colour rather than
+  changing the one already there.
+- **A fresh project opens on the theme's own background colour**, which is what
+  the field shows until you pick something. Choosing a colour stops the
+  background following the light/dark theme; **Reset** puts that back.
+
+### Removed
+
+- **The Default / Custom step.** It stood for a single colour chosen by the
+  theme, which the Single field now shows directly.
+
+---
+
+## [1.1.11] — 2026-09-09
+
+### Changed
+
+- **The Background dialog now asks two plain questions.** First **Default** or
+  **Custom** — Default leaves the workplane following the light or dark theme.
+  Pick Custom and a second row offers **Single colour** or **Double colour**:
+  single takes one colour behind the grid, double takes a **Top** and a
+  **Bottom** and blends between them. Coming back to Custom after Default
+  returns to whichever of the two was last in use.
+- **The Settings menu names the choice the same way**, reading Default, Custom ·
+  single colour or Custom · double colour under Background….
+
+### Removed
+
+- **The four sky preset swatches.** The two colour pickers are the whole control
+  now.
+
+---
+
+## [1.1.10] — 2026-09-09
+
+### Changed
+
+- **The Background dialog no longer labels the mode buttons.** The Theme / Sky /
+  Solid row sat under two headings both reading "Mode"; the buttons say what they
+  are, so both are gone and a line underneath now describes the mode in force.
+- **The sky presets, Sky, Horizon and Solid colours are always on show**, whatever
+  mode is picked, so a gradient can be set up before switching to it and comes
+  back unchanged afterwards. The dialog no longer changes height as you move
+  between modes.
+
+---
+
+## [1.1.9] — 2026-09-09
+
+### Added
+
+- **Background… in the Settings menu**, under a separator with Units and
+  Dimensions. It opens a dialog holding everything the View tab used to: the
+  Theme / Sky / Solid choice, the four sky presets, the sky and horizon colours
+  and the solid colour. Colours apply to the workplane as you pick them — there
+  is nothing to save, so the dialog closes with Done or Escape — and a Reset
+  button puts the background back to following the theme. The menu row names the
+  mode in force underneath it.
+
+### Removed
+
+- **The View tab in the right panel.** Background was all it held, so the panel
+  now opens straight onto Part and Build.
+
+---
+
+## [1.1.8] — 2026-09-09
+
+### Removed
+
+- **The Display section from the View tab.** Its two switches — Grid and Track
+  ends — duplicated the Grid and Ends buttons that already sit in the footer, so
+  the View tab now opens straight onto Background.
+
+---
+
+## [1.1.7] — 2026-09-09
+
+### Removed
+
+- **The Home and Fit buttons in the status bar.** Both moves already have round
+  buttons under the navigation cube in the corner of the workplane — Home for
+  the default view, Fit Selected for zooming in on the chosen part — so the
+  footer keeps only the Top, Front and Right view buttons beside the grid,
+  print-area and ends toggles.
+
+---
+
 ## [1.1.6] — 2026-09-09
 
 ### Added

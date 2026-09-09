@@ -1,18 +1,13 @@
 import { useMemo, useState } from 'react'
 import { Copy, Trash2 } from 'lucide-react'
-import {
-  useProject,
-  DEFAULT_SKY_TOP,
-  DEFAULT_SKY_BOTTOM,
-  type BackgroundMode,
-} from '../store/useProject'
+import { useProject } from '../store/useProject'
 import { ColorInput, Field, NumberInput, Section, Segmented, Toggle } from './controls'
 import { LengthInput, useUnits } from './units'
 import { computePrintVolume } from '../lib/printVolume'
 import { laneWidth } from '../geometry/dimensions'
 import type { GizmoAnchor, Vec3 } from '../types'
 
-type Tab = 'properties' | 'view' | 'build'
+type Tab = 'properties' | 'build'
 
 export function RightPanel() {
   const [tab, setTab] = useState<Tab>('properties')
@@ -27,14 +22,12 @@ export function RightPanel() {
           onChange={setTab}
           options={[
             { value: 'properties', label: 'Part' },
-            { value: 'view', label: 'View' },
             { value: 'build', label: 'Build' },
           ]}
         />
       </div>
       <div className="flex-1 overflow-y-auto">
         {tab === 'properties' && <Properties />}
-        {tab === 'view' && <ViewTab />}
         {tab === 'build' && <BuildTab />}
       </div>
     </aside>
@@ -200,93 +193,6 @@ function Properties() {
             </Field>
           ))}
         </div>
-      </Section>
-    </>
-  )
-}
-
-const SKY_PRESETS: { name: string; top: string; bottom: string }[] = [
-  { name: 'Daylight', top: DEFAULT_SKY_TOP, bottom: DEFAULT_SKY_BOTTOM },
-  { name: 'Dusk', top: '#2b3a67', bottom: '#e8a87c' },
-  { name: 'Studio', top: '#4a5560', bottom: '#c9d1d9' },
-  { name: 'Slate', top: '#1c2733', bottom: '#4a5866' },
-]
-
-function ViewTab() {
-  const showGrid = useProject((s) => s.showGrid)
-  const toggleGrid = useProject((s) => s.toggleGrid)
-  const showPorts = useProject((s) => s.showPorts)
-  const togglePorts = useProject((s) => s.togglePorts)
-  const background = useProject((s) => s.background)
-  const setBackground = useProject((s) => s.setBackground)
-  const skyTop = useProject((s) => s.skyTop)
-  const skyBottom = useProject((s) => s.skyBottom)
-  const setSkyColors = useProject((s) => s.setSkyColors)
-  const solidColor = useProject((s) => s.solidColor)
-  const setSolidColor = useProject((s) => s.setSolidColor)
-  const { fmt } = useUnits()
-
-  return (
-    <>
-      <Section title="Display">
-        <Toggle
-          checked={showGrid}
-          onChange={toggleGrid}
-          label="Grid"
-          hint={`Ground plane, ${fmt(10, 0)} cells.`}
-        />
-        <Toggle
-          checked={showPorts}
-          onChange={togglePorts}
-          label="Track ends"
-          hint="Highlights the end a new piece will snap to."
-        />
-      </Section>
-
-      <Section title="Background">
-        <Field label="Mode" hint="Sky adds a gradient above the grid for contrast.">
-          <Segmented<BackgroundMode>
-            value={background}
-            onChange={setBackground}
-            options={[
-              { value: 'theme', label: 'Theme' },
-              { value: 'sky', label: 'Sky' },
-              { value: 'solid', label: 'Solid' },
-            ]}
-          />
-        </Field>
-
-        {background === 'sky' && (
-          <>
-            <div className="mb-2 grid grid-cols-4 gap-1">
-              {SKY_PRESETS.map((p) => (
-                <button
-                  key={p.name}
-                  className="h-6.5 rounded border transition"
-                  title={p.name}
-                  onClick={() => setSkyColors(p.top, p.bottom)}
-                  style={{
-                    background: `linear-gradient(${p.top}, ${p.bottom})`,
-                    borderColor:
-                      skyTop === p.top && skyBottom === p.bottom ? 'var(--color-accent)' : 'var(--color-line)',
-                  }}
-                />
-              ))}
-            </div>
-            <Field label="Sky (top)">
-              <ColorInput value={skyTop} onChange={(v) => setSkyColors(v, skyBottom)} />
-            </Field>
-            <Field label="Horizon (bottom)">
-              <ColorInput value={skyBottom} onChange={(v) => setSkyColors(skyTop, v)} />
-            </Field>
-          </>
-        )}
-
-        {background === 'solid' && (
-          <Field label="Colour">
-            <ColorInput value={solidColor} onChange={setSolidColor} />
-          </Field>
-        )}
       </Section>
     </>
   )

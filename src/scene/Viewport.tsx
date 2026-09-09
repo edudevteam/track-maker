@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import { Canvas, useThree } from '@react-three/fiber'
 import { Environment, GizmoHelper, OrbitControls, TransformControls } from '@react-three/drei'
 import { useProject } from '../store/useProject'
-import { useTheme } from '../store/useTheme'
+import { themeBackground, useTheme } from '../store/useTheme'
 import { PieceMesh } from './PieceMesh'
 import { PrintVolume } from './PrintVolume'
 import { Car } from './Car'
@@ -26,8 +26,7 @@ export function Viewport() {
   const skyBottom = useProject((s) => s.skyBottom)
   const solidColor = useProject((s) => s.solidColor)
 
-  // Near-white in light mode, matching the Fusion viewport the grid is styled after.
-  const themeBg = theme === 'dark' ? '#161a20' : '#fafbfc'
+  const themeBg = themeBackground(theme)
   // The sky dome paints the backdrop itself; the clear colour just avoids a flash.
   const bg = background === 'solid' ? solidColor : themeBg
 
@@ -283,5 +282,4 @@ export const VIEW_DIRECTIONS: Record<string, THREE.Vector3> = {
   Top: new THREE.Vector3(0, 1, 0.0001),
   Front: new THREE.Vector3(0, 0, 1),
   Right: new THREE.Vector3(1, 0, 0),
-  Home: new THREE.Vector3(0.7, 0.55, 0.75).normalize(),
 }

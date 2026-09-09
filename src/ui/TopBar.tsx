@@ -8,6 +8,7 @@ import {
   Download,
   FilePlus2,
   FolderOpen,
+  Image,
   Moon,
   Printer,
   Redo2,
@@ -18,7 +19,13 @@ import {
   Sun,
   Undo2,
 } from 'lucide-react'
-import { PRINTER_PRESETS, TRACK_TYPES, VEHICLE_TYPES, useProject } from '../store/useProject'
+import {
+  PRINTER_PRESETS,
+  TRACK_TYPES,
+  VEHICLE_TYPES,
+  useProject,
+  type BackgroundMode,
+} from '../store/useProject'
 import { useTheme } from '../store/useTheme'
 import { UNIT_OPTIONS, unitLabel } from '../lib/units'
 import { downloadBlob } from '../export/exporters'
@@ -35,12 +42,20 @@ interface Notice {
   text: string
 }
 
+const BACKGROUND_LABELS: Record<BackgroundMode, string> = {
+  theme: 'Single · follows the theme',
+  sky: 'Double',
+  solid: 'Single',
+}
+
 export function TopBar({
   onExport,
   onOpenDimensions,
+  onOpenBackground,
 }: {
   onExport: () => void
   onOpenDimensions: () => void
+  onOpenBackground: () => void
 }) {
   const projectName = useProject((s) => s.projectName)
   const setProjectName = useProject((s) => s.setProjectName)
@@ -52,6 +67,7 @@ export function TopBar({
   const setUnits = useProject((s) => s.setUnits)
   const printer = useProject((s) => s.printer)
   const setPrinter = useProject((s) => s.setPrinter)
+  const background = useProject((s) => s.background)
   const showPrintVolume = useProject((s) => s.showPrintVolume)
   const togglePrintVolume = useProject((s) => s.togglePrintVolume)
   const newProject = useProject((s) => s.newProject)
@@ -214,6 +230,12 @@ export function TopBar({
           </Submenu>
         </Submenu>
         <MenuSeparator />
+        <MenuItem
+          icon={<Image size={13} />}
+          label="Background…"
+          hint={BACKGROUND_LABELS[background]}
+          onClick={onOpenBackground}
+        />
         <Submenu icon={<Ruler size={13} />} label="Units" hint={unitLabel(units)}>
           {UNIT_OPTIONS.map((u) => (
             <ChoiceItem

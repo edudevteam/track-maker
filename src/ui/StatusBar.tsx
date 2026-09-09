@@ -42,12 +42,6 @@ export function StatusBar() {
           {name}
         </button>
       ))}
-      <button
-        className="rounded px-2 py-1 transition hover:bg-black/5 dark:hover:bg-white/10"
-        onClick={() => viewApi?.frameAll()}
-      >
-        Fit
-      </button>
 
       <div className="flex-1" />
 

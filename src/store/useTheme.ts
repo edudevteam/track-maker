@@ -2,6 +2,12 @@ import { create } from 'zustand'
 
 export type Theme = 'light' | 'dark'
 
+/**
+ * What the workplane sits on when no colour has been chosen. Near-white in light
+ * mode, matching the Fusion viewport the grid is styled after.
+ */
+export const themeBackground = (theme: Theme) => (theme === 'dark' ? '#161a20' : '#fafbfc')
+
 const KEY = 'track-maker.theme'
 
 function initial(): Theme {
