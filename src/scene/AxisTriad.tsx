@@ -1,6 +1,9 @@
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 
+/** The whole triad is drawn at two-thirds size, so it reads as a quiet corner
+ *  marker rather than a second gizmo competing with the view cube. */
+const SCALE = 2 / 3
 /** Length of the plain part of each arrow, before the head. */
 const SHAFT = 32
 /** Radius of the shaft. */
@@ -20,7 +23,7 @@ function AxisLabel({ color, text, position }: { color: string; text: string; pos
     canvas.width = 64
     canvas.height = 64
     const ctx = canvas.getContext('2d')!
-    ctx.font = 'bold 42px Inter var, Inter, system-ui, Arial, sans-serif'
+    ctx.font = '42px Inter var, Inter, system-ui, Arial, sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillStyle = color
@@ -70,7 +73,7 @@ function Arrow({ color, label, rotation }: { color: string; label: string; rotat
  */
 export function AxisTriad() {
   return (
-    <group>
+    <group scale={SCALE}>
       <Arrow color="#e0342c" label="X" rotation={[0, 0, -Math.PI / 2]} />
       <Arrow color="#1faa33" label="Y" rotation={[-Math.PI / 2, 0, 0]} />
       <Arrow color="#2f6fe0" label="Z" rotation={[0, 0, 0]} />

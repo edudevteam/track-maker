@@ -35,7 +35,7 @@ export function Viewport() {
     <Canvas
       shadows
       dpr={[1, 2]}
-      camera={{ position: [240, 190, 260], fov: 40, near: 1, far: 20000 }}
+      camera={{ position: HOME_CAMERA.toArray(), fov: 40, near: 1, far: 20000 }}
       onPointerMissed={() => select([])}
       gl={{ antialias: true, preserveDrawingBuffer: true }}
     >
@@ -172,8 +172,9 @@ function Gizmo() {
 
 /** Exposes camera helpers to the toolbar without prop-drilling through the Canvas. */
 function CameraBridge() {
-  const { camera, controls } = useThree()
+  const { camera, controls, scene } = useThree()
   const pieces = useProject((s) => s.pieces)
+  const pieceIds = useProject((s) => s.selection.pieceIds)
 
   useEffect(() => {
     const api: ViewApi = {
@@ -185,6 +186,13 @@ function CameraBridge() {
         camera.lookAt(target)
         c?.update()
       },
+      home() {
+        const c = controls as unknown as OrbitLike | null
+        camera.position.copy(HOME_CAMERA)
+        if (c) c.target.set(0, 0, 0)
+        camera.lookAt(0, 0, 0)
+        c?.update()
+      },
       frameAll() {
         const c = controls as unknown as OrbitLike | null
         if (!pieces.length) return
@@ -192,22 +200,52 @@ function CameraBridge() {
         // Cheap framing: use the piece origins plus a generous pad.
         for (const p of pieces) box.expandByPoint(new THREE.Vector3(...p.position))
         box.expandByScalar(180)
-        const sphere = box.getBoundingSphere(new THREE.Sphere())
-        const dir = camera.position.clone().sub(c?.target ?? new THREE.Vector3()).normalize()
-        const persp = camera as THREE.PerspectiveCamera
-        const dist = sphere.radius / Math.sin(THREE.MathUtils.degToRad(persp.fov) / 2)
-        if (c) c.target.copy(sphere.center)
-        camera.position.copy(sphere.center).addScaledVector(dir, dist)
-        c?.update()
+        frameBox(camera, c, box, 1)
+      },
+      frameSelected() {
+        const c = controls as unknown as OrbitLike | null
+        const box = selectionBox(scene, pieceIds)
+        if (!box) return
+        // A little air around the part, so it does not touch the viewport edges.
+        frameBox(camera, c, box, 1.4)
       },
     }
     viewApi = api
     return () => {
       if (viewApi === api) viewApi = null
     }
-  }, [camera, controls, pieces])
+  }, [camera, controls, scene, pieces, pieceIds])
 
   return null
+}
+
+/**
+ * World-space bounds of the given pieces, taken from what is actually drawn —
+ * track, connectors and port tabs — so framing matches what is on screen.
+ * Null when none of them are in the scene.
+ */
+function selectionBox(scene: THREE.Object3D, pieceIds: string[]): THREE.Box3 | null {
+  if (!pieceIds.length) return null
+  const box = new THREE.Box3()
+  scene.traverse((o) => {
+    const id = (o.userData as { pieceId?: string }).pieceId
+    if (id && pieceIds.includes(id)) box.expandByObject(o)
+  })
+  return box.isEmpty() ? null : box
+}
+
+/** Pull the camera back along its current direction until `box` fits the frame. */
+function frameBox(camera: THREE.Camera, c: OrbitLike | null, box: THREE.Box3, pad: number) {
+  const sphere = box.getBoundingSphere(new THREE.Sphere())
+  const dir = camera.position.clone().sub(c?.target ?? new THREE.Vector3())
+  if (dir.lengthSq() === 0) dir.copy(HOME_CAMERA)
+  dir.normalize()
+  const persp = camera as THREE.PerspectiveCamera
+  const radius = Math.max(sphere.radius * pad, 12)
+  const dist = radius / Math.sin(THREE.MathUtils.degToRad(persp.fov) / 2)
+  if (c) c.target.copy(sphere.center)
+  camera.position.copy(sphere.center).addScaledVector(dir, dist)
+  c?.update()
 }
 
 /** The slice of OrbitControls the camera helpers need, without pulling in three-stdlib's types. */
@@ -218,8 +256,13 @@ interface OrbitLike {
 
 export interface ViewApi {
   setView: (dir: THREE.Vector3) => void
+  home: () => void
   frameAll: () => void
+  frameSelected: () => void
 }
+
+/** Where the camera starts, and where Home puts it back. */
+export const HOME_CAMERA = new THREE.Vector3(240, 190, 260)
 
 /** Set by the live Canvas; the toolbar calls into it. */
 export let viewApi: ViewApi | null = null

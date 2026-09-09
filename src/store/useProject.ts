@@ -1,6 +1,17 @@
 import { create } from 'zustand'
 import * as THREE from 'three'
-import type { CarState, GizmoAnchor, Piece, PieceKind, PortId, PrinterPreset, ToolId, TrackType, Vec3 } from '../types'
+import type {
+  CarState,
+  GizmoAnchor,
+  PartSpec,
+  Piece,
+  PieceKind,
+  PortId,
+  PrinterPreset,
+  ToolId,
+  TrackType,
+  Vec3,
+} from '../types'
 import {
   DEFAULT_CONNECTOR_COLOR,
   DEFAULT_DIMENSIONS,
@@ -32,6 +43,14 @@ export interface Selection {
   anchor: GizmoAnchor
 }
 
+export interface AddOptions {
+  /**
+   * End to join the new piece onto, overriding the Placement toggle and the
+   * highlighted end. `null` forces the piece to land loose.
+   */
+  attachTo?: { pieceId: string; port: PortId } | null
+}
+
 export interface ProjectState {
   projectName: string
   trackType: TrackType
@@ -44,6 +63,8 @@ export interface ProjectState {
   snapToPort: boolean
   /** Free port a new piece will attach to. */
   activePort: { pieceId: string; port: PortId } | null
+  /** The last part added, so the repeat tool can lay another one down. */
+  lastPart: PartSpec | null
 
   showGrid: boolean
   showPrintVolume: boolean
@@ -71,7 +92,9 @@ export interface ProjectActions {
   setDimValue: (group: keyof Dimensions, field: string, value: number) => void
   resetDims: () => void
 
-  addPiece: (init?: Partial<Piece>) => string
+  addPiece: (init?: Partial<Piece>, opts?: AddOptions) => string
+  /** Another of the last part added, joined onto the open end of the build. */
+  repeatLastPart: () => string | null
   updatePiece: (id: string, patch: Partial<Piece>) => void
   removeSelected: () => void
   duplicateSelected: () => void
@@ -102,9 +125,10 @@ export interface ProjectActions {
   commit: () => void
   undo: () => void
   redo: () => void
-  clearAll: () => void
+  /** Start over: an empty workplane under a fresh title. Workshop setup is kept. */
+  newProject: () => void
   loadPieces: (pieces: Piece[]) => void
-  /** Replace the whole build with a project read from a `.tm.json` file. */
+  /** Replace the whole build with a project read from a `.track.json` file. */
   loadProject: (doc: ProjectDocument) => void
 }
 
@@ -130,6 +154,28 @@ function makePiece(dims: Dimensions, init: Partial<Piece> = {}): Piece {
   }
 }
 
+/** What the repeat tool needs to lay down another of the same part. */
+function specOf(p: Piece): PartSpec {
+  const { kind, lanes, length, radius, angleDeg, name } = p
+  return { kind, lanes, length, radius, angleDeg, name }
+}
+
+/** The given end, or null when it is missing or already joined. */
+function freePort(pieces: Piece[], at: { pieceId: string; port: PortId } | null) {
+  if (!at) return null
+  const piece = pieces.find((p) => p.id === at.pieceId)
+  return piece && !piece.links[at.port] ? at : null
+}
+
+/** The open end of the most recently added piece — `b` first, since builds run a → b. */
+function newestFreePort(pieces: Piece[]) {
+  for (let i = pieces.length - 1; i >= 0; i--) {
+    const p = pieces[i]
+    for (const port of ['b', 'a'] as PortId[]) if (!p.links[port]) return { pieceId: p.id, port }
+  }
+  return null
+}
+
 /** Somewhere clear of existing geometry, so an unsnapped piece lands where you can see it. */
 function freeSpot(pieces: Piece[]): Vec3 {
   const row = pieces.length
@@ -146,6 +192,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
   tool: 'select',
   snapToPort: true,
   activePort: null,
+  lastPart: null,
 
   showGrid: true,
   showPrintVolume: false,
@@ -173,12 +220,13 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
     })),
   resetDims: () => set({ dims: DEFAULT_DIMENSIONS }),
 
-  addPiece: (init = {}) => {
+  addPiece: (init = {}, opts = {}) => {
     const state = get()
     state.commit()
     const piece = makePiece(state.dims, init)
+    const lastPart = specOf(piece)
 
-    const target = state.snapToPort ? state.activePort : null
+    const target = opts.attachTo !== undefined ? opts.attachTo : state.snapToPort ? state.activePort : null
     if (target) {
       const host = state.pieces.find((p) => p.id === target.pieceId)
       if (host && !host.links[target.port]) {
@@ -203,6 +251,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
           ],
           selection: { pieceIds: [piece.id], anchor: 'middle' },
           activePort: { pieceId: piece.id, port: 'b' },
+          lastPart,
         }))
         return piece.id
       }
@@ -213,8 +262,18 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       pieces: [...s.pieces, piece],
       selection: { pieceIds: [piece.id], anchor: 'middle' },
       activePort: { pieceId: piece.id, port: 'b' },
+      lastPart,
     }))
     return piece.id
+  },
+
+  repeatLastPart: () => {
+    const { lastPart, pieces, activePort, addPiece } = get()
+    if (!lastPart) return null
+    // The highlighted end wins when it is still free; otherwise take the newest
+    // open end, which is where the build was last growing.
+    const target = freePort(pieces, activePort) ?? newestFreePort(pieces)
+    return addPiece({ ...lastPart }, { attachTo: target })
   },
 
   updatePiece: (id, patch) =>
@@ -381,11 +440,22 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       if (!s.future.length) return s
       return { pieces: s.future[0], history: [...s.history, s.pieces], future: s.future.slice(1) }
     }),
-  clearAll: () => {
-    get().commit()
-    set({ pieces: [], selection: { pieceIds: [], anchor: 'middle' }, activePort: null, car: { pieceId: null, s: 0, v: 0, running: false } })
-  },
   loadPieces: (pieces) => set({ pieces, selection: { pieceIds: [], anchor: 'middle' }, history: [], future: [] }),
+
+  newProject: () =>
+    set({
+      projectName: 'Untitled Track',
+      pieces: [],
+      selection: { pieceIds: [], anchor: 'middle' },
+      activePort: null,
+      lastPart: null,
+      tool: 'select',
+      car: { pieceId: null, s: 0, v: 0, running: false },
+      // Dimensions, printer and view settings are workshop setup, not part of
+      // the build, so a new project keeps them.
+      history: [],
+      future: [],
+    }),
 
   loadProject: (doc) => {
     const preset = PRINTER_PRESETS.find((p) => p.id === doc.printerId) ?? PRINTER_PRESETS[0]
@@ -401,6 +471,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       // An opened file starts a fresh session: nothing selected, nothing to undo past.
       selection: { pieceIds: [], anchor: 'middle' },
       activePort: null,
+      lastPart: null,
       tool: 'select',
       car: { pieceId: null, s: 0, v: 0, running: false },
       history: [],

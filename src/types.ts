@@ -39,6 +39,20 @@ export interface Piece {
   locked: boolean
 }
 
+/**
+ * The recipe for a new piece, as the Parts Library hands it to the store. Kept
+ * apart from `Piece` because it carries no identity, placement or joints — it is
+ * what "add another one of those" needs to know.
+ */
+export interface PartSpec {
+  kind: PieceKind
+  lanes: number
+  length: number
+  radius: number
+  angleDeg: number
+  name: string
+}
+
 export type ToolId = 'select' | 'move' | 'rotate' | 'connect' | 'disconnect'
 
 /** Which part of a selected piece the transform gizmo is anchored to. */

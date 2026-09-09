@@ -20,6 +20,150 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.1.0] — 2026-09-09
+
+### Fixed
+
+- **The navigation cube is actually white now in light mode.** It was set to
+  white last version but still drew a light grey, because the viewport's film
+  tone mapping was dimming it the way it dims the model. The cube and its outline
+  now bypass that, so the faces come out at full white against the workplane.
+
+---
+
+## [1.0.20] — 2026-09-09
+
+### Changed
+
+- **The navigation cube's faces are white in light mode**, instead of the faint
+  grey they were, so the cube reads as a clean white box against the workplane.
+  Dark mode is unchanged.
+- **The corner X/Y/Z axis marker is a third smaller**, and its letters are no
+  longer bold. It sits in the bottom-left corner as before, just quieter — it
+  no longer competes with the navigation cube for attention.
+
+---
+
+## [1.0.19] — 2026-09-09
+
+### Added
+
+- **Home and Fit Selected buttons under the navigation cube**, as two round
+  buttons stacked on the cube's centre line in the top-right of the workplane.
+  **Home** (`H`) puts the camera back where a fresh project starts — the
+  three-quarter view looking at the origin — whatever you have orbited or panned
+  to. **Fit Selected** (`F`) swings in on the selected part, keeping the
+  direction you are looking from and pulling back just far enough to frame the
+  part with a little air around it. It greys out when nothing is selected, and
+  frames the whole selection when several parts are picked. Both name themselves
+  and their shortcut on hover.
+
+---
+
+## [1.0.18] — 2026-09-09
+
+### Changed
+
+- **Snap to selected end moved into the toolbar**, as a magnet button beside
+  Connect and Disconnect. It lights up the same way an active tool does when snap
+  is on, and its hover text says which way it is set — pieces attaching to the
+  highlighted end, or landing loose. The left panel's **Placement** section is
+  gone with it, so the panel now opens on Car and the browser.
+
+---
+
+## [1.0.17] — 2026-09-09
+
+### Removed
+
+- The **Build** section at the top of the left panel, with its **+ Add Part** and
+  **Repeat last part** buttons. Both live in the toolbar across the top, so the
+  left panel now opens straight into Placement and the outliner sits higher.
+  `A` still opens the parts library.
+
+---
+
+## [1.0.16] — 2026-09-09
+
+### Changed
+
+- **Saved projects now use the `.track.json` extension** instead of `.tm.json`.
+  Save writes `My-Big-Track.track.json`, the File menu names the new extension,
+  and Open's file picker filters on it. Files saved with the old name still open
+  fine — pick them with "All files" in the picker, or rename them.
+
+---
+
+## [1.0.15] — 2026-09-09
+
+### Added
+
+- **A File menu** in the top bar, next to the Track Maker name. It holds **New**,
+  **Save**, **Open…**, and below a divider, **Undo** and **Redo**. Save names the
+  file it will write and Open names the file type it accepts, so neither is a
+  guess from an icon. Undo and Redo grey out when there is nothing to step
+  through. The menu closes on a pick, on Escape, or on a click anywhere else.
+- **New** starts an empty workplane under the title "Untitled Track", and asks
+  first when there is a build to lose. Dimensions, printer and view settings are
+  workshop setup rather than part of the build, so they carry over to the new
+  project.
+
+### Changed
+
+- The top bar's save and open icons, and the eraser that cleared the build, are
+  gone — all three are items in the File menu now. The top bar keeps the project
+  title, the track type, the light/dark switch and Export.
+- Undo and redo stay in the toolbar as buttons as well; the File menu lists them
+  for anyone hunting through menus rather than reading icons.
+
+---
+
+## [1.0.14] — 2026-09-09
+
+### Changed
+
+- The toolbar's group captions — History, Parts, Tools, Joints — are gone. The
+  groups keep their outlines, so the buttons still read as clusters, and every
+  button still names itself and its shortcut on hover. The strip is shorter for
+  it, giving the workplane more room.
+
+---
+
+## [1.0.13] — 2026-09-09
+
+### Added
+
+- **Parts library.** New parts come from a pop-up library instead of the left
+  panel. **+ Add Part** — in the toolbar, in the left panel, or the `A` key —
+  opens it. Pick Straight or Curve from the list, choose the lane width right
+  there (Single, 2×, 3×, 4×, or type up to 8), set the length or the radius,
+  sweep and turn direction, and a sketch of the part updates as you go. Adding
+  drops it on the workplane, joined onto the highlighted end when snapping is
+  on, and the piece's full settings carry on in the Part panel on the right as
+  before.
+- **Repeat last part.** A new toolbar tool — the `T` key, or the button in the
+  left panel — lays down another of the part you last added and joins it onto
+  the open end of the build. It prefers the highlighted end, and otherwise takes
+  the newest free end, so pressing it over and over runs a line of track out.
+  It joins the piece whether or not "Snap to selected end" is on.
+- **A horizontal toolbar** across the top of the workplane, in labelled groups:
+  History (undo, redo), Parts (Add Part), Tools (select, move, rotate, repeat,
+  duplicate, delete) and Joints (connect, disconnect). The active tool's hint
+  reads out along the right of the strip.
+
+### Changed
+
+- The left panel is now placement, the car and the browser. Its Tools grid moved
+  into the toolbar and its Add track section became the parts library.
+- Undo and redo moved from the top bar into the toolbar's History group. The top
+  bar keeps save, open, clear, theme and export; clear now carries an eraser so
+  it does not read as the toolbar's delete.
+- Keyboard shortcuts are ignored while a dialog is open, so typing in the parts
+  library or the export dialog no longer switches the tool underneath it. Held
+  ⌘/Ctrl no longer triggers a tool shortcut either.
+
+---
+
 ## [1.0.12] — 2026-09-09
 
 ### Added

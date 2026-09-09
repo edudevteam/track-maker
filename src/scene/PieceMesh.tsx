@@ -27,8 +27,9 @@ export function PieceMesh({ piece }: { piece: Piece }) {
     select([piece.id], e.shiftKey)
   }
 
+  // The id on the group lets Fit Selected read this piece's bounds off the scene.
   return (
-    <group position={piece.position} rotation={piece.rotation}>
+    <group position={piece.position} rotation={piece.rotation} userData={{ pieceId: piece.id }}>
       <mesh geometry={geometry} castShadow receiveShadow onClick={onClick}>
         <meshStandardMaterial
           color={piece.color}

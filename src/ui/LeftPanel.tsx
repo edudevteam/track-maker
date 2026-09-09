@@ -1,190 +1,17 @@
-import { useState } from 'react'
-import {
-  Box,
-  Car as CarIcon,
-  Eye,
-  EyeOff,
-  Link2,
-  Link2Off,
-  Lock,
-  Move,
-  MousePointer2,
-  Rotate3d,
-  Unlock,
-} from 'lucide-react'
+import { Car as CarIcon, Eye, EyeOff, Lock, Unlock } from 'lucide-react'
 import { useProject } from '../store/useProject'
-import { NumberInput, Section, Toggle, Tooltip } from './controls'
-import type { ToolId } from '../types'
-
-/** Shortcuts here must match the key handler in `App.tsx`. */
-const TOOLS: { id: ToolId; icon: typeof MousePointer2; label: string; hint: string; key: string }[] = [
-  { id: 'select', icon: MousePointer2, label: 'Select', hint: 'Click a piece to select it', key: 'V' },
-  { id: 'move', icon: Move, label: 'Move', hint: 'Drag the handle to move the assembly', key: 'G' },
-  { id: 'rotate', icon: Rotate3d, label: 'Rotate', hint: 'Spin the assembly about the handle', key: 'R' },
-  { id: 'connect', icon: Link2, label: 'Connect', hint: 'Click two ends to join them', key: 'C' },
-  {
-    id: 'disconnect',
-    icon: Link2Off,
-    label: 'Disconnect',
-    hint: 'Click a joined end to free it',
-    key: 'X',
-  },
-]
-
-const CURVE_ANGLES = [15, 30, 45, 90]
-
-/** Lanes are free-typed now, so they need sane bounds. Widths are whole lanes. */
-const MAX_LANES = 8
-/** A straight still has to hold a connector pocket at each end. Millimetres. */
-const MIN_STRAIGHT_LENGTH = 20
-const MAX_STRAIGHT_LENGTH = 1000
+import { Section } from './controls'
 
 export function LeftPanel() {
-  const tool = useProject((s) => s.tool)
-  const setTool = useProject((s) => s.setTool)
-  const snapToPort = useProject((s) => s.snapToPort)
-  const setSnapToPort = useProject((s) => s.setSnapToPort)
-  const addPiece = useProject((s) => s.addPiece)
-  const dims = useProject((s) => s.dims)
   const dropCar = useProject((s) => s.dropCar)
   const car = useProject((s) => s.car)
   const setCar = useProject((s) => s.setCar)
-
-  const [lanes, setLanes] = useState(1)
-  const [length, setLength] = useState(dims.assembly.defaultStraightLength)
-  const [radius, setRadius] = useState(120)
 
   return (
     <aside
       className="flex w-[228px] shrink-0 flex-col overflow-y-auto border-r"
       style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}
     >
-      <Section title="Tools">
-        <div className="grid grid-cols-5 gap-1">
-          {TOOLS.map((t) => {
-            const Icon = t.icon
-            const active = tool === t.id
-            return (
-              <Tooltip key={t.id} title={t.label} body={t.hint} shortcut={t.key} className="block">
-                <button
-                  aria-label={`${t.label} tool`}
-                  aria-pressed={active}
-                  onClick={() => setTool(t.id)}
-                  className="grid h-[34px] w-full place-items-center rounded border transition"
-                  style={{
-                    background: active ? 'var(--color-accent)' : 'var(--color-surface-2)',
-                    borderColor: active ? 'var(--color-accent)' : 'var(--color-line)',
-                    color: active ? '#fff' : 'var(--color-ink)',
-                  }}
-                >
-                  <Icon size={15} />
-                </button>
-              </Tooltip>
-            )
-          })}
-        </div>
-        <p className="mt-2 text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
-          {TOOLS.find((t) => t.id === tool)?.hint}
-        </p>
-      </Section>
-
-      <Section title="Placement">
-        <Toggle
-          checked={snapToPort}
-          onChange={setSnapToPort}
-          label="Snap to selected end"
-          hint={
-            snapToPort
-              ? 'New pieces attach to the highlighted end.'
-              : 'New pieces land loose, away from the build.'
-          }
-        />
-      </Section>
-
-      <Section title="Add track">
-        <div className="mb-2">
-          <span className="tm-label mb-1 block">Width · lanes</span>
-          <NumberInput
-            value={lanes}
-            onChange={(v) => setLanes(Math.max(1, Math.round(v)))}
-            step={1}
-            min={1}
-            max={MAX_LANES}
-            suffix="×"
-          />
-          <p className="mt-1 text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
-            1 = single track. Wider pieces drop the inner walls, keeping one T-slot per lane.
-          </p>
-        </div>
-
-        <div className="mb-2">
-          <span className="tm-label mb-1 block">Straight · length (mm)</span>
-          <NumberInput
-            value={length}
-            onChange={setLength}
-            step={5}
-            min={MIN_STRAIGHT_LENGTH}
-            max={MAX_STRAIGHT_LENGTH}
-            suffix="mm"
-          />
-          <div className="my-1.5 flex gap-1">
-            {[50, 100, 150, 200].map((l) => (
-              <button
-                key={l}
-                className="tm-btn flex-1 px-0"
-                title={`${l}mm`}
-                style={length === l ? { borderColor: 'var(--color-accent)' } : undefined}
-                onClick={() => setLength(l)}
-              >
-                {l}
-              </button>
-            ))}
-          </div>
-          <button
-            className="tm-btn tm-btn-primary w-full"
-            onClick={() => addPiece({ kind: 'straight', lanes, length, name: `Straight ${length}mm` })}
-          >
-            <Box size={13} /> Add straight
-          </button>
-        </div>
-
-        <div>
-          <span className="tm-label mb-1 block">Curve · radius {radius}mm</span>
-          <input
-            type="range"
-            min={60}
-            max={400}
-            step={5}
-            value={radius}
-            onChange={(e) => setRadius(Number(e.target.value))}
-            className="mb-1.5 w-full accent-[var(--color-accent)]"
-          />
-          <div className="grid grid-cols-4 gap-1">
-            {CURVE_ANGLES.map((a) => (
-              <button
-                key={a}
-                className="tm-btn px-0"
-                title={`${a}° left turn — hold Shift for a right turn`}
-                onClick={(e) =>
-                  addPiece({
-                    kind: 'curve',
-                    lanes,
-                    radius,
-                    angleDeg: e.shiftKey ? -a : a,
-                    name: `Curve ${a}°`,
-                  })
-                }
-              >
-                {a}°
-              </button>
-            ))}
-          </div>
-          <p className="mt-1.5 text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
-            Shift-click for a right-hand turn.
-          </p>
-        </div>
-      </Section>
-
       <Section title="Car">
         <button className="tm-btn w-full" onClick={dropCar}>
           <CarIcon size={13} /> Drop car on track
@@ -219,7 +46,7 @@ function Outliner() {
     <Section title={`Browser · ${pieces.length} ${pieces.length === 1 ? 'body' : 'bodies'}`}>
       {!pieces.length && (
         <p className="text-[11.5px]" style={{ color: 'var(--color-ink-2)' }}>
-          Nothing yet. Add a straight to start the build.
+          Nothing yet. Add a part to start the build.
         </p>
       )}
       <ul className="space-y-[2px]">

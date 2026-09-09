@@ -1,5 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
-import { Download, FolderOpen, Moon, Redo2, Save, Sun, Trash2, Undo2 } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  ChevronDown,
+  Download,
+  FilePlus2,
+  FolderOpen,
+  Moon,
+  Redo2,
+  Save,
+  Sun,
+  Undo2,
+} from 'lucide-react'
 import { useProject } from '../store/useProject'
 import { useTheme } from '../store/useTheme'
 import { downloadBlob } from '../export/exporters'
@@ -27,16 +37,17 @@ export function TopBar({ onExport }: { onExport: () => void }) {
   const setProjectName = useProject((s) => s.setProjectName)
   const trackType = useProject((s) => s.trackType)
   const setTrackType = useProject((s) => s.setTrackType)
+  const newProject = useProject((s) => s.newProject)
+  const loadProject = useProject((s) => s.loadProject)
   const undo = useProject((s) => s.undo)
   const redo = useProject((s) => s.redo)
-  const clearAll = useProject((s) => s.clearAll)
-  const loadProject = useProject((s) => s.loadProject)
   const canUndo = useProject((s) => s.history.length > 0)
   const canRedo = useProject((s) => s.future.length > 0)
   const { theme, toggle } = useTheme()
 
   const fileInput = useRef<HTMLInputElement>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
     if (!notice) return
@@ -55,6 +66,13 @@ export function TopBar({ onExport }: { onExport: () => void }) {
     // Opening replaces the whole build, and there is no autosave to fall back on.
     if (useProject.getState().pieces.length && !window.confirm('Open a project? The current build is replaced.')) return
     fileInput.current?.click()
+  }
+
+  const startNew = () => {
+    if (useProject.getState().pieces.length && !window.confirm('Start a new project? The current build is discarded.'))
+      return
+    newProject()
+    setNotice({ kind: 'ok', text: 'Started a new project' })
   }
 
   const readFile = async (file: File) => {
@@ -106,6 +124,29 @@ export function TopBar({ onExport }: { onExport: () => void }) {
 
       <div className="h-5 w-px" style={{ background: 'var(--color-line)' }} />
 
+      <Menu label="File" open={menuOpen} onOpenChange={setMenuOpen}>
+        <MenuItem icon={<FilePlus2 size={13} />} label="New" onClick={startNew} />
+        <MenuItem
+          icon={<Save size={13} />}
+          label="Save"
+          shortcut="⌘S"
+          hint={projectFileName(projectName)}
+          onClick={save}
+        />
+        <MenuItem
+          icon={<FolderOpen size={13} />}
+          label="Open…"
+          shortcut="⌘O"
+          hint={`A ${PROJECT_FILE_EXT} project`}
+          onClick={pickFile}
+        />
+        <MenuSeparator />
+        <MenuItem icon={<Undo2 size={13} />} label="Undo" shortcut="⌘Z" onClick={undo} disabled={!canUndo} />
+        <MenuItem icon={<Redo2 size={13} />} label="Redo" shortcut="⇧⌘Z" onClick={redo} disabled={!canRedo} />
+      </Menu>
+
+      <div className="h-5 w-px" style={{ background: 'var(--color-line)' }} />
+
       <input
         className="tm-input max-w-[220px]"
         value={projectName}
@@ -127,14 +168,6 @@ export function TopBar({ onExport }: { onExport: () => void }) {
         ))}
       </select>
 
-      <div className="h-5 w-px" style={{ background: 'var(--color-line)' }} />
-
-      <button className="tm-btn" onClick={save} title={`Save ${projectFileName(projectName)} (⌘S)`}>
-        <Save size={14} />
-      </button>
-      <button className="tm-btn" onClick={pickFile} title={`Open a ${PROJECT_FILE_EXT} project (⌘O)`}>
-        <FolderOpen size={14} />
-      </button>
       <input
         ref={fileInput}
         type="file"
@@ -149,18 +182,6 @@ export function TopBar({ onExport }: { onExport: () => void }) {
       />
 
       <div className="flex-1" />
-
-      <button className="tm-btn" onClick={undo} disabled={!canUndo} title="Undo (⌘Z)">
-        <Undo2 size={14} />
-      </button>
-      <button className="tm-btn" onClick={redo} disabled={!canRedo} title="Redo (⇧⌘Z)">
-        <Redo2 size={14} />
-      </button>
-      <button className="tm-btn" onClick={clearAll} title="Clear the build">
-        <Trash2 size={14} />
-      </button>
-
-      <div className="h-5 w-px" style={{ background: 'var(--color-line)' }} />
 
       <button className="tm-btn" onClick={toggle} title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
         {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
@@ -186,4 +207,107 @@ export function TopBar({ onExport }: { onExport: () => void }) {
       )}
     </header>
   )
+}
+
+/** A named drop-down in the top bar. Closes on Escape, on a pick, or on a click outside. */
+function Menu({
+  label,
+  open,
+  onOpenChange,
+  children,
+}: {
+  label: string
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  children: ReactNode
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) onOpenChange(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onOpenChange(false)
+    }
+    window.addEventListener('pointerdown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('pointerdown', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [open, onOpenChange])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        className="tm-btn"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => onOpenChange(!open)}
+      >
+        {label}
+        <ChevronDown size={13} />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          // A pick closes the menu. A disabled item fires no click, so it stays open.
+          onClick={() => onOpenChange(false)}
+          className="absolute top-full left-0 z-40 mt-1 min-w-[214px] rounded-[6px] border p-1 shadow-lg"
+          style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MenuItem({
+  icon,
+  label,
+  shortcut,
+  hint,
+  onClick,
+  disabled,
+}: {
+  icon: ReactNode
+  label: string
+  shortcut?: string
+  hint?: string
+  onClick: () => void
+  disabled?: boolean
+}) {
+  return (
+    <button
+      role="menuitem"
+      disabled={disabled}
+      onClick={onClick}
+      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[12px] transition
+        enabled:hover:bg-black/5 disabled:opacity-45 dark:enabled:hover:bg-white/5"
+    >
+      <span className="shrink-0" style={{ color: 'var(--color-ink-2)' }}>
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{label}</span>
+        {hint && (
+          <span className="block truncate text-[10px]" style={{ color: 'var(--color-ink-2)' }}>
+            {hint}
+          </span>
+        )}
+      </span>
+      {shortcut && (
+        <span className="shrink-0 font-mono text-[10px]" style={{ color: 'var(--color-ink-2)' }}>
+          {shortcut}
+        </span>
+      )}
+    </button>
+  )
+}
+
+function MenuSeparator() {
+  return <div className="my-1 h-px" style={{ background: 'var(--color-line)' }} />
 }

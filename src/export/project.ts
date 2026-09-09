@@ -6,11 +6,11 @@ import {
   type Dimensions,
 } from '../geometry/dimensions'
 
-/** Marker written into every `.tm.json` so we can tell our files from any other JSON. */
+/** Marker written into every `.track.json` so we can tell our files from any other JSON. */
 export const PROJECT_FORMAT = 'track-maker'
 /** Bumped only when the shape of a saved file changes in a way a reader must know about. */
 export const PROJECT_FORMAT_VERSION = 1
-export const PROJECT_FILE_EXT = '.tm.json'
+export const PROJECT_FILE_EXT = '.track.json'
 
 /** Everything a saved file restores. Transient state — selection, tool, undo history — is not saved. */
 export interface ProjectDocument {
@@ -171,7 +171,7 @@ function pruneOneSidedLinks(pieces: Piece[]): Piece[] {
 }
 
 /**
- * Parse the text of a `.tm.json` file. Unknown fields are ignored and missing
+ * Parse the text of a `.track.json` file. Unknown fields are ignored and missing
  * ones fall back to today's defaults, so a file from an older build still opens.
  */
 export function parseProject(text: string): ProjectDocument {

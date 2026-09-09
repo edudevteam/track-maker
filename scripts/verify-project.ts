@@ -45,7 +45,7 @@ const snapshot = {
 const text = JSON.stringify(serializeProject(snapshot), null, 2)
 const back = parseProject(text)
 
-check('filename from project title', projectFileName(snapshot.projectName) === 'My-Big-Track.tm.json', projectFileName(snapshot.projectName))
+check('filename from project title', projectFileName(snapshot.projectName) === 'My-Big-Track.track.json', projectFileName(snapshot.projectName))
 check('name round-trips', back.name === snapshot.projectName)
 check('edited dimension round-trips', back.dims.track.totalHeight === 15.5)
 check('untouched dimension kept', back.dims.connector.holeSpan === DEFAULT_DIMENSIONS.connector.holeSpan)

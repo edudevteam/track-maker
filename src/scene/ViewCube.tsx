@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { GizmoViewcube, Line } from '@react-three/drei'
 import { useTheme } from '../store/useTheme'
@@ -75,28 +75,47 @@ export function ViewCube() {
   const theme = useTheme((s) => s.theme)
   const dark = theme === 'dark'
 
-  const face = dark ? '#39414c' : '#f5f6f8'
+  const face = dark ? '#39414c' : '#ffffff'
   const line = dark ? '#aab2bc' : '#a7aeb6'
   const text = dark ? '#e9edf2' : '#4b525a'
   const hover = dark ? '#4a9eea' : '#2f7fd1'
 
   const points = useMemo(() => cubeEdges(EDGE), [])
 
+  /*
+    The canvas runs ACES tone mapping, which pulls pure white down to a light
+    grey — fine for the model, wrong for a gizmo that is meant to read as a flat
+    white box. drei builds the cube's six face materials itself, so the only way
+    in is to walk the group afterwards and opt them out of tone mapping. Rerun it
+    whenever the theme colours change, since that rebuilds the face textures.
+  */
+  const cube = useRef<THREE.Group>(null)
+  useLayoutEffect(() => {
+    cube.current?.traverse((o) => {
+      const m = (o as THREE.Mesh).material
+      if (!m) return
+      for (const mat of Array.isArray(m) ? m : [m]) mat.toneMapped = false
+    })
+  }, [face, text, line, hover])
+
   return (
     <group>
       <CubeShadow opacity={dark ? 0.5 : 0.32} />
-      <GizmoViewcube
-        color={face}
-        textColor={text}
-        strokeColor={line}
-        hoverColor={hover}
-        font="bold 21px Inter var, Inter, system-ui, Arial, sans-serif"
-      />
+      <group ref={cube}>
+        <GizmoViewcube
+          color={face}
+          textColor={text}
+          strokeColor={line}
+          hoverColor={hover}
+          font="bold 21px Inter var, Inter, system-ui, Arial, sans-serif"
+        />
+      </group>
       <Line
         points={points}
         segments
         color={line}
         lineWidth={1.6}
+        toneMapped={false}
         polygonOffset
         polygonOffsetFactor={-4}
         raycast={() => null}
