@@ -1,10 +1,12 @@
-import { useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { useProject } from '../store/useProject'
-import { getCarGeometry } from '../geometry/cache'
+import { getBlockGeometry, getCarGeometry } from '../geometry/cache'
 import { centrelineLength, sampleCentreline } from '../lib/ports'
 import { railHeight } from '../geometry/trackProfile'
+import { vehicleScale, vehicleSizeOf } from '../geometry/vehicle'
+import { BLOCK_CAR, BUILT_IN_CAR, useLoadedCar, withFacing } from '../lib/carLibrary'
 
 const UP = new THREE.Vector3(0, 1, 0)
 
@@ -25,9 +27,31 @@ export function Car() {
   const gravity = useProject((s) => s.gravity)
   const friction = useProject((s) => s.friction)
   const setCar = useProject((s) => s.setCar)
+  const vehicle = useProject((s) => s.vehicle)
+  const models = useProject((s) => s.carLibrary.models)
+  const vehicleSizes = useProject((s) => s.vehicleSizes)
+  const facing = useProject((s) => s.vehicleFacing)
 
   const group = useRef<THREE.Group>(null)
-  const geometry = getCarGeometry(dims)
+  // Whichever way the car has been told it faces wins over what its file says.
+  const spec = withFacing(models.find((m) => m.id === vehicle) ?? BUILT_IN_CAR, facing[vehicle])
+  // A model that will not load leaves the built-in shape on the track, so the
+  // physics preview still runs while the file is sorted out.
+  const { car: loaded } = useLoadedCar(spec)
+  // The block is a real vehicle's size, so a scale divides into it; the die-cast
+  // shape follows the channel, so it fits whatever the track has been set to.
+  const builtIn = spec.id === BLOCK_CAR.id ? getBlockGeometry() : getCarGeometry(dims)
+  const natural = useMemo(
+    () => loaded?.natural ?? vehicleSizeOf(builtIn),
+    [loaded, builtIn],
+  )
+  const scale = vehicleScale(natural, vehicleSizes[spec.id] ?? spec.size)
+
+  // A file with no colour of its own is painted from the manifest, so a changed
+  // colour shows without the file being read again.
+  useEffect(() => {
+    for (const material of loaded?.painted ?? []) material.color.set(spec.color)
+  }, [loaded, spec.color])
 
   useFrame((_, rawDelta) => {
     if (!showVehicle || !car.pieceId || !group.current) return
@@ -102,9 +126,15 @@ export function Car() {
 
   return (
     <group ref={group}>
-      <mesh geometry={geometry} castShadow>
-        <meshStandardMaterial color="#dc2626" metalness={0.35} roughness={0.35} />
-      </mesh>
+      {loaded ? (
+        // The loaded model keeps whatever materials the file brought, so a GLB
+        // or 3MF arrives with its paint, glass and tyres already on it.
+        <primitive object={loaded.object} scale={scale} />
+      ) : (
+        <mesh geometry={builtIn} scale={scale} castShadow>
+          <meshStandardMaterial color={spec.color} metalness={0.35} roughness={0.35} />
+        </mesh>
+      )}
     </group>
   )
 }

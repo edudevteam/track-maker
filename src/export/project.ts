@@ -1,10 +1,20 @@
-import type { Piece, PieceKind, PortId, PortLink, TrackType, Vec3, VehicleType } from '../types'
+import type {
+  Piece,
+  PieceKind,
+  PortId,
+  PortLink,
+  TrackType,
+  Vec3,
+  VehicleSize,
+  VehicleType,
+} from '../types'
 import {
   DEFAULT_CONNECTOR_COLOR,
   DEFAULT_DIMENSIONS,
   DEFAULT_TRACK_COLOR,
   type Dimensions,
 } from '../geometry/dimensions'
+import { AXES, facingIsValid, type Axis, type VehicleFacing } from '../geometry/vehicle'
 
 /** Marker written into every `.track.json` so we can tell our files from any other JSON. */
 export const PROJECT_FORMAT = 'track-maker'
@@ -22,6 +32,10 @@ export interface ProjectDocument {
   name: string
   trackType: TrackType
   vehicle: VehicleType
+  /** Sizes typed over a car's own, keyed by car id. */
+  vehicleSizes: Record<string, VehicleSize>
+  /** Which way each car was told it faces, keyed by car id. */
+  vehicleFacing: Record<string, VehicleFacing>
   dims: Dimensions
   pieces: Piece[]
   printerId: string
@@ -34,6 +48,8 @@ export interface ProjectSnapshot {
   projectName: string
   trackType: TrackType
   vehicle: VehicleType
+  vehicleSizes: Record<string, VehicleSize>
+  vehicleFacing: Record<string, VehicleFacing>
   dims: Dimensions
   pieces: Piece[]
   printer: { id: string }
@@ -51,6 +67,8 @@ export function serializeProject(s: ProjectSnapshot): ProjectDocument {
     name: s.projectName,
     trackType: s.trackType,
     vehicle: s.vehicle,
+    vehicleSizes: s.vehicleSizes,
+    vehicleFacing: s.vehicleFacing,
     dims: s.dims,
     pieces: s.pieces,
     printerId: s.printer.id,
@@ -117,6 +135,44 @@ function mergeDims(v: unknown): Dimensions {
   }
   return out
 }
+
+/**
+ * Car sizes, keyed by car id. Only complete, positive sizes are kept — a partial
+ * one would scale a model to nothing, and leaving it out simply means that car
+ * is drawn at its own size.
+ */
+function readVehicleSizes(v: unknown): Record<string, VehicleSize> {
+  if (!isObj(v)) return {}
+  const out: Record<string, VehicleSize> = {}
+  for (const [id, size] of Object.entries(v)) {
+    if (!isObj(size)) continue
+    const length = num(size.length, 0)
+    const width = num(size.width, 0)
+    const height = num(size.height, 0)
+    if (length > 0 && width > 0 && height > 0) out[id] = { length, width, height }
+  }
+  return out
+}
+
+/**
+ * Facings read back from a file. An axis pair that is not two distinct axes
+ * cannot be turned into a rotation, so it is dropped rather than carried into
+ * the app — the car then faces whichever way its file says, as it did before.
+ */
+function readVehicleFacing(v: unknown): Record<string, VehicleFacing> {
+  if (!isObj(v)) return {}
+  const out: Record<string, VehicleFacing> = {}
+  for (const [id, facing] of Object.entries(v)) {
+    if (!isObj(facing)) continue
+    const { forward, up } = facing
+    if (!isAxis(forward) || !isAxis(up)) continue
+    if (!facingIsValid({ forward, up })) continue
+    out[id] = { forward, up }
+  }
+  return out
+}
+
+const isAxis = (v: unknown): v is Axis => typeof v === 'string' && (AXES as readonly string[]).includes(v)
 
 function readLink(v: unknown, ids: Set<string>): PortLink | null {
   if (!isObj(v)) return null
@@ -213,7 +269,9 @@ export function parseProject(text: string): ProjectDocument {
     // Anything we do not recognise — including the old 'marble' track type —
     // opens as a car track with the die-cast vehicle.
     trackType: raw.trackType === 'train' ? 'train' : 'car',
-    vehicle: raw.vehicle === 'rc48' ? 'rc48' : 'diecast',
+    vehicle: str(raw.vehicle, 'diecast'),
+    vehicleSizes: readVehicleSizes(raw.vehicleSizes),
+    vehicleFacing: readVehicleFacing(raw.vehicleFacing),
     dims: mergeDims(raw.dims),
     pieces,
     printerId: str(raw.printerId, 'bambu-256'),

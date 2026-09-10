@@ -20,6 +20,178 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.3.1] — 2026-09-10
+
+### Added
+
+- **Turn a car around.** A model that comes in driving backwards is fixed with
+  one button in **Settings ▸ Vehicle ▸ Facing**. No model format records which
+  way a car faces and nothing can work it out from the mesh — a car is about as
+  car-shaped tail-first as nose-first — so a file is read facing whichever way
+  its kind usually does, and one built the other way needs telling.
+- **Which way is up, too.** Two axis rows beside the button set where the nose
+  and the roof point, for a model that arrives on its side or its roof rather
+  than merely back to front. Picking an axis the other one already holds swaps
+  the two rather than refusing the click, since a nose and a roof on one axis
+  describe no turn at all. **Reset** goes back to the way the file is read.
+- **The correction sticks.** A model picked off your disk keeps it in the browser
+  beside the model, so a car only has to be turned around once however many
+  projects it rides in. A car from `public/cars/` keeps it in the project, and
+  its `cars.json` entry can still fix it for everyone.
+
+---
+
+## [1.3.0] — 2026-09-10
+
+### Added
+
+- **Your own car, without adding it to the project.** **Settings ▸ Vehicle ▸ Add
+  a model…** reads a `.glb`, `.3mf`, `.stl` or `.obj` straight off your disk and
+  keeps it in your browser. Nothing is uploaded anywhere and nothing is added to
+  the app, so a hundred-megabyte car is no longer a hundred megabytes everyone
+  else has to download. It survives a reload, and a bin button beside it gives
+  the room back. A browser that will not store — a private window, or one that
+  is simply full — says so and drives the car anyway until the page is closed.
+- **Scale buttons: 1:64 die cast, 1:32 slot car, 1:28 RC.** One click sizes the
+  car to that fraction of the real vehicle. The dialog says what it measured
+  against — the model's own size where the file's units could be settled, or a
+  typical 4500mm car where they could not.
+- **A Block car.** A plain box exactly the size of a real vehicle, so a scale can
+  be seen before there is a model to see it on. It is also what a project falls
+  back to when it names a car this browser has never seen, which is what happens
+  when a project file is sent to someone else — the model does not travel with
+  it, so a correctly sized placeholder stands in until they pick their own.
+- **A Muscle Car rides out of the box.** The first car that ships with the app,
+  at 1:64.
+- **`pnpm car:add` writes a car's entry for you.** For a model that should ship
+  with the app rather than sit in one browser. It reads each file with the app's
+  own loaders, seats it with the app's own code, and writes `cars.json` from what
+  came out — so nobody has to measure a model by hand and guess at its units. It
+  warns about a file too big to ship and about parts standing apart, and
+  `--dry-run` shows the entry without writing it.
+
+### Changed
+
+- **A model's units are read off the model.** No format records what one unit
+  means, so a car exported in metres used to arrive six millimetres long. An
+  entry that does not say is now measured instead: millimetres, centimetres,
+  inches, metres and metres-under-a-thousandth-scale-node are far enough apart
+  that only one of them ever puts a car between a quad bike and a lorry. If none
+  does, the file's numbers are used unchanged and the car's real size is treated
+  as unknown, which is what the scale buttons then say. Setting `units` in an
+  entry turns the guessing off — and it now takes a plain number of millimetres
+  per unit, for a file on some scale of its own.
+- **A scale sets the car and nothing else.** No track dimension moves with it, so
+  a 1:32 or 1:28 car sits wider than a channel cut for die-cast until the channel
+  is widened in **Settings ▸ Dimensions**. The Vehicle dialog states this and
+  gives the channel width beside it.
+- **The cars folder's README now covers both ways in**, and says which one a
+  given car wants: ship the small ones, pick the big ones.
+
+---
+
+## [1.2.18] — 2026-09-10
+
+### Added
+
+- **The Vehicle dialog counts a car's parts.** A model built out of separate
+  objects — body, glass, wheels, lights — says how many came through, so a file
+  that arrived as one lump rather than as its parts is obvious at a glance.
+
+### Changed
+
+- **A car in parts is confirmed to hold together.** Separate objects are the
+  normal case, and the way a 3MF carries colour at all: each part comes in where
+  the file puts it, in its own colour. The model audit now proves it rather than
+  assuming it — a four-part car is read back and checked that its wheels are
+  still the right distance apart, still level, and still under the body after
+  being turned onto the track's axes and seated.
+- **The cars folder's README says which arrangement will not work.** A print
+  plate — the same parts laid out flat and spread apart ready to slice — rides as
+  a spread of loose parts, because those are the positions the file holds.
+  Exporting the parts assembled is what to do, and the model's own size in the
+  dialog gives a plate away.
+
+---
+
+## [1.2.17] — 2026-09-10
+
+### Added
+
+- **A car that looks like a car.** STL holds triangles and nothing else, so a car
+  read from one could only ever be a single flat colour. Three formats that do
+  carry colour now read too, and a car in any of them rides in the paint it was
+  made with — body, glass, tyres, chrome and all:
+  - **`.glb` / `.gltf`** — the one to reach for. Everything, textures included,
+    travels in a single file, and it is one click out of Blender or Fusion.
+  - **`.3mf`** — per-object colour, and the format Track Maker already writes on
+    export, so a car can be sent out and brought back.
+  - **`.obj` with its `.mtl`** — flat colour per named material. The `.mtl` has
+    to sit beside the `.obj`; without one the car falls back to a flat colour.
+- **Each format is assumed to be the way round its own kind usually is.** A GLB
+  is taken as facing +Z with +Y up, as glTF specifies; a 3MF as standing up in Z,
+  as it comes out of a slicer; an STL or OBJ as facing +X, which is what Track
+  Maker has always assumed. An entry that says nothing gets the right one, and
+  saying `forward` and `up` still overrides it.
+- **The Vehicle dialog says where a car's colour came from** — how many colours
+  the file carried, or that it carries none and is taking the flat one its entry
+  gives. The colour swatch beside a name is only shown when it is actually what
+  you will see.
+
+### Changed
+
+- **`color` in `cars.json` is now the fallback, not the paint.** It colours a
+  file that has none of its own — an STL, or an OBJ whose MTL is missing — and is
+  ignored for a file that brought its own. Changing it recolours the car without
+  the file being read again.
+- **A model reader is only fetched when a car needs it.** Reading four formats
+  did not make the app bigger: each reader is a separate download, so a project
+  with no models pays for none of them and the main bundle came down slightly.
+
+---
+
+## [1.2.16] — 2026-09-10
+
+### Added
+
+- **Your own car on the track.** Drop an `.stl` or `.obj` file into
+  `public/cars/`, name it in that folder's `cars.json`, and it joins the list in
+  **Settings ▸ Vehicle** beside the built-in shape. The folder has to be that one
+  — the tool runs wholly in the browser, which cannot read a path elsewhere on
+  your disk — and the folder's own README sets out every field.
+- **A model is turned the right way round for you.** Say which way it faces in
+  its own file and which way is up, and it is swung to face down the track, sat
+  on the road surface and centred in the channel, wherever its origin was. A file
+  exported in centimetres or inches can say so and comes in at the right size.
+- **Every car has its own size, and you set it.** **Settings ▸ Vehicle…** gives a
+  length, a width and a height in whichever unit you are working in — the length
+  runs down the track, the width across it, the height up off the road. Keep
+  proportions is on by default, so typing one carries the other two; turn it off
+  to stretch a car on one axis. The size is remembered per car, so several cars
+  of different sizes share one track, and Reset puts a car back to the size the
+  file was drawn at.
+- **The Vehicle dialog says what became of each file** — how many triangles it
+  holds and how long it is as drawn, or, if it could not be read, why: a missing
+  file, a format that is not STL or OBJ, two entries sharing an id, forward and
+  up on the same axis. A bad entry is skipped and named rather than silently
+  dropped. **Reload models** re-reads the folder without restarting.
+
+### Changed
+
+- **The vehicle button names the car it will drop.** It reads whatever is picked
+  rather than always saying Die Cast, and a car takes the colour its entry gives
+  — worth setting, since STL carries no colour of its own.
+- **A saved project remembers the car and its size**, and opens with them. A
+  project naming a car that is no longer in the folder falls back to the built-in
+  one instead of leaving the track empty.
+
+### Removed
+
+- **The greyed-out 1/48" RC entry.** Adding a model of it to the cars folder is
+  now the way to have it, so the placeholder had nothing left to promise.
+
+---
+
 ## [1.2.15] — 2026-09-10
 
 ### Added

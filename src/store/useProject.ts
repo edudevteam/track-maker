@@ -12,14 +12,30 @@ import type {
   TrackType,
   Unit,
   Vec3,
+  VehicleSize,
   VehicleType,
 } from '../types'
+import {
+  BLOCK_CAR,
+  BUILT_IN_CAR,
+  EMPTY_LIBRARY,
+  fetchCarLibrary,
+  forgetCarModel,
+  forgetCarModels,
+  removeStoredCar,
+  saveStoredCarFacing,
+  storeCarFile,
+  withFacing,
+  type CarLibrary,
+  type CarModelSpec,
+} from '../lib/carLibrary'
 import {
   DEFAULT_CONNECTOR_COLOR,
   DEFAULT_DIMENSIONS,
   DEFAULT_TRACK_COLOR,
   type Dimensions,
 } from '../geometry/dimensions'
+import { facingIsValid, type VehicleFacing } from '../geometry/vehicle'
 import { lanesAt } from '../geometry/parts'
 import { defaultTransitionLength } from '../geometry/transition'
 import { collectGroup, pieceMatrix, reflowFrom, transformToMate, worldPortFrame } from '../lib/ports'
@@ -42,14 +58,8 @@ export const TRACK_TYPES: { value: TrackType; label: string; enabled: boolean }[
   { value: 'train', label: 'Train', enabled: false },
 ]
 
-/** The Settings ▸ Vehicle menu — what rides the track in the preview. */
-export const VEHICLE_TYPES: { value: VehicleType; label: string; enabled: boolean }[] = [
-  { value: 'diecast', label: 'Die Cast', enabled: true },
-  { value: 'rc48', label: '1/48" RC', enabled: false },
-]
-
-export const vehicleLabel = (v: VehicleType) =>
-  VEHICLE_TYPES.find((x) => x.value === v)?.label ?? 'Vehicle'
+export const vehicleLabel = (models: CarModelSpec[], v: VehicleType) =>
+  models.find((x) => x.id === v)?.name ?? 'Missing model'
 
 export type BackgroundMode = 'theme' | 'sky' | 'solid'
 
@@ -90,6 +100,26 @@ export interface ProjectState {
   trackType: TrackType
   /** Which vehicle the preview rides — picked in Settings ▸ Vehicle. */
   vehicle: VehicleType
+  /**
+   * The cars on offer: the built-in shape, plus whatever `public/cars/cars.json`
+   * lists. Read once on start-up and re-readable from the Vehicle dialog.
+   */
+  carLibrary: CarLibrary
+  carLibraryLoading: boolean
+  /**
+   * Sizes typed over a car's own, keyed by car id, mm. A car with no entry is
+   * drawn at the size its manifest entry gives, or at the file's own size.
+   */
+  vehicleSizes: Record<string, VehicleSize>
+  /**
+   * Which way a car has been told it faces, keyed by car id. No format records
+   * this, so a model that comes in backwards is corrected here. A car with no
+   * entry faces whichever way its file, its manifest entry, or its format's own
+   * convention says.
+   */
+  vehicleFacing: Record<string, VehicleFacing>
+  /** Whether typing one of a car's three sizes drags the other two with it. */
+  keepVehicleProportions: boolean
   /**
    * The unit every length is shown and typed in — picked in Settings ▸ Units.
    * Display only: the build itself is millimetres throughout.
@@ -138,6 +168,25 @@ export interface ProjectActions {
   setProjectName: (n: string) => void
   setTrackType: (t: TrackType) => void
   setVehicle: (v: VehicleType) => void
+  /** Re-read `public/cars/cars.json`, dropping any mesh already loaded. */
+  loadCarLibrary: (refresh?: boolean) => Promise<void>
+  /**
+   * Take a model the user picked off their own disk, keep it in this browser and
+   * put it on the track. Resolves with a note when it could only be kept for the
+   * session, or null when it is stored properly.
+   */
+  addCarFile: (file: File) => Promise<string | null>
+  /** Forget a picked model. Manifest and built-in cars cannot be removed. */
+  removeCar: (id: string) => Promise<void>
+  /** Type over a car's size. A null size puts it back to the model's own. */
+  setVehicleSize: (id: string, size: VehicleSize | null) => void
+  /**
+   * Say which way a car faces in its own file. A null facing puts it back to
+   * whatever the file, the manifest or the format says. For a picked model this
+   * is also remembered in the browser, so the correction is not made twice.
+   */
+  setVehicleFacing: (id: string, facing: VehicleFacing | null) => Promise<void>
+  setKeepVehicleProportions: (v: boolean) => void
   setUnits: (u: Unit) => void
   setDims: (patch: Partial<Dimensions>) => void
   setDimValue: (group: keyof Dimensions, field: string, value: number) => void
@@ -260,7 +309,12 @@ function freeSpot(pieces: Piece[]): Vec3 {
 export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
   projectName: 'Untitled Track',
   trackType: 'car',
-  vehicle: 'diecast',
+  vehicle: BUILT_IN_CAR.id,
+  carLibrary: EMPTY_LIBRARY,
+  carLibraryLoading: false,
+  vehicleSizes: {},
+  vehicleFacing: {},
+  keepVehicleProportions: true,
   units: loadUnits(),
   dims: DEFAULT_DIMENSIONS,
 
@@ -293,6 +347,55 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
   setProjectName: (projectName) => set({ projectName }),
   setTrackType: (trackType) => set({ trackType }),
   setVehicle: (vehicle) => set({ vehicle }),
+  loadCarLibrary: async (refresh = false) => {
+    if (get().carLibraryLoading) return
+    if (refresh) forgetCarModels()
+    set({ carLibraryLoading: true })
+    const carLibrary = await fetchCarLibrary()
+    // A car picked before its entry was renamed or removed — or a project opened
+    // on a browser that has never seen its model — falls back to the placeholder
+    // block, which is at least the right size for a car.
+    const vehicle = carLibrary.models.some((m) => m.id === get().vehicle)
+      ? get().vehicle
+      : BLOCK_CAR.id
+    set({ carLibrary, carLibraryLoading: false, vehicle })
+  },
+  addCarFile: async (file) => {
+    const taken = new Set(get().carLibrary.models.map((m) => m.id))
+    const { spec, temporary } = await storeCarFile(file, taken)
+    await get().loadCarLibrary()
+    set({ vehicle: spec.id })
+    return temporary
+  },
+  removeCar: async (id) => {
+    await removeStoredCar(id)
+    await get().loadCarLibrary()
+  },
+  setVehicleSize: (id, size) =>
+    set((s) => {
+      const sizes = { ...s.vehicleSizes }
+      if (size) sizes[id] = size
+      else delete sizes[id]
+      return { vehicleSizes: sizes }
+    }),
+  setVehicleFacing: async (id, facing) => {
+    if (facing && !facingIsValid(facing)) return
+    const spec = get().carLibrary.models.find((m) => m.id === id)
+    // Seating bakes the rotation in, so the mesh facing the old way is of no
+    // further use — released here rather than left sitting in the cache.
+    if (spec) forgetCarModel(withFacing(spec, get().vehicleFacing[id]))
+
+    set((s) => {
+      const all = { ...s.vehicleFacing }
+      if (facing) all[id] = facing
+      else delete all[id]
+      return { vehicleFacing: all }
+    })
+
+    // A picked model keeps it, so the next project starts the right way round.
+    if (spec?.source === 'stored') await saveStoredCarFacing(id, facing)
+  },
+  setKeepVehicleProportions: (keepVehicleProportions) => set({ keepVehicleProportions }),
   setUnits: (units) => {
     saveUnits(units)
     set({ units })
@@ -792,7 +895,11 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
     set({
       projectName: doc.name,
       trackType: doc.trackType,
+      // A car the manifest no longer lists is left as saved until the library is
+      // next read, which puts it back to the built-in one and says so.
       vehicle: doc.vehicle,
+      vehicleSizes: doc.vehicleSizes,
+      vehicleFacing: doc.vehicleFacing,
       dims: doc.dims,
       pieces: doc.pieces,
       printer: preset.id === 'custom' ? { ...preset, size: doc.customPrinterSize } : preset,

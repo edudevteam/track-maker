@@ -1,10 +1,11 @@
 import * as THREE from 'three'
 import type { Dimensions } from './dimensions'
-import type { Piece, PortId } from '../types'
+import type { Piece, PortId, VehicleSize } from '../types'
 import { arcFrames, mergeGeometries, straightFrames, sweepProfile } from './sweep'
 import { trackProfile } from './trackProfile'
 import { buildTransitionGeometry } from './transition'
 import { chamferedPlan, loftPrism, type LoftLevel } from './loft'
+import { seatVehicleGeometry } from './vehicle'
 
 export { mergeGeometries }
 
@@ -153,6 +154,23 @@ export function buildCarGeometry(d: Dimensions): THREE.BufferGeometry {
       parts.push(wheel)
     }
   }
-  return mergeGeometries(parts)
+  // Seated the same way a loaded model is — on the road, centred across it, nose
+  // down +X — so both can be scaled to a typed size by the same rule.
+  const car = mergeGeometries(parts)
+  seatVehicleGeometry(car)
+  return car
+}
+
+/**
+ * The placeholder: a plain box the size of a real vehicle, seated the same way.
+ *
+ * It is built at full size rather than at any particular scale, so its own size
+ * is a real vehicle's size and a scale divides straight into it — which is the
+ * whole point of it. What rides the track is this box scaled down.
+ */
+export function buildBlockGeometry(real: VehicleSize): THREE.BufferGeometry {
+  const block = new THREE.BoxGeometry(real.length, real.height, real.width)
+  seatVehicleGeometry(block)
+  return block
 }
 

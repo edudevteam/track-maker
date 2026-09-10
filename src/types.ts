@@ -3,8 +3,19 @@ export type Vec3 = [number, number, number]
 /** Which family of parts the project is building. */
 export type TrackType = 'car' | 'train'
 
-/** Which vehicle rides the track in the preview. */
-export type VehicleType = 'diecast' | 'rc48'
+/**
+ * Which vehicle rides the track in the preview — `diecast` for the built-in
+ * shape, otherwise the `id` of an entry in `public/cars/cars.json`. A free
+ * string, since the ids come from that file rather than from the code.
+ */
+export type VehicleType = string
+
+/** How big a vehicle is drawn, mm. Length runs down the track, width across it. */
+export interface VehicleSize {
+  length: number
+  width: number
+  height: number
+}
 
 /**
  * The unit lengths are shown and typed in. Only a display choice — every stored

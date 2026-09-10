@@ -1,7 +1,8 @@
 import * as THREE from 'three'
 import type { Dimensions } from './dimensions'
 import type { Piece } from '../types'
-import { buildCarGeometry, buildConnectorGeometry, buildTrackGeometry } from './parts'
+import { buildBlockGeometry, buildCarGeometry, buildConnectorGeometry, buildTrackGeometry } from './parts'
+import { REFERENCE_VEHICLE } from '../lib/carScales'
 
 /**
  * Geometry is rebuilt only when the inputs that actually shape it change, so
@@ -85,4 +86,9 @@ export function getConnectorGeometry(d: Dimensions, length: number): THREE.Buffe
 
 export function getCarGeometry(d: Dimensions): THREE.BufferGeometry {
   return take(`car|${d.track.channelTopWidth}`, () => buildCarGeometry(d))
+}
+
+/** The placeholder block at its full reference size — a scale divides into it. */
+export function getBlockGeometry(): THREE.BufferGeometry {
+  return take('block', () => buildBlockGeometry(REFERENCE_VEHICLE))
 }

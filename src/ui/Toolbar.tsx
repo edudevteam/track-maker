@@ -95,6 +95,7 @@ export function Toolbar({ onAddPart }: { onAddPart: () => void }) {
   const snapToPort = useProject((s) => s.snapToPort)
   const setSnapToPort = useProject((s) => s.setSnapToPort)
   const vehicle = useProject((s) => s.vehicle)
+  const carModels = useProject((s) => s.carLibrary.models)
   const showVehicle = useProject((s) => s.showVehicle)
   const toggleVehicle = useProject((s) => s.toggleVehicle)
   const hasPieces = useProject((s) => s.pieces.length > 0)
@@ -183,7 +184,7 @@ export function Toolbar({ onAddPart }: { onAddPart: () => void }) {
 
       <Group>
         <Latch
-          label={`${vehicleLabel(vehicle)} on the track`}
+          label={`${vehicleLabel(carModels, vehicle)} on the track`}
           hint={
             showVehicle
               ? 'Shown — click to hide it. It keeps its place on the track.'

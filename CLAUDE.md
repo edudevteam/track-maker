@@ -40,6 +40,20 @@ It has already caught two real defects that looked fine on screen. Treat a
 non-zero non-manifold edge count or a volume that misses the analytic value as a
 bug, not noise.
 
+Run it from a directory inside the repo — `node` cannot resolve `three` from
+`/tmp`. `--outDir .vg` works; delete the folder afterwards.
+
+`scripts/verify-vehicle.ts` does the same for the car models: it parses an STL,
+an OBJ with its MTL and a hand-written GLB, then checks each comes out facing
+down the track, seated on the road, centred across it, scaled to the size typed
+in Settings ▸ Vehicle, and still wearing the colours its file carried. Run it
+after touching `src/geometry/vehicle.ts` or `src/lib/carLibrary.ts`.
+
+3MF is wired up the same way but is not in the audit — `3MFLoader` reads the
+package with `DOMParser`, which node does not have. Adding a dev-only XML parser
+would close that gap; it has not been done, so a 3MF change needs checking in the
+browser.
+
 Dimensions are millimetres. Every track and connector dimension is a runtime
 parameter in `src/geometry/dimensions.ts`, editable from Settings ▸ Dimensions — prefer
 adding a parameter over hardcoding a value.

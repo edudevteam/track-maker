@@ -74,9 +74,20 @@ src/
   ui/         panels, controls, export dialog
   export/     OBJ, STL and hand-written 3MF writers
   store/      zustand state for the project and the theme
+public/
+  cars/       car models for the preview, and the cars.json that lists them
 scripts/
   verify-geometry.ts   headless audit of every generated solid
+  verify-vehicle.ts    headless audit of the STL/OBJ car loader
 ```
+
+The one thing that is imported rather than generated is the car in the gravity
+preview. Drop a `.glb`, `.gltf`, `.3mf`, `.obj` or `.stl` into `public/cars/`,
+list it in that folder's `cars.json`, and pick it in Settings ▸ Vehicle, where
+its size is yours to set. A GLB, 3MF or OBJ-with-MTL rides in the colours it was
+made with; an STL carries none, so it takes the flat colour its entry gives.
+`public/cars/README.md` has the fields. The folder has to be that one: this runs
+wholly in the browser, so a manifest cannot name a path elsewhere on disk.
 
 ### Verifying the geometry
 
@@ -86,9 +97,15 @@ edge is shared by exactly two triangles. Run it after changing anything in
 `src/geometry/`:
 
 ```bash
-npx vite build --ssr scripts/verify-geometry.ts --outDir /tmp/vg --config /dev/null
-node /tmp/vg/verify-geometry.js
+npx vite build --ssr scripts/verify-geometry.ts --outDir .vg --config /dev/null
+node .vg/verify-geometry.js
 ```
+
+`scripts/verify-vehicle.ts` does the same for the car models — that an STL, OBJ
+or GLB comes out facing down the track, seated on the road, centred across it,
+scaled to the size set in Settings ▸ Vehicle, and still wearing the colours its
+file carried. Build and run it the same way. 3MF is not covered: its loader reads
+the package with the browser's XML parser, which node has none of.
 
 ## Source drawings
 

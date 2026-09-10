@@ -1,0 +1,14 @@
+{
+  "format": "track-maker-cars",
+  "cars": [
+    {
+      "id": "muscle-car",
+      "name": "Muscle Car",
+      "file": "muscle_car.glb",
+      "units": "m",
+      "length": 97.7,
+      "width": 37.3,
+      "height": 27.7
+    }
+  ]
+}

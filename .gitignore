@@ -4,3 +4,6 @@ dist
 .DS_Store
 .vite
 _plan
+.vg
+.cars-tool
+models-local

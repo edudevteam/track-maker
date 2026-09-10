@@ -25,8 +25,8 @@ import {
   PANEL_ITEMS,
   PRINTER_PRESETS,
   TRACK_TYPES,
-  VEHICLE_TYPES,
   useProject,
+  vehicleLabel,
   type BackgroundMode,
 } from '../store/useProject'
 import { useTheme } from '../store/useTheme'
@@ -55,10 +55,12 @@ export function TopBar({
   onExport,
   onOpenDimensions,
   onOpenBackground,
+  onOpenVehicle,
 }: {
   onExport: () => void
   onOpenDimensions: () => void
   onOpenBackground: () => void
+  onOpenVehicle: () => void
 }) {
   const projectName = useProject((s) => s.projectName)
   const setProjectName = useProject((s) => s.setProjectName)
@@ -66,6 +68,7 @@ export function TopBar({
   const setTrackType = useProject((s) => s.setTrackType)
   const vehicle = useProject((s) => s.vehicle)
   const setVehicle = useProject((s) => s.setVehicle)
+  const carModels = useProject((s) => s.carLibrary.models)
   const units = useProject((s) => s.units)
   const setUnits = useProject((s) => s.setUnits)
   const printer = useProject((s) => s.printer)
@@ -204,16 +207,22 @@ export function TopBar({
             />
           ))}
         </Submenu>
-        <Submenu icon={<Car size={13} />} label="Vehicle">
-          {VEHICLE_TYPES.map((v) => (
+        <Submenu icon={<Car size={13} />} label="Vehicle" hint={vehicleLabel(carModels, vehicle)}>
+          {carModels.map((m) => (
             <ChoiceItem
-              key={v.value}
-              label={v.label}
-              checked={vehicle === v.value}
-              disabled={!v.enabled}
-              onClick={() => setVehicle(v.value)}
+              key={m.id}
+              label={m.name}
+              checked={vehicle === m.id}
+              onClick={() => setVehicle(m.id)}
             />
           ))}
+          <MenuSeparator />
+          <MenuItem
+            icon={<SlidersHorizontal size={13} />}
+            label="Vehicle…"
+            hint="Add a model, set its size"
+            onClick={onOpenVehicle}
+          />
         </Submenu>
         <Submenu icon={<Printer size={13} />} label="Print">
           <CheckItem

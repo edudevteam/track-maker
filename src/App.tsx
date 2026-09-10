@@ -7,6 +7,7 @@ import { StatusBar } from './ui/StatusBar'
 import { ExportDialog } from './ui/ExportDialog'
 import { DimensionsDialog } from './ui/DimensionsDialog'
 import { BackgroundDialog } from './ui/BackgroundDialog'
+import { VehicleDialog } from './ui/VehicleDialog'
 import { PartsLibrary } from './ui/PartsLibrary'
 import { CloseLoop } from './ui/CloseLoop'
 import { Viewport, viewApi } from './scene/Viewport'
@@ -19,6 +20,8 @@ export function App() {
   const [library, setLibrary] = useState(false)
   const [dimensions, setDimensions] = useState(false)
   const [background, setBackground] = useState(false)
+  const [vehicle, setVehicle] = useState(false)
+  const loadCarLibrary = useProject((s) => s.loadCarLibrary)
   const undo = useProject((s) => s.undo)
   const redo = useProject((s) => s.redo)
   const removeSelected = useProject((s) => s.removeSelected)
@@ -32,7 +35,13 @@ export function App() {
   const closure = useProject((s) => s.closure)
   const setClosure = useProject((s) => s.setClosure)
 
-  const dialogOpen = exporting || library || dimensions || background || !!closure
+  const dialogOpen = exporting || library || dimensions || background || vehicle || !!closure
+
+  // The car models are read once on start-up, so the Vehicle menu is populated
+  // before it is opened. Reload in that dialog re-reads them.
+  useEffect(() => {
+    void loadCarLibrary()
+  }, [loadCarLibrary])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -113,6 +122,7 @@ export function App() {
         onExport={() => setExporting(true)}
         onOpenDimensions={() => setDimensions(true)}
         onOpenBackground={() => setBackground(true)}
+        onOpenVehicle={() => setVehicle(true)}
       />
       <Toolbar onAddPart={() => setLibrary(true)} />
       <div className="flex min-h-0 flex-1">
@@ -137,6 +147,7 @@ export function App() {
       {closure && <CloseLoop ends={closure} onClose={() => setClosure(null)} />}
       {dimensions && <DimensionsDialog onClose={() => setDimensions(false)} />}
       {background && <BackgroundDialog onClose={() => setBackground(false)} />}
+      {vehicle && <VehicleDialog onClose={() => setVehicle(false)} />}
     </div>
   )
 }
