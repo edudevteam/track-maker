@@ -139,7 +139,14 @@ function Properties() {
                 />
               </Field>
             </div>
-            <Field label="Length" hint="Each end keeps a full connector pocket; the middle tapers.">
+            <Field
+              label="Length"
+              hint={
+                piece.lanes === piece.lanesB
+                  ? 'Both ends are the same width — pick different ones to get a taper.'
+                  : 'Each end keeps a full connector pocket; the middle tapers.'
+              }
+            >
               <LengthInput
                 value={piece.length}
                 min={minTransitionLength(dims)}

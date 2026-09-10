@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import type {
   CarState,
   GizmoAnchor,
+  PartSpec,
   Piece,
   PieceKind,
   PortId,
@@ -21,7 +22,8 @@ import {
 } from '../geometry/dimensions'
 import { lanesAt } from '../geometry/parts'
 import { defaultTransitionLength } from '../geometry/transition'
-import { pieceMatrix, reflowFrom, transformToMate, worldPortFrame } from '../lib/ports'
+import { collectGroup, pieceMatrix, reflowFrom, transformToMate, worldPortFrame } from '../lib/ports'
+import { fitOf, measureGap, type PortRef } from '../lib/closure'
 import { pieceBounds } from '../lib/printVolume'
 import { loadUnits, saveUnits } from '../lib/units'
 import type { ProjectDocument } from '../export/project'
@@ -102,6 +104,12 @@ export interface ProjectState {
   snapToPort: boolean
   /** Free port a new piece will attach to. */
   activePort: { pieceId: string; port: PortId } | null
+  /**
+   * The two open ends the closing tool has been pointed at, waiting on a part to
+   * bridge them. Set once the second end is clicked; cleared when the picker is
+   * done with it.
+   */
+  closure: { a: PortRef; b: PortRef } | null
 
   showGrid: boolean
   showPrintVolume: boolean
@@ -160,6 +168,15 @@ export interface ProjectActions {
   connectPorts: (a: { pieceId: string; port: PortId }, b: { pieceId: string; port: PortId }) => void
   disconnectPort: (p: { pieceId: string; port: PortId }) => void
 
+  /** Hold two open ends for the closing part picker, or let them go. */
+  setClosure: (ends: { a: PortRef; b: PortRef } | null) => void
+  /**
+   * Drop a part into the gap between two open ends. Both ends are joined when
+   * the part spans the gap; when it does not, it lands on the first end with its
+   * far end left free, so the run can be worked out from there.
+   */
+  closeGap: (a: PortRef, b: PortRef, spec: PartSpec) => string | null
+
   toggleGrid: () => void
   togglePrintVolume: () => void
   togglePorts: () => void
@@ -191,9 +208,16 @@ export interface ProjectActions {
 /** Fields that move a piece's ends, so a joined neighbour has to be re-seated. */
 const RESHAPES: (keyof Piece)[] = ['kind', 'length', 'radius', 'angleDeg', 'flatEnd']
 
+/** Fields that change how wide a piece is, so a transition clipped to it has to follow. */
+const WIDTHS: (keyof Piece)[] = ['lanes', 'lanesB']
+
 /** The default name for a part of this kind, before the user renames it. */
 export const kindName = (kind: PieceKind) =>
   kind === 'curve' ? 'Curve' : kind === 'transition' ? 'Transition' : 'Straight'
+
+/** What a transition is called before the user renames it — the step it makes. */
+export const transitionName = (lanesA: number, lanesB: number) =>
+  `Transition ${Math.max(1, Math.round(lanesA))}× → ${Math.max(1, Math.round(lanesB))}×`
 
 function makePiece(dims: Dimensions, init: Partial<Piece> = {}): Piece {
   const kind: PieceKind = init.kind ?? 'straight'
@@ -245,6 +269,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
   tool: 'select',
   snapToPort: true,
   activePort: null,
+  closure: null,
 
   showGrid: true,
   showPrintVolume: false,
@@ -325,7 +350,10 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
 
   updatePiece: (id, patch) =>
     set((s) => {
-      const pieces = s.pieces.map((p) => (p.id === id ? { ...p, ...patch } : p))
+      let pieces = s.pieces.map((p) => (p.id === id ? { ...p, ...patch } : p))
+      // A joint only fits when both sides are the same width, so a width change
+      // is carried out through the run rather than left as a step.
+      if (WIDTHS.some((k) => k in patch)) pieces = refitFromWidth(pieces, id, patch)
       // Resizing a piece moves the end its neighbour is clipped to, so the rest
       // of the assembly has to follow or the two would overlap.
       return { pieces: RESHAPES.some((k) => k in patch) ? reflowFrom(pieces, id) : pieces }
@@ -350,7 +378,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       lanes: from,
       lanesB: to,
       length: defaultTransitionLength(dims, from, to),
-      name: `Transition ${from}× → ${to}×`,
+      name: transitionName(from, to),
       color: host.color,
       connectorColor: host.connectorColor,
     })
@@ -424,6 +452,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
         }),
       selection: { pieceIds: [], anchor: 'middle' },
       activePort: null,
+      closure: null,
     })
   },
 
@@ -543,7 +572,13 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       },
     })),
   setAnchor: (anchor) => set((s) => ({ selection: { ...s.selection, anchor } })),
-  setTool: (tool) => set({ tool }),
+  // Closing a gap starts from an open end, so a highlight left on a joined one
+  // by another tool is dropped rather than taken as the first pick.
+  setTool: (tool) =>
+    set((s) => ({
+      tool,
+      activePort: tool === 'close' ? freePort(s.pieces, s.activePort) : s.activePort,
+    })),
   setSnapToPort: (snapToPort) => set({ snapToPort }),
   setActivePort: (activePort) => set({ activePort }),
 
@@ -614,6 +649,74 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
     })
   },
 
+  setClosure: (closure) => set({ closure }),
+
+  closeGap: (a, b, spec) => {
+    const { pieces, dims, commit } = get()
+    const hostA = pieces.find((p) => p.id === a.pieceId)
+    const hostB = pieces.find((p) => p.id === b.pieceId)
+    if (!hostA || !hostB || hostA.links[a.port] || hostB.links[b.port]) return null
+    const gap = measureGap(pieces, a, b)
+    if (!gap) return null
+
+    commit()
+
+    const piece = makePiece(dims, {
+      ...spec,
+      color: hostA.color,
+      connectorColor: hostA.connectorColor,
+    })
+    const seat = transformToMate(piece, 'a', worldPortFrame(hostA, a.port))
+    piece.position = seat.position
+    piece.rotation = seat.rotation
+    piece.links = { a: { pieceId: hostA.id, port: a.port }, b: null }
+    piece.connectors = { a: true, b: false }
+
+    // Two ends of one run are both pinned down, so the part has to span the gap
+    // as it is. Two separate runs can be swung together, so anything closes.
+    const closes = !gap.sameRun || fitOf(spec, gap).exact
+
+    let placed = pieces
+    if (closes && !gap.sameRun) {
+      const moved = transformToMate(hostB, b.port, worldPortFrame(piece, 'b'))
+      const delta = pieceMatrix({ ...hostB, ...moved }).multiply(pieceMatrix(hostB).invert())
+      const group = collectGroup(pieces, hostB.id)
+      placed = pieces.map((p) => (group.has(p.id) ? { ...p, ...applyMatrix(p, delta) } : p))
+    }
+    if (closes) {
+      piece.links.b = { pieceId: hostB.id, port: b.port }
+      piece.connectors.b = true
+    }
+
+    set({
+      pieces: [
+        ...placed.map((p) => {
+          let next = p
+          if (p.id === hostA.id)
+            next = {
+              ...next,
+              links: { ...next.links, [a.port]: { pieceId: piece.id, port: 'a' as PortId } },
+              connectors: { ...next.connectors, [a.port]: true },
+            }
+          if (closes && p.id === hostB.id)
+            next = {
+              ...next,
+              links: { ...next.links, [b.port]: { pieceId: piece.id, port: 'b' as PortId } },
+              connectors: { ...next.connectors, [b.port]: true },
+            }
+          return next
+        }),
+        piece,
+      ],
+      selection: { pieceIds: [piece.id], anchor: 'middle' },
+      // An unclosed gap leaves the part's own far end highlighted, so the next
+      // thing added carries on from there.
+      activePort: closes ? null : { pieceId: piece.id, port: 'b' },
+      closure: null,
+    })
+    return piece.id
+  },
+
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
   togglePrintVolume: () => set((s) => ({ showPrintVolume: !s.showPrintVolume })),
   togglePorts: () => set((s) => ({ showPorts: !s.showPorts })),
@@ -674,6 +777,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       pieces: [],
       selection: { pieceIds: [], anchor: 'middle' },
       activePort: null,
+      closure: null,
       tool: 'select',
       car: { pieceId: null, s: 0, v: 0, running: false },
       showVehicle: false,
@@ -698,6 +802,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       // An opened file starts a fresh session: nothing selected, nothing to undo past.
       selection: { pieceIds: [], anchor: 'middle' },
       activePort: null,
+      closure: null,
       tool: 'select',
       car: { pieceId: null, s: 0, v: 0, running: false },
       showVehicle: false,
@@ -741,23 +846,100 @@ export function widthMismatches(pieces: Piece[]): WidthMismatch[] {
   return out
 }
 
-/** Every piece reachable through links from `startId` — a connected assembly. */
-export function collectGroup(pieces: Piece[], startId: string): Set<string> {
+/** A width offered out of one piece's end, waiting to be pushed into whatever is clipped there. */
+interface WidthWave {
+  pieceId: string
+  port: PortId
+  lanes: number
+  /** Whether a transition offered it — a plain piece only resizes for one of those. */
+  fromTransition: boolean
+}
+
+/** An auto-named transition keeps reading as the step it makes; a renamed one keeps your name. */
+function renamedTransition(before: Piece, after: Piece): Piece {
+  return before.name === transitionName(before.lanes, before.lanesB)
+    ? { ...after, name: transitionName(after.lanes, after.lanesB) }
+    : after
+}
+
+/**
+ * Carry a width change outward through the joints it touches, so a run stays
+ * watertight instead of stepping wherever the edit stopped.
+ *
+ * Two rules, and between them they keep the whole run fitting without letting
+ * one field take over the build:
+ *
+ *  - **A transition always takes the width offered at the end that was reached,
+ *    and stops there.** Its far end is the step it exists to make, so it is
+ *    left alone — the change is absorbed rather than passed on.
+ *  - **A plain piece — a straight or a curve — is one width end to end**, so it
+ *    can only follow by resizing all of it. It does that when a *transition*
+ *    asked it to, and then offers the new width on out of its far end, which is
+ *    what keeps a transition either side of a straight in step. Two plain
+ *    pieces clipped to each other are left alone: that step is a real one, and
+ *    All Parts already offers to drop a transition into it.
+ */
+function refitFromWidth(pieces: Piece[], id: string, patch: Partial<Piece>): Piece[] {
+  const start = pieces.find((p) => p.id === id)
+  if (!start) return pieces
+
   const byId = new Map(pieces.map((p) => [p.id, p]))
-  const seen = new Set<string>()
-  const stack = [startId]
-  while (stack.length) {
-    const id = stack.pop()!
-    if (seen.has(id)) continue
-    seen.add(id)
-    const p = byId.get(id)
-    if (!p) continue
-    for (const port of ['a', 'b'] as PortId[]) {
-      const l = p.links[port]
-      if (l && !seen.has(l.pieceId)) stack.push(l.pieceId)
-    }
+  const refits = new Map<string, Piece>()
+  const at = (pieceId: string) => refits.get(pieceId) ?? byId.get(pieceId)
+
+  const queue: WidthWave[] = []
+  const offer = (piece: Piece, port: PortId) =>
+    queue.push({
+      pieceId: piece.id,
+      port,
+      lanes: lanesAt(piece, port),
+      fromTransition: piece.kind === 'transition',
+    })
+
+  // Only the ends whose width actually moved have anything to offer: a
+  // transition's two ends are separate fields, a plain piece's single width is
+  // both of its ends at once.
+  if (start.kind === 'transition') {
+    if ('lanes' in patch) offer(start, 'a')
+    if ('lanesB' in patch) offer(start, 'b')
+  } else if ('lanes' in patch) {
+    for (const port of ['a', 'b'] as PortId[]) offer(start, port)
   }
-  return seen
+
+  const settled = new Set<string>([start.id])
+  while (queue.length) {
+    const wave = queue.shift()!
+    const host = at(wave.pieceId)
+    const link = host?.links[wave.port]
+    if (!host || !link) continue
+    const neighbour = at(link.pieceId)
+    if (!neighbour || settled.has(neighbour.id)) continue
+    if (lanesAt(neighbour, link.port) === wave.lanes) continue
+
+    if (neighbour.kind === 'transition') {
+      const bumped =
+        link.port === 'b'
+          ? { ...neighbour, lanesB: wave.lanes }
+          : { ...neighbour, lanes: wave.lanes }
+      settled.add(neighbour.id)
+      refits.set(neighbour.id, renamedTransition(neighbour, bumped))
+      continue
+    }
+
+    if (!wave.fromTransition) continue
+    settled.add(neighbour.id)
+    refits.set(neighbour.id, { ...neighbour, lanes: wave.lanes })
+    // A straight or curve is the same width at both ends, so its far end now
+    // offers the new width to whatever is clipped beyond it.
+    queue.push({
+      pieceId: neighbour.id,
+      port: link.port === 'a' ? 'b' : 'a',
+      lanes: wave.lanes,
+      fromTransition: false,
+    })
+  }
+
+  return refits.size ? pieces.map((p) => refits.get(p.id) ?? p) : pieces
 }
 
 function applyMatrix(p: Piece, m: THREE.Matrix4): Pick<Piece, 'position' | 'rotation'> {

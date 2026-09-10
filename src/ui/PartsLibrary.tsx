@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Plus, X } from 'lucide-react'
-import { useProject } from '../store/useProject'
+import { transitionName, useProject } from '../store/useProject'
 import { Field, NumberInput, Segmented } from './controls'
 import { LengthInput, useUnits } from './units'
 import { laneWidth } from '../geometry/dimensions'
@@ -88,7 +88,7 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
             flatEnd: flat,
             radius,
             angleDeg,
-            name: `Transition ${lanes}× → ${lanesB}×`,
+            name: transitionName(lanes, lanesB),
           }
         : {
             kind,
@@ -466,7 +466,7 @@ function LaneField({
 }
 
 /** The small glyph beside a part in the list. */
-function PartIcon({ kind }: { kind: PieceKind }) {
+export function PartIcon({ kind }: { kind: PieceKind }) {
   return (
     <svg width={26} height={26} viewBox="0 0 26 26" className="shrink-0" aria-hidden>
       {kind === 'straight' && (

@@ -28,8 +28,15 @@ export function pieceQuaternion(p: Piece): THREE.Quaternion {
   return new THREE.Quaternion().setFromEuler(new THREE.Euler(...p.rotation, 'XYZ'))
 }
 
+/**
+ * What a port frame is worked out from. Only the piece's shape matters, so a
+ * part that has not been made yet — a recipe from the parts library, or the
+ * candidate part for a gap — can be measured the same way a placed one is.
+ */
+export type PieceShape = Pick<Piece, 'kind' | 'length' | 'radius' | 'angleDeg'>
+
 /** Local (piece-space) frame of a port. */
-export function localPortFrame(p: Piece, port: PortId): PortFrame {
+export function localPortFrame(p: PieceShape, port: PortId): PortFrame {
   if (port === 'a') {
     return {
       position: new THREE.Vector3(0, 0, 0),
@@ -87,7 +94,7 @@ const FLIP = new THREE.Quaternion().setFromAxisAngle(Y_AXIS, Math.PI)
  * Returns the piece's world position and Euler rotation.
  */
 export function transformToMate(
-  piece: Piece,
+  piece: PieceShape,
   port: PortId,
   target: PortFrame,
 ): { position: Vec3; rotation: Vec3 } {
@@ -129,6 +136,25 @@ export function sampleCentreline(p: Piece, s: number): { point: THREE.Vector3; t
     point: local.applyQuaternion(q).add(origin),
     tangent: tan.applyQuaternion(q).normalize(),
   }
+}
+
+/** Every piece reachable through links from `startId` — a connected assembly. */
+export function collectGroup(pieces: Piece[], startId: string): Set<string> {
+  const byId = new Map(pieces.map((p) => [p.id, p]))
+  const seen = new Set<string>()
+  const stack = [startId]
+  while (stack.length) {
+    const id = stack.pop()!
+    if (seen.has(id)) continue
+    seen.add(id)
+    const p = byId.get(id)
+    if (!p) continue
+    for (const port of ['a', 'b'] as PortId[]) {
+      const l = p.links[port]
+      if (l && !seen.has(l.pieceId)) stack.push(l.pieceId)
+    }
+  }
+  return seen
 }
 
 /**

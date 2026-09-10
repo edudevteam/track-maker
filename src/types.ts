@@ -80,7 +80,7 @@ export interface PartSpec {
   name: string
 }
 
-export type ToolId = 'select' | 'move' | 'rotate' | 'connect' | 'disconnect'
+export type ToolId = 'select' | 'move' | 'rotate' | 'connect' | 'disconnect' | 'close'
 
 /** Which part of a selected piece the transform gizmo is anchored to. */
 export type GizmoAnchor = 'a' | 'middle' | 'b'

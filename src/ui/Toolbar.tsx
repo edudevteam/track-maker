@@ -11,6 +11,7 @@ import {
   Plus,
   Redo2,
   Rotate3d,
+  Spline,
   Trash2,
   Undo2,
 } from 'lucide-react'
@@ -60,6 +61,13 @@ const MODES: ModeSpec[] = [
 
 const JOINTS: ModeSpec[] = [
   { id: 'connect', icon: Link2, label: 'Connect', hint: 'Click two ends to join them', shortcut: 'C' },
+  {
+    id: 'close',
+    icon: Spline,
+    label: 'Close Loop',
+    hint: 'Click two open ends, then pick the part that fills the gap',
+    shortcut: 'L',
+  },
   {
     id: 'disconnect',
     icon: Link2Off,

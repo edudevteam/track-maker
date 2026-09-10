@@ -20,6 +20,85 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.2.15] — 2026-09-10
+
+### Added
+
+- **A Close Loop tool**, beside Connect and Disconnect, with **L** to hand. Click
+  two open ends and it measures the hole between them — how far apart they are,
+  which way each faces, whether one sits higher than the other — then offers the
+  part that fills it. Straight, Curve and Transition are all on the list, each
+  already sized to the gap: a curve works out the radius and sweep that carry one
+  end round to the other, a straight the length that runs them together, a
+  transition the length and the width at each end. Every field is still yours to
+  type over, and **Back to the fitted size** puts the worked-out figures back.
+- **A part that spans the gap says so.** Pick one and it reads either "Closes the
+  gap exactly" or how far it misses by — how much short of the far end it stops,
+  and how many degrees off it points. The list says the same in brief against
+  each part, so the one that fits is obvious before you open it.
+- **Taking a part that does not close the gap.** It lands on the first end with
+  its far end left open and highlighted, so the run can be carried on from there
+  rather than the tool refusing to do anything. Nothing else on the workplane
+  moves.
+- **Joining two separate runs of track.** When the two ends belong to different
+  runs, anything fits: pick a part and the far run swings round to meet it, the
+  way Connect already moves a run onto an end. The tool says which of the two it
+  is doing before you commit to a part.
+- **Hairpins.** A gap whose ends face each other can be closed the short way
+  round or the long way; if only the long way reaches, that is what is offered —
+  a curve of up to 350°, which nothing in the parts library could make before.
+
+### Changed
+
+- **A track need not be a loop.** Nothing here runs on its own or nags about an
+  open end; the tool is there when a loop is wanted and out of the way when it is
+  not.
+
+---
+
+## [1.2.14] — 2026-09-10
+
+### Fixed
+
+- **Changing a transition's own end width now resizes the piece clipped to it.**
+  1.2.13 only carried a change one way — resize a straight and the transition
+  followed, but type a new Width at A or Width at B on the transition itself and
+  the straight beside it stayed where it was, leaving the step the transition
+  was meant to remove. Both ends now work the same way in both directions.
+- **A straight or curve between two transitions stays in step with both.** When
+  a transition resizes its neighbour, that neighbour hands its new width on out
+  of its far end, so a piece with a transition either side no longer has to be
+  fixed up by hand.
+
+### Changed
+
+- **Two plain pieces clipped to each other are still left alone.** Widening a
+  straight does not drag the next straight along with it — that step is a real
+  one, and All Parts goes on offering to drop a transition into it.
+
+---
+
+## [1.2.13] — 2026-09-10
+
+### Fixed
+
+- **Changing a piece's width now carries the transition it is clipped to.**
+  Widening or narrowing the track either side of a transition left the
+  transition at its old width, so the joint stepped and the part appeared to sit
+  on top of the track rather than in it. The end of the transition that meets
+  the piece you resized now follows it; the transition's far end stays as it
+  was, since that is the end the rest of the run is built to. A transition still
+  carrying the name it was given reads back the step it now makes; one you have
+  renamed keeps your name.
+
+### Changed
+
+- **Selected Part(s) says when a transition has stopped tapering.** If a resize
+  leaves both ends the same width, the length field now points that out, the way
+  the parts library already did.
+
+---
+
 ## [1.2.12] — 2026-09-10
 
 ### Fixed

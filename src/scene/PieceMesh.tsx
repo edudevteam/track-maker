@@ -101,9 +101,10 @@ function PortHandle({ piece, port }: { piece: Piece; port: PortId }) {
   const setActivePort = useProject((s) => s.setActivePort)
   const connectPorts = useProject((s) => s.connectPorts)
   const disconnectPort = useProject((s) => s.disconnectPort)
+  const setClosure = useProject((s) => s.setClosure)
   const select = useProject((s) => s.select)
 
-  const toolMode = tool === 'connect' || tool === 'disconnect'
+  const toolMode = tool === 'connect' || tool === 'disconnect' || tool === 'close'
   const linked = piece.links[port] !== null
   const isActive = activePort?.pieceId === piece.id && activePort.port === port
 
@@ -118,8 +119,9 @@ function PortHandle({ piece, port }: { piece: Piece; port: PortId }) {
   }, [piece.kind, piece.length, piece.radius, piece.angleDeg, port, dims])
 
   if (!showPorts && !toolMode) return null
-  // Outside the connect tools an already-joined end has nothing to offer.
-  if (!toolMode && linked) return null
+  // Outside the connect tools an already-joined end has nothing to offer, and
+  // closing a gap only ever works on open ends.
+  if (linked && (!toolMode || tool === 'close')) return null
 
   const color = tool === 'disconnect' && linked ? '#f0a5a5' : isActive ? '#5fe08a' : '#cfe0ee'
   const opacity = toolMode ? 0.55 : isActive ? 0.6 : 0.14
@@ -136,6 +138,12 @@ function PortHandle({ piece, port }: { piece: Piece; port: PortId }) {
       } else {
         setActivePort({ pieceId: piece.id, port })
       }
+      return
+    }
+    if (tool === 'close') {
+      // The first end picked is held; the second opens the part picker.
+      if (activePort && !isActive) setClosure({ a: activePort, b: { pieceId: piece.id, port } })
+      else setActivePort({ pieceId: piece.id, port })
       return
     }
     setActivePort(isActive ? null : { pieceId: piece.id, port })

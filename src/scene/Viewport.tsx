@@ -11,9 +11,8 @@ import { SkyDome } from './SkyDome'
 import { ViewCube } from './ViewCube'
 import { AxisTriad } from './AxisTriad'
 import { CadGrid } from './CadGrid'
-import { localPortFrame, pieceMidpoint, pieceQuaternion } from '../lib/ports'
+import { collectGroup, localPortFrame, pieceMidpoint, pieceQuaternion } from '../lib/ports'
 import type { Piece } from '../types'
-import { collectGroup } from '../store/useProject'
 
 export function Viewport() {
   const theme = useTheme((s) => s.theme)

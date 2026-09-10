@@ -8,6 +8,7 @@ import { ExportDialog } from './ui/ExportDialog'
 import { DimensionsDialog } from './ui/DimensionsDialog'
 import { BackgroundDialog } from './ui/BackgroundDialog'
 import { PartsLibrary } from './ui/PartsLibrary'
+import { CloseLoop } from './ui/CloseLoop'
 import { Viewport, viewApi } from './scene/Viewport'
 import { ViewTools } from './ui/ViewTools'
 import { NavHint } from './ui/NavHint'
@@ -26,8 +27,12 @@ export function App() {
   const setTool = useProject((s) => s.setTool)
   const toggleGrid = useProject((s) => s.toggleGrid)
   const panels = useProject((s) => s.panels)
+  // Picking the second open end with the closing tool puts a pair here, which is
+  // what raises the part picker.
+  const closure = useProject((s) => s.closure)
+  const setClosure = useProject((s) => s.setClosure)
 
-  const dialogOpen = exporting || library || dimensions || background
+  const dialogOpen = exporting || library || dimensions || background || !!closure
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -68,6 +73,9 @@ export function App() {
           break
         case 'x':
           setTool('disconnect')
+          break
+        case 'l':
+          setTool('close')
           break
         case 'a':
           setLibrary(true)
@@ -126,6 +134,7 @@ export function App() {
       <StatusBar />
       {exporting && <ExportDialog onClose={() => setExporting(false)} />}
       {library && <PartsLibrary onClose={() => setLibrary(false)} />}
+      {closure && <CloseLoop ends={closure} onClose={() => setClosure(null)} />}
       {dimensions && <DimensionsDialog onClose={() => setDimensions(false)} />}
       {background && <BackgroundDialog onClose={() => setBackground(false)} />}
     </div>
