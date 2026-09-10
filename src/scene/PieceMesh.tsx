@@ -4,7 +4,7 @@ import type { ThreeEvent } from '@react-three/fiber'
 import type { Piece, PortId } from '../types'
 import { useProject } from '../store/useProject'
 import { getConnectorGeometry, getTrackGeometry } from '../geometry/cache'
-import { connectorOffsets } from '../geometry/parts'
+import { connectorOffsets, lanesAt } from '../geometry/parts'
 import { laneWidth } from '../geometry/dimensions'
 import { localPortFrame } from '../lib/ports'
 import { ownsConnector } from '../lib/connectors'
@@ -59,7 +59,7 @@ export function PieceMesh({ piece }: { piece: Piece }) {
 function ConnectorAt({ piece, port }: { piece: Piece; port: PortId }) {
   const dims = useProject((s) => s.dims)
   const geometry = getConnectorGeometry(dims, dims.connector.length)
-  const lanes = useMemo(() => connectorOffsets(piece, dims), [piece.lanes, dims])
+  const lanes = useMemo(() => connectorOffsets(piece, dims, port), [piece.kind, piece.lanes, piece.lanesB, port, dims])
 
   const placement = useMemo(() => {
     const frame = localPortFrame(piece, port)
@@ -111,7 +111,7 @@ function PortHandle({ piece, port }: { piece: Piece; port: PortId }) {
     const frame = localPortFrame(piece, port)
     const inward = X_AXIS.clone().applyQuaternion(frame.quaternion).multiplyScalar(-1)
     // A small tab, per the plan — enough to grab without masking the piece.
-    const depth = Math.min(12, (piece.kind === 'straight' ? piece.length : piece.radius) * 0.2)
+    const depth = Math.min(12, (piece.kind === 'curve' ? piece.radius : piece.length) * 0.2)
     const pos = frame.position.clone().addScaledVector(inward, depth / 2)
     pos.y = dims.track.totalHeight / 2
     return { pos, quaternion: frame.quaternion, depth }
@@ -142,7 +142,7 @@ function PortHandle({ piece, port }: { piece: Piece; port: PortId }) {
     select([piece.id])
   }
 
-  const w = laneWidth(dims.track) * piece.lanes
+  const w = laneWidth(dims.track) * lanesAt(piece, port)
   const h = dims.track.totalHeight
 
   return (

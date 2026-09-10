@@ -17,33 +17,11 @@ export function trackProfile(d: Dimensions, lanes: number): Pt2[] {
   const t = d.track
   const n = Math.max(1, Math.round(lanes))
   const pitch = laneWidth(t)
-  const width = pitch * n
-  const halfW = width / 2
+  const halfW = (pitch * n) / 2
 
-  const floorY = floorTopY(t)
-  const innerX = Math.max(0.5, halfW - t.wallThickness)
-  // The 110° wall angle is measured from the floor, so the ramp leans 20° off vertical.
-  const rampRun = t.rampHeight * Math.tan(THREE.MathUtils.degToRad(t.wallAngleDeg - 90))
-  const rampBottomX = THREE.MathUtils.clamp(innerX - rampRun, 0.2, innerX)
-  const rampTopY = Math.min(floorY + t.rampHeight, t.totalHeight - 0.2)
+  const { slotH, mouthH, outerHalf, mouthHalf } = slotMetrics(d)
 
-  // Clamped so a hand-edited dimension can never fold the polygon back on itself.
-  const slotH = Math.min(slotDepth(d), floorY - 0.2)
-  const mouthH = Math.min(slotMouthDepth(d), slotH - 0.05)
-  const outerHalf = Math.min(t.slotOuterWidth / 2, pitch / 2 - 0.2)
-  const mouthHalf = Math.min(t.slotMouthWidth / 2, outerHalf - 0.05)
-
-  const pts: Pt2[] = []
-
-  // Top surface, left wall over to the right wall.
-  pts.push({ x: -halfW, y: t.totalHeight })
-  pts.push({ x: -innerX, y: t.totalHeight })
-  pts.push({ x: -innerX, y: rampTopY })
-  pts.push({ x: -rampBottomX, y: floorY })
-  pts.push({ x: rampBottomX, y: floorY })
-  pts.push({ x: innerX, y: rampTopY })
-  pts.push({ x: innerX, y: t.totalHeight })
-  pts.push({ x: halfW, y: t.totalHeight })
+  const pts: Pt2[] = [...topOutline(t, halfW)]
 
   // Bottom face, right to left, notched with one T-slot per lane.
   pts.push({ x: halfW, y: 0 })
@@ -61,6 +39,51 @@ export function trackProfile(d: Dimensions, lanes: number): Pt2[] {
   pts.push({ x: -halfW, y: 0 })
 
   return pts
+}
+
+/** Where the walls sit for a piece of half-width `halfW`. */
+export function wallMetrics(t: Dimensions['track'], halfW: number) {
+  const floorY = floorTopY(t)
+  const innerX = Math.max(0.5, halfW - t.wallThickness)
+  // The 110° wall angle is measured from the floor, so the ramp leans 20° off vertical.
+  const rampRun = t.rampHeight * Math.tan(THREE.MathUtils.degToRad(t.wallAngleDeg - 90))
+  const rampBottomX = THREE.MathUtils.clamp(innerX - rampRun, 0.2, innerX)
+  const rampTopY = Math.min(floorY + t.rampHeight, t.totalHeight - 0.2)
+  return { floorY, innerX, rampBottomX, rampTopY }
+}
+
+/**
+ * The eight points across the top of a section — left wall, down the ramp,
+ * across the channel floor and up the far wall. Shared by the plain track and
+ * the transition piece so both taper their walls the same way.
+ */
+export function topOutline(t: Dimensions['track'], halfW: number): Pt2[] {
+  const { innerX, rampBottomX, rampTopY, floorY } = wallMetrics(t, halfW)
+  return [
+    { x: -halfW, y: t.totalHeight },
+    { x: -innerX, y: t.totalHeight },
+    { x: -innerX, y: rampTopY },
+    { x: -rampBottomX, y: floorY },
+    { x: rampBottomX, y: floorY },
+    { x: innerX, y: rampTopY },
+    { x: innerX, y: t.totalHeight },
+    { x: halfW, y: t.totalHeight },
+  ]
+}
+
+/**
+ * The T-slot's clamped shape. Clamped so a hand-edited dimension can never fold
+ * the polygon back on itself.
+ */
+export function slotMetrics(d: Dimensions) {
+  const t = d.track
+  const pitch = laneWidth(t)
+  const floorY = floorTopY(t)
+  const slotH = Math.min(slotDepth(d), floorY - 0.2)
+  const mouthH = Math.min(slotMouthDepth(d), slotH - 0.05)
+  const outerHalf = Math.min(t.slotOuterWidth / 2, pitch / 2 - 0.2)
+  const mouthHalf = Math.min(t.slotMouthWidth / 2, outerHalf - 0.05)
+  return { pitch, floorY, slotH, mouthH, outerHalf, mouthHalf }
 }
 
 /** Outer width of an N-lane piece. */

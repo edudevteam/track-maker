@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Eye, EyeOff, Pencil } from 'lucide-react'
-import { useProject } from '../store/useProject'
+import { Eye, EyeOff, Pencil, Plus, X } from 'lucide-react'
+import { useProject, kindName, widthMismatches } from '../store/useProject'
 import { Panel } from './controls'
 import type { Piece } from '../types'
 
 /** What the piece is, shown after its name so a renamed piece still reads clearly. */
-const kindLabel = (p: Piece) => (p.kind === 'straight' ? 'Straight' : 'Curve')
+const kindLabel = (p: Piece) =>
+  p.kind === 'transition' ? `Transition ${p.lanes}×→${p.lanesB}×` : kindName(p.kind)
 
 /**
  * Every piece on the workplane, one row each. The checkbox builds up a selection
@@ -16,6 +17,15 @@ const kindLabel = (p: Piece) => (p.kind === 'straight' ? 'Straight' : 'Curve')
 export function AllParts() {
   const pieces = useProject((s) => s.pieces)
   const [open, setOpen] = useState(false)
+
+  // A new step at a joint has a question attached to it, so the list opens
+  // itself rather than waiting to be found.
+  const steps = widthMismatches(pieces).length
+  const seenSteps = useRef(0)
+  useEffect(() => {
+    if (steps > seenSteps.current) setOpen(true)
+    seenSteps.current = steps
+  }, [steps])
 
   return (
     <Panel
@@ -30,13 +40,74 @@ export function AllParts() {
           Nothing on the workplane yet. Add a piece from the parts library.
         </p>
       ) : (
-        <ul className="py-1">
-          {pieces.map((p) => (
-            <Row key={p.id} piece={p} />
-          ))}
-        </ul>
+        <>
+          <StepPrompts />
+          <ul className="py-1">
+            {pieces.map((p) => (
+              <Row key={p.id} piece={p} />
+            ))}
+          </ul>
+        </>
       )}
     </Panel>
+  )
+}
+
+/**
+ * Resizing a piece that is already clipped to another leaves a step at the
+ * joint. Rather than change it back, the list offers the part that covers it:
+ * one prompt per mismatched joint, until it is taken or dismissed.
+ */
+function StepPrompts() {
+  const pieces = useProject((s) => s.pieces)
+  const insertTransition = useProject((s) => s.insertTransition)
+  const select = useProject((s) => s.select)
+  const [dismissed, setDismissed] = useState<string[]>([])
+
+  const open = widthMismatches(pieces).filter((m) => !dismissed.includes(`${m.pieceId}:${m.port}`))
+  if (!open.length) return null
+
+  return (
+    <div className="border-b" style={{ borderColor: 'var(--color-line)' }}>
+      {open.map((m) => {
+        const key = `${m.pieceId}:${m.port}`
+        const name = pieces.find((p) => p.id === m.pieceId)?.name ?? 'A piece'
+        return (
+          <div
+            key={key}
+            className="flex items-start gap-2 px-2 py-2"
+            style={{ background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)' }}
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-[11.5px] leading-snug">
+                <span className="font-medium">{name}</span> is {m.from}× where it meets{' '}
+                <span className="font-medium">{m.otherName}</span> at {m.to}×. Add a transition part
+                to open one into the other?
+              </p>
+              <button
+                className="tm-btn mt-1.5 px-1.5 py-1 text-[11px]"
+                onClick={() => {
+                  const id = insertTransition({ pieceId: m.pieceId, port: m.port })
+                  if (id) select([id])
+                }}
+              >
+                <Plus size={11} /> Add Transition {m.from}× → {m.to}×
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDismissed((d) => [...d, key])}
+              title="Leave the step as it is"
+              aria-label="Dismiss"
+              className="shrink-0 rounded p-1 transition hover:bg-black/10 dark:hover:bg-white/10"
+              style={{ color: 'var(--color-ink-2)' }}
+            >
+              <X size={12} />
+            </button>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 

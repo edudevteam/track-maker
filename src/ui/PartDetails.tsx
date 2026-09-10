@@ -3,8 +3,13 @@ import { Copy, Trash2 } from 'lucide-react'
 import { useProject } from '../store/useProject'
 import { ColorInput, Field, NumberInput, Panel, Section, Segmented, Toggle } from './controls'
 import { LengthInput, useUnits } from './units'
-import { LENGTH_PRESETS, MAX_LANES } from './PartsLibrary'
+import { CornerRoundingField, LENGTH_PRESETS, MAX_LANES, TaperField } from './PartsLibrary'
 import { laneWidth } from '../geometry/dimensions'
+import {
+  defaultTransitionLength,
+  minTransitionLength,
+  transitionCornerLimit,
+} from '../geometry/transition'
 import type { GizmoAnchor, Vec3 } from '../types'
 
 /**
@@ -64,6 +69,12 @@ function Properties() {
   }
 
   const joined = piece.links.a !== null || piece.links.b !== null
+  const cornerLimit = transitionCornerLimit(dims, {
+    lanesA: piece.lanes,
+    lanesB: piece.lanesB,
+    length: piece.length,
+    flatEnd: piece.flatEnd,
+  })
 
   return (
     <>
@@ -100,24 +111,82 @@ function Properties() {
       </Section>
 
       <Section title="Shape">
-        <Field label="Track width" hint="Whole lanes.">
-          <NumberInput
-            value={piece.lanes}
-            onChange={(v) => set({ lanes: Math.max(1, Math.round(v)) })}
-            step={1}
-            min={1}
-            max={MAX_LANES}
-            digits={0}
-            clampWhileTyping
-            suffix="×"
-          />
-        </Field>
-        <p className="mb-2 text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
-          {fmt(laneWidth(dims.track) * piece.lanes)} across
-          {piece.lanes > 1 ? ' · inner walls removed' : ''}
-        </p>
+        {piece.kind === 'transition' ? (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Width at A" hint={fmt(laneWidth(dims.track) * piece.lanes)}>
+                <NumberInput
+                  value={piece.lanes}
+                  onChange={(v) => set({ lanes: Math.max(1, Math.round(v)) })}
+                  step={1}
+                  min={1}
+                  max={MAX_LANES}
+                  digits={0}
+                  clampWhileTyping
+                  suffix="×"
+                />
+              </Field>
+              <Field label="Width at B" hint={fmt(laneWidth(dims.track) * piece.lanesB)}>
+                <NumberInput
+                  value={piece.lanesB}
+                  onChange={(v) => set({ lanesB: Math.max(1, Math.round(v)) })}
+                  step={1}
+                  min={1}
+                  max={MAX_LANES}
+                  digits={0}
+                  clampWhileTyping
+                  suffix="×"
+                />
+              </Field>
+            </div>
+            <Field label="Length" hint="Each end keeps a full connector pocket; the middle tapers.">
+              <LengthInput
+                value={piece.length}
+                min={minTransitionLength(dims)}
+                max={600}
+                step={5}
+                onChange={(length) => set({ length })}
+              />
+            </Field>
+            <button
+              className="tm-btn mb-2 w-full"
+              onClick={() => set({ length: defaultTransitionLength(dims, piece.lanes, piece.lanesB) })}
+            >
+              Fit to the step · {val(defaultTransitionLength(dims, piece.lanes, piece.lanesB), 0)}
+            </button>
+            <TaperField
+              length={piece.length}
+              value={piece.flatEnd}
+              onChange={(flatEnd) => set({ flatEnd })}
+            />
+            <CornerRoundingField
+              value={Math.min(piece.cornerRadius, cornerLimit)}
+              limit={cornerLimit}
+              onChange={(cornerRadius) => set({ cornerRadius })}
+            />
+          </>
+        ) : (
+          <>
+            <Field label="Track width" hint="Whole lanes.">
+              <NumberInput
+                value={piece.lanes}
+                onChange={(v) => set({ lanes: Math.max(1, Math.round(v)) })}
+                step={1}
+                min={1}
+                max={MAX_LANES}
+                digits={0}
+                clampWhileTyping
+                suffix="×"
+              />
+            </Field>
+            <p className="mb-2 text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
+              {fmt(laneWidth(dims.track) * piece.lanes)} across
+              {piece.lanes > 1 ? ' · inner walls removed' : ''}
+            </p>
+          </>
+        )}
 
-        {piece.kind === 'straight' ? (
+        {piece.kind === 'transition' ? null : piece.kind === 'straight' ? (
           <>
             <Field label="Length" hint="Connector ends keep their width, so joins still fit.">
               <LengthInput

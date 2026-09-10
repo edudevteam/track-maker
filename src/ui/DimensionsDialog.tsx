@@ -188,6 +188,28 @@ export function DimensionsDialog({ onClose }: { onClose: () => void }) {
                   onChange={(v) => setValue('assembly', 'defaultStraightLength', v)}
                 />
               </Field>
+              <Field
+                label="Transition flat ends"
+                hint="Full-width run each end of a new transition keeps. Shorter tapers more slowly."
+              >
+                <LengthInput
+                  value={draft.assembly.transitionFlatEnd}
+                  step={1}
+                  min={0}
+                  onChange={(v) => setValue('assembly', 'transitionFlatEnd', v)}
+                />
+              </Field>
+              <Field
+                label="Transition corner rounding"
+                hint="What a new transition rounds its two taper corners to. 0 leaves them square."
+              >
+                <LengthInput
+                  value={draft.assembly.transitionCornerRadius}
+                  step={1}
+                  min={0}
+                  onChange={(v) => setValue('assembly', 'transitionCornerRadius', v)}
+                />
+              </Field>
             </div>
           </Section>
         </div>

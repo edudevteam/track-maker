@@ -36,7 +36,7 @@ export function localPortFrame(p: Piece, port: PortId): PortFrame {
       quaternion: new THREE.Quaternion().setFromAxisAngle(Y_AXIS, Math.PI),
     }
   }
-  if (p.kind === 'straight') {
+  if (p.kind !== 'curve') {
     return { position: new THREE.Vector3(p.length, 0, 0), quaternion: new THREE.Quaternion() }
   }
   const rad = THREE.MathUtils.degToRad(p.angleDeg)
@@ -68,7 +68,7 @@ export function portOutward(frame: PortFrame): THREE.Vector3 {
 export function pieceMidpoint(p: Piece): THREE.Vector3 {
   const q = pieceQuaternion(p)
   const origin = new THREE.Vector3(...p.position)
-  if (p.kind === 'straight') {
+  if (p.kind !== 'curve') {
     return new THREE.Vector3(p.length / 2, 0, 0).applyQuaternion(q).add(origin)
   }
   const rad = THREE.MathUtils.degToRad(p.angleDeg) / 2
@@ -103,7 +103,7 @@ export function transformToMate(
 
 /** Centreline length of a piece in mm. */
 export function centrelineLength(p: Piece): number {
-  return p.kind === 'straight' ? p.length : p.radius * Math.abs(THREE.MathUtils.degToRad(p.angleDeg))
+  return p.kind === 'curve' ? p.radius * Math.abs(THREE.MathUtils.degToRad(p.angleDeg)) : p.length
 }
 
 /**
@@ -115,7 +115,7 @@ export function sampleCentreline(p: Piece, s: number): { point: THREE.Vector3; t
   const origin = new THREE.Vector3(...p.position)
   let local: THREE.Vector3
   let tan: THREE.Vector3
-  if (p.kind === 'straight') {
+  if (p.kind !== 'curve') {
     local = new THREE.Vector3(s, 0, 0)
     tan = new THREE.Vector3(1, 0, 0)
   } else {
@@ -129,4 +129,31 @@ export function sampleCentreline(p: Piece, s: number): { point: THREE.Vector3; t
     point: local.applyQuaternion(q).add(origin),
     tangent: tan.applyQuaternion(q).normalize(),
   }
+}
+
+/**
+ * Re-seat every piece joined to `rootId` so the joints still meet after its
+ * shape changed. The edited piece keeps its place and the rest of the assembly
+ * follows it, port by port — so lengthening a piece in the middle of a run
+ * pushes the far side along instead of burying it.
+ */
+export function reflowFrom(pieces: Piece[], rootId: string): Piece[] {
+  const seated = new Map(pieces.map((p) => [p.id, p]))
+  if (!seated.has(rootId)) return pieces
+  const placed = new Set([rootId])
+  const queue = [rootId]
+
+  while (queue.length) {
+    const host = seated.get(queue.shift()!)!
+    for (const port of ['a', 'b'] as PortId[]) {
+      const link = host.links[port]
+      const neighbour = link && seated.get(link.pieceId)
+      if (!link || !neighbour || placed.has(neighbour.id)) continue
+      const t = transformToMate(neighbour, link.port, worldPortFrame(host, port))
+      seated.set(neighbour.id, { ...neighbour, position: t.position, rotation: t.rotation })
+      placed.add(neighbour.id)
+      queue.push(neighbour.id)
+    }
+  }
+  return pieces.map((p) => seated.get(p.id)!)
 }

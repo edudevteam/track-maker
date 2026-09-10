@@ -20,6 +20,91 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.2.12] — 2026-09-10
+
+### Fixed
+
+- **Resizing a piece now carries whatever it is clipped to.** Making a
+  transition — or a straight, or a curve — longer moved its own end but left the
+  neighbour where it was, so the two grew into each other and the part appeared
+  to sit on top of the track rather than in it. The rest of the assembly now
+  follows the end that moved, joint by joint, all the way down the run. The
+  piece you edited stays put and everything past it slides along; it is one undo
+  step, as before.
+- **A transition's length is now built exactly as typed.** A length shorter than
+  the part could hold was quietly built longer than the piece claimed to be,
+  which left its far end sitting away from where the track thought the joint
+  was. The fields hold the length off instead — a transition cannot be set
+  shorter than two clip-halves plus a taper.
+
+### Added
+
+- **Flat ends on the transition part** — how much of each end stays full width
+  before the taper starts. Shorter ends hand the rest of the piece to the taper,
+  so it opens from wide to thin gradually across almost the whole part instead
+  of stepping across the middle. **Slowest**, **Standard** and **Short** are
+  there to pick from, with a figure you can type, and the label reads back how
+  much of the piece is taper. Slowest is as gentle as the part can go: the run
+  never drops below half a clip, or the clip would run out of slot to sit in.
+- **A "Transition flat ends" setting under Settings ▸ Dimensions**, the value a
+  newly added transition starts at. It ships at 35 mm — the slowest taper the
+  clip allows.
+
+### Changed
+
+- **A new transition is longer, so it opens more gradually.** Fit now allows a
+  70 mm taper at minimum rather than 30 mm, which puts a 1× → 2× at 150 mm with
+  just over half its length tapering.
+
+---
+
+## [1.2.11] — 2026-09-10
+
+### Added
+
+- **Corner rounding on the transition part.** The two corners where the taper
+  leaves one width and meets the other can now be filleted instead of left
+  square, giving a smooth waisted part rather than a flat-sided funnel. It sits
+  under the length in both the parts library and Selected Part(s), with
+  **Square**, **Soft** and **Full** to hand and a radius you can type. Full is as
+  round as the part can go — the two fillets meet and the taper becomes one
+  continuous S with no straight run left between them; the field will not let
+  you ask for more than that, and a taper too short for its step gets a smaller
+  limit so the wall never turns side-on.
+- **A "Transition corner rounding" setting under Settings ▸ Dimensions**, which
+  is what a newly added transition starts at. It ships at 0 — square corners, as
+  before — so nothing already on the workplane changes shape.
+
+### Changed
+
+- **The parts library preview shows the rounding**, so the sketch matches the
+  part before you add it.
+
+---
+
+## [1.2.10] — 2026-09-10
+
+### Added
+
+- **A Transition part**, in the parts library beside Straight and Curve. It
+  opens one track width into the next — a single lane into a double, or a
+  triple back down to a double — with a straight taper between the two. Each end
+  keeps a full connector pocket at its own width, so the clip at either joint
+  seats exactly as it does on a plain piece; only the middle tapers, and it has
+  no clip slots. Pick the width at each end and a length, or press **Fit** to
+  let it size itself to the step it has to make.
+- **A prompt in All Parts when a resized piece no longer matches what it is
+  clipped to.** Widen one piece of a joined run and the list opens itself with
+  the joint called out — "Straight is 1× where it meets Straight at 2×" — and an
+  **Add Transition 1× → 2×** button. Taking it drops the transition into the
+  joint and slides the far side of the track along to make room, keeping every
+  joint beyond it together; it is one undo step. Dismiss it to leave the step as
+  it is.
+- **Width at A and Width at B in Selected Part(s)** for a transition, alongside
+  its length and a Fit button.
+
+---
+
 ## [1.2.9] — 2026-09-09
 
 ### Removed

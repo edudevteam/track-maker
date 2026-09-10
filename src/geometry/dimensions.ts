@@ -94,6 +94,17 @@ export interface AssemblyDims {
   fitClearance: number
   /** Shorter clip for tight corners, per the plan. */
   cornerConnectorLength: number
+  /**
+   * The radius a new transition piece rounds its two taper corners to. 0 leaves
+   * them square. Each piece carries its own, so this is only the starting value.
+   */
+  transitionCornerRadius: number
+  /**
+   * How much of each end of a new transition stays full width before the taper
+   * starts. Shorter ends spread the taper over more of the piece; it can never
+   * go below half a clip, or the clip would run out of slot.
+   */
+  transitionFlatEnd: number
 }
 
 export interface Dimensions {
@@ -135,6 +146,8 @@ export const DEFAULT_DIMENSIONS: Dimensions = {
     defaultStraightLength: 100,
     fitClearance: 0.15,
     cornerConnectorLength: 40,
+    transitionCornerRadius: 0,
+    transitionFlatEnd: 35,
   },
 }
 

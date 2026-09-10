@@ -1,0 +1,523 @@
+import * as THREE from 'three'
+import { laneWidth, type Dimensions } from './dimensions'
+import {
+  ensureOutwardWinding,
+  mergeGeometries,
+  signedArea,
+  sweepSections,
+  type Frame,
+  type Pt2,
+} from './sweep'
+import { slotMetrics, topOutline, wallMetrics } from './trackProfile'
+
+/**
+ * A transition piece — track that opens from one width to the next, so a single
+ * lane can run into a double without either end having to change.
+ *
+ * The part is three zones along its length:
+ *
+ *   |<- inset ->|<--- taper --->|<- inset ->|
+ *   ┌───────────┐               ┌───────────┐
+ *   │  width A  ╲               ╱  width B  │
+ *   │  A slots  ╱               ╲  B slots  │
+ *   └───────────┘               └───────────┘
+ *
+ * The end zones keep their own end's full width and its T-slots, so the clip at
+ * each joint seats exactly as it does on a plain piece. The middle tapers, and
+ * has no slots at all — the A slots are walled off where the taper starts and
+ * the B slots open where it ends. That step is why this cannot be one sweep: the
+ * cross-section changes how many slots it carries, so the two slot ends are
+ * built as their own faces and stitched between the three swept zones.
+ */
+export interface TransitionSpec {
+  /** Lanes at port `a`. */
+  lanesA: number
+  /** Lanes at port `b`. */
+  lanesB: number
+  /** Overall centreline length, mm. */
+  length: number
+  /**
+   * Radius the two taper corners are rounded to, mm. 0 leaves them square.
+   * Clamped to `maxCornerRadius` — past that the two fillets would overlap.
+   */
+  cornerRadius?: number
+  /**
+   * How much of each end stays full width before the taper starts, mm. Shorter
+   * ends spread the taper over more of the piece, so it opens more slowly.
+   */
+  flatEnd?: number
+}
+
+/** Bottom-face vertices closer than this are merged into one, mm. */
+const WELD = 0.05
+
+/** A T-slot, as the two bottom vertices that bound its mouth. */
+interface Slot {
+  uLeft: number
+  uRight: number
+}
+
+/** One end zone or the tapering middle, as the cross-section at each station along it. */
+interface Zone {
+  xs: number[]
+  sections: Pt2[][]
+}
+
+type Tri = [Pt2, Pt2, Pt2]
+
+/**
+ * The shortest full-width run each end can keep.
+ *
+ * The clip is centred on the joint, so it reaches half its length into the
+ * piece. The slot has to stay at full width for at least that far or the clip
+ * runs out of slot and cannot seat.
+ */
+export function minFlatEnd(d: Dimensions): number {
+  return Math.max(6, d.connector.length / 2)
+}
+
+/** The longest full-width run, so a taper is always left in the middle. */
+export function maxFlatEnd(length: number): number {
+  return Math.max(1, length) * 0.45
+}
+
+/** Shortest a transition can be and still hold a clip at each end, mm. */
+export function minTransitionLength(d: Dimensions): number {
+  return Math.round(2 * minFlatEnd(d) + 10)
+}
+
+/**
+ * A sensible length for a transition between two widths: a full-width run at
+ * each end, plus a taper long enough to open gradually rather than step across.
+ */
+export function defaultTransitionLength(d: Dimensions, lanesA: number, lanesB: number): number {
+  const step = (Math.abs(lanesB - lanesA) * laneWidth(d.track)) / 2
+  const flat = Math.max(minFlatEnd(d), d.assembly.transitionFlatEnd)
+  return Math.round(2 * flat + Math.max(70, 2 * step))
+}
+
+/** Half-width of an N-lane end. */
+function halfWidth(d: Dimensions, lanes: number): number {
+  return (laneWidth(d.track) * Math.max(1, Math.round(lanes))) / 2
+}
+
+/**
+ * Steepest the taper wall is allowed to lean, measured from the centreline.
+ * Rounding a corner steepens whatever is left between the two fillets, and past
+ * about here the wall is near enough side-on that the surface degenerates into
+ * slivers — and past 90° it would fold back over itself.
+ */
+const MAX_TAPER_ANGLE = (80 * Math.PI) / 180
+
+/** Stations closer together than this along the length are treated as one, mm. */
+const STATION_WELD = 1e-4
+
+/** The radius the fillets come out at for a given ramp angle. */
+function radiusForAngle(run: number, rise: number, theta: number): number {
+  const drop = 1 - Math.cos(theta)
+  return drop <= 1e-12 ? 0 : (run * Math.sin(theta) - rise * Math.cos(theta)) / (2 * drop)
+}
+
+/**
+ * The largest corner radius a taper can take. Normally that is where the two
+ * fillets meet and the taper becomes a smooth S with no straight run left
+ * between them — but a short run for a big step reaches `MAX_TAPER_ANGLE`
+ * first, and the wall is not allowed past that.
+ */
+export function maxCornerRadius(run: number, rise: number): number {
+  if (run <= 1e-9 || rise <= 1e-9) return 0
+  const flat = Math.atan(rise / run)
+  const limit = Math.min(2 * flat, MAX_TAPER_ANGLE)
+  if (limit <= flat + 1e-9) return 0
+  return Math.max(0, radiusForAngle(run, rise, limit))
+}
+
+/** Where the taper sits and how wide each end is, without building any sections. */
+export function transitionLayout(d: Dimensions, spec: TransitionSpec) {
+  const nA = Math.max(1, Math.round(spec.lanesA))
+  const nB = Math.max(1, Math.round(spec.lanesB))
+  // The built length is whatever the piece says, so the geometry and the port
+  // frames can never disagree; a length too short to seat a clip is held off in
+  // the fields instead.
+  const length = Math.max(1, spec.length)
+  // Each end keeps a run at its own width for the clip, and a shorter run hands
+  // the rest to the taper.
+  const flatEnd = Math.min(
+    Math.max(spec.flatEnd ?? d.assembly.transitionFlatEnd, minFlatEnd(d)),
+    maxFlatEnd(length),
+  )
+  const halfA = halfWidth(d, nA)
+  const halfB = halfWidth(d, nB)
+  const x0 = flatEnd
+  const x1 = length - flatEnd
+  const cornerLimit = maxCornerRadius(x1 - x0, Math.abs(halfB - halfA))
+  const cornerRadius = Math.min(Math.max(spec.cornerRadius ?? 0, 0), cornerLimit)
+  return { nA, nB, halfA, halfB, length, flatEnd, x0, x1, cornerLimit, cornerRadius }
+}
+
+/** The largest corner radius the given transition can take, mm. */
+export function transitionCornerLimit(d: Dimensions, spec: TransitionSpec): number {
+  return transitionLayout(d, spec).cornerLimit
+}
+
+/**
+ * Half-width along the taper, sampled station by station: level where it leaves
+ * each end zone, rolling through a fillet of `radius` into a straight ramp and
+ * back out again. Being level at both ends is what keeps the two end zones — and
+ * so the slots and the joint fit — exactly the width they claim to be.
+ */
+function taperStations(
+  x0: number,
+  x1: number,
+  hA: number,
+  hB: number,
+  radius: number,
+): { x: number; half: number }[] {
+  const square = [
+    { x: x0, half: hA },
+    { x: x1, half: hB },
+  ]
+  const run = x1 - x0
+  const rise = hB - hA
+  const climb = Math.abs(rise)
+  if (run <= 1e-9 || climb <= 1e-9 || radius <= 1e-6) return square
+
+  const dir = Math.sign(rise)
+  // The ramp angle runs from the square taper's own slope, at zero radius, up to
+  // whatever the fillets have room for. Radius climbs with it, so the angle this
+  // radius asks for is found by bisection.
+  const flat = Math.atan(climb / run)
+  let lo = flat
+  let hi = Math.min(2 * flat, MAX_TAPER_ANGLE)
+  if (hi <= lo + 1e-9) return square
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2
+    if (radiusForAngle(run, climb, mid) < radius) lo = mid
+    else hi = mid
+  }
+  const theta = (lo + hi) / 2
+  if (!Number.isFinite(theta) || theta <= flat + 1e-12) return square
+
+  const segs = Math.max(3, Math.ceil((theta * 180) / Math.PI / 4))
+  const arc = (i: number, xEnd: number, hEnd: number, towards: number) => {
+    const p = (theta * i) / segs
+    return {
+      x: xEnd + towards * radius * Math.sin(p),
+      half: hEnd + towards * dir * radius * (1 - Math.cos(p)),
+    }
+  }
+
+  const out: { x: number; half: number }[] = []
+  for (let i = 0; i <= segs; i++) out.push(arc(i, x0, hA, 1))
+  for (let i = segs; i >= 0; i--) out.push(arc(i, x1, hB, -1))
+
+  // A full S leaves the two fillets touching, so drop the repeated station
+  // rather than hand the sweep a sliver of zero-length surface.
+  const kept: { x: number; half: number }[] = []
+  for (const p of out) {
+    if (kept.length && p.x - kept[kept.length - 1].x <= STATION_WELD) continue
+    kept.push(p)
+  }
+  // Whatever the welding did, the taper still has to hand each end zone back
+  // exactly the width it claims.
+  if (kept.length < 2) return square
+  kept[0] = { x: x0, half: hA }
+  kept[kept.length - 1] = { x: x1, half: hB }
+  return kept
+}
+
+/**
+ * The three zones of a transition, with the exact cross-section at every plane
+ * where two of them meet. Exported so the geometry audit can integrate the
+ * section area along the length independently of the triangulation.
+ */
+export function transitionZones(d: Dimensions, spec: TransitionSpec) {
+  const layout = transitionLayout(d, spec)
+  const { nA, nB, halfA, halfB, x0, x1, cornerRadius } = layout
+  const L = layout.length
+
+  const { pitch, mouthHalf } = slotMetrics(d)
+  const centres = (n: number, half: number) =>
+    Array.from({ length: n }, (_, i) => (-half + pitch * (i + 0.5)) / half)
+
+  // Every bottom vertex is held as a fraction of the half-width, so the ones
+  // that belong to the far end fan out with the taper instead of crossing it.
+  const interior: number[] = []
+  for (const u of centres(nA, halfA)) interior.push(u - mouthHalf / halfA, u + mouthHalf / halfA)
+  for (const u of centres(nB, halfB)) interior.push(u - mouthHalf / halfB, u + mouthHalf / halfB)
+
+  const minHalf = Math.min(halfA, halfB)
+  const us: number[] = [-1]
+  for (const u of interior.sort((a, b) => a - b)) {
+    if (u <= -1 || u >= 1) continue
+    if ((u - us[us.length - 1]) * minHalf > WELD) us.push(u)
+  }
+  us.push(1)
+
+  const snap = (u: number) =>
+    us.reduce((best, cur) => (Math.abs(cur - u) < Math.abs(best - u) ? cur : best), us[0])
+
+  const slotsFor = (n: number, half: number): Slot[] =>
+    centres(n, half)
+      .map((u) => ({ uLeft: snap(u - mouthHalf / half), uRight: snap(u + mouthHalf / half) }))
+      .filter((s) => s.uRight > s.uLeft)
+
+  const slotsA = slotsFor(nA, halfA)
+  const slotsB = slotsFor(nB, halfB)
+
+  // A slot is a hole in the bottom face, so the vertices that fall inside its
+  // mouth belong to the flat middle zone only.
+  const outsideSlots = (slots: Slot[]) =>
+    us.filter((u) => !slots.some((s) => u > s.uLeft + 1e-9 && u < s.uRight - 1e-9))
+
+  const usA = outsideSlots(slotsA)
+  const usB = outsideSlots(slotsB)
+
+  const sectionA = transitionSection(d, halfA, usA, slotsA)
+  const sectionB = transitionSection(d, halfB, usB, slotsB)
+  const taper = taperStations(x0, x1, halfA, halfB, cornerRadius)
+
+  const zones: Zone[] = [
+    { xs: [0, x0], sections: [sectionA, sectionA] },
+    {
+      xs: taper.map((p) => p.x),
+      sections: taper.map((p) => transitionSection(d, p.half, us, [])),
+    },
+    { xs: [x1, L], sections: [sectionB, sectionB] },
+  ]
+
+  return { ...layout, us, usA, usB, slotsA, slotsB, zones }
+}
+
+/**
+ * The cross-section of a transition at one station.
+ *
+ * `bottom` lists the bottom-face vertices as fractions of the half-width, and
+ * `slots` says which neighbouring pairs of them open into a T-slot. The outer
+ * walls carry an extra vertex at every height a face changes, so the end cap
+ * built band by band lines up with the swept sides exactly.
+ */
+function transitionSection(d: Dimensions, halfW: number, bottom: number[], slots: Slot[]): Pt2[] {
+  const t = d.track
+  const { floorY, rampTopY } = wallMetrics(t, halfW)
+  const { slotH, mouthH, outerHalf } = slotMetrics(d)
+
+  const wallYs = wallHeights(mouthH, slotH, floorY, rampTopY, t.totalHeight)
+  const pts: Pt2[] = [...topOutline(t, halfW)]
+
+  // Down the right-hand outer wall.
+  for (let i = wallYs.length - 1; i >= 0; i--) pts.push({ x: halfW, y: wallYs[i] })
+
+  // Bottom face, right to left, detouring up and over each T-slot.
+  const byRight = new Map(slots.map((s) => [s.uRight, s]))
+  for (let i = bottom.length - 1; i >= 0; i--) {
+    const u = bottom[i]
+    pts.push({ x: u * halfW, y: 0 })
+    const slot = byRight.get(u)
+    if (!slot) continue
+    const c = ((slot.uLeft + slot.uRight) / 2) * halfW
+    pts.push({ x: slot.uRight * halfW, y: mouthH })
+    pts.push({ x: c + outerHalf, y: mouthH })
+    pts.push({ x: c + outerHalf, y: slotH })
+    pts.push({ x: c - outerHalf, y: slotH })
+    pts.push({ x: c - outerHalf, y: mouthH })
+    pts.push({ x: slot.uLeft * halfW, y: mouthH })
+  }
+
+  // Up the left-hand outer wall, back to the start of the top surface.
+  for (const y of wallYs) pts.push({ x: -halfW, y })
+
+  return pts
+}
+
+/** Heights the outer wall is split at, low to high, with anything degenerate dropped. */
+function wallHeights(mouthH: number, slotH: number, floorY: number, rampTopY: number, H: number): number[] {
+  const out: number[] = []
+  for (const y of [mouthH, slotH, floorY, rampTopY]) {
+    if (y <= 1e-6 || y >= H - 1e-6) continue
+    if (out.length && y - out[out.length - 1] <= 1e-6) continue
+    out.push(y)
+  }
+  return out
+}
+
+/** Geometry for a transition piece, port `a` at the origin and +X down the centreline. */
+export function buildTransitionGeometry(d: Dimensions, spec: TransitionSpec): THREE.BufferGeometry {
+  const z = transitionZones(d, spec)
+
+  const frame = (x: number): Frame => ({
+    position: new THREE.Vector3(x, 0, 0),
+    tangent: new THREE.Vector3(1, 0, 0),
+  })
+
+  // Zones are swept open at both ends; the faces between them are built below,
+  // so the winding is only settled once the whole solid is assembled.
+  const parts = z.zones.map((zone) =>
+    sweepSections(zone.sections, zone.xs.map(frame), false, false, false),
+  )
+
+  parts.push(capGeometry(sectionCap(d, z.halfA, z.usA, z.slotsA), 0, true))
+  parts.push(capGeometry(sectionCap(d, z.halfB, z.usB, z.slotsB), z.length, false))
+  // The A slots are walled off where the taper starts, and the B slots open
+  // where it ends. Both walls take their intermediate bottom vertices from the
+  // taper's own section, so no edge is left split against its neighbour.
+  parts.push(capGeometry(slotCaps(d, z.halfA, z.us, z.slotsA), z.x0, true))
+  parts.push(capGeometry(slotCaps(d, z.halfB, z.us, z.slotsB), z.x1, false))
+
+  const geom = mergeGeometries(parts.filter((g) => (g.getIndex()?.count ?? 0) > 0))
+  ensureOutwardWinding(geom)
+  geom.computeVertexNormals()
+  geom.computeBoundingBox()
+  geom.computeBoundingSphere()
+  for (const p of parts) p.dispose()
+  return geom
+}
+
+/**
+ * Triangles filling the region between two left-to-right polylines, joined by a
+ * straight edge at each end. Both polylines keep every vertex they were given,
+ * so the face meets its neighbours without leaving an edge split down one side.
+ */
+function ribbon(lower: Pt2[], upper: Pt2[], out: Tri[]): void {
+  if (lower.length < 2 || upper.length < 2) return
+  let i = 0
+  let j = 0
+  while (i < lower.length - 1 || j < upper.length - 1) {
+    const ti = i / (lower.length - 1)
+    const tj = j / (upper.length - 1)
+    if (j >= upper.length - 1 || (i < lower.length - 1 && ti <= tj)) {
+      out.push([lower[i], lower[i + 1], upper[j]])
+      i++
+    } else {
+      out.push([lower[i], upper[j + 1], upper[j]])
+      j++
+    }
+  }
+}
+
+const at = (x: number, y: number): Pt2 => ({ x, y })
+
+/**
+ * The full end face of a transition, built as horizontal bands rather than by
+ * ear-clipping: a bottom face carrying the far end's vertices has long runs of
+ * collinear points, which general triangulation is entitled to drop.
+ */
+function sectionCap(d: Dimensions, halfW: number, bottom: number[], slots: Slot[]): Tri[] {
+  const t = d.track
+  const { floorY, innerX, rampBottomX, rampTopY } = wallMetrics(t, halfW)
+  const { slotH, mouthH, outerHalf } = slotMetrics(d)
+  const H = t.totalHeight
+
+  const mouths = slots
+    .map((s) => {
+      const c = ((s.uLeft + s.uRight) / 2) * halfW
+      return { left: s.uLeft * halfW, right: s.uRight * halfW, outL: c - outerHalf, outR: c + outerHalf }
+    })
+    .sort((a, b) => a.left - b.left)
+
+  const tris: Tri[] = []
+  const xs = bottom.map((u) => u * halfW)
+
+  // Band 1: bottom face up to the slot mouths, in the spans between them.
+  for (let k = 0; k <= mouths.length; k++) {
+    const xl = k === 0 ? -halfW : mouths[k - 1].right
+    const xr = k === mouths.length ? halfW : mouths[k].left
+    if (xr - xl <= 1e-9) continue
+    const lower = xs.filter((x) => x >= xl - 1e-9 && x <= xr + 1e-9).map((x) => at(x, 0))
+    // The undercut ledges start part-way along, so the top of this band is split
+    // where the band above it begins.
+    const upper = [xl, ...(k > 0 ? [mouths[k - 1].outR] : []), ...(k < mouths.length ? [mouths[k].outL] : []), xr]
+    ribbon(lower, upper.map((x) => at(x, mouthH)), tris)
+  }
+
+  // Band 2: past the ledges, in the spans between the undercuts.
+  for (let k = 0; k <= mouths.length; k++) {
+    const xl = k === 0 ? -halfW : mouths[k - 1].outR
+    const xr = k === mouths.length ? halfW : mouths[k].outL
+    if (xr - xl <= 1e-9) continue
+    ribbon([at(xl, mouthH), at(xr, mouthH)], [at(xl, slotH), at(xr, slotH)], tris)
+  }
+
+  // Band 3: solid slab from the slot ceilings up to the channel floor.
+  const slabLower = [-halfW]
+  for (const m of mouths) slabLower.push(m.outL, m.outR)
+  slabLower.push(halfW)
+  ribbon(
+    slabLower.map((x) => at(x, slotH)),
+    [-halfW, -rampBottomX, rampBottomX, halfW].map((x) => at(x, floorY)),
+    tris,
+  )
+
+  // Bands 4 and 5: the two walls, up the ramp and then straight to the top.
+  ribbon([at(-halfW, floorY), at(-rampBottomX, floorY)], [at(-halfW, rampTopY), at(-innerX, rampTopY)], tris)
+  ribbon([at(rampBottomX, floorY), at(halfW, floorY)], [at(innerX, rampTopY), at(halfW, rampTopY)], tris)
+  ribbon([at(-halfW, rampTopY), at(-innerX, rampTopY)], [at(-halfW, H), at(-innerX, H)], tris)
+  ribbon([at(innerX, rampTopY), at(halfW, rampTopY)], [at(innerX, H), at(halfW, H)], tris)
+
+  return tris
+}
+
+/**
+ * The wall that closes off one end's T-slots where the taper takes over. Only
+ * the slot cross-sections are filled — the rest of that plane is solid on both
+ * sides.
+ */
+function slotCaps(d: Dimensions, halfW: number, bottom: number[], slots: Slot[]): Tri[] {
+  const { slotH, mouthH, outerHalf } = slotMetrics(d)
+  const tris: Tri[] = []
+
+  for (const s of slots) {
+    const left = s.uLeft * halfW
+    const right = s.uRight * halfW
+    const c = (left + right) / 2
+    const lower = bottom
+      .filter((u) => u >= s.uLeft - 1e-9 && u <= s.uRight + 1e-9)
+      .map((u) => at(u * halfW, 0))
+    ribbon(lower, [at(left, mouthH), at(right, mouthH)], tris)
+    ribbon(
+      [at(c - outerHalf, mouthH), at(left, mouthH), at(right, mouthH), at(c + outerHalf, mouthH)],
+      [at(c - outerHalf, slotH), at(c + outerHalf, slotH)],
+      tris,
+    )
+  }
+
+  return tris
+}
+
+/**
+ * Lifts profile-space triangles onto the plane at `x`, using the same mapping
+ * the sweep uses so shared vertices land on exactly the same coordinates.
+ * `flip` reverses the winding for a face whose outside points back along -X.
+ */
+function capGeometry(tris: Tri[], x: number, flip: boolean): THREE.BufferGeometry {
+  const positions: number[] = []
+  const indices: number[] = []
+  for (const tri of tris) {
+    const base = positions.length / 3
+    const ordered = flip ? [tri[0], tri[2], tri[1]] : tri
+    for (const p of ordered) positions.push(x, p.y, -p.x)
+    indices.push(base, base + 1, base + 2)
+  }
+  const geom = new THREE.BufferGeometry()
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  geom.setIndex(indices)
+  return geom
+}
+
+/**
+ * Cross-section area swept along the length — the volume the solid must come
+ * out to. Section area is linear in the half-width and each station is joined to
+ * the next by a ruled surface, so the trapezoid rule is exact here, rounded
+ * corners and all.
+ */
+export function transitionVolume(d: Dimensions, spec: TransitionSpec): number {
+  const area = (pts: Pt2[]) => Math.abs(signedArea(pts))
+  let volume = 0
+  for (const zone of transitionZones(d, spec).zones) {
+    for (let i = 0; i < zone.xs.length - 1; i++) {
+      const span = zone.xs[i + 1] - zone.xs[i]
+      volume += ((area(zone.sections[i]) + area(zone.sections[i + 1])) / 2) * span
+    }
+  }
+  return volume
+}

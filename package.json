@@ -1,7 +1,7 @@
 {
   "name": "track-maker",
   "private": true,
-  "version": "1.2.9",
+  "version": "1.2.12",
   "type": "module",
   "scripts": {
     "dev": "vite",

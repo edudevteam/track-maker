@@ -1,6 +1,7 @@
 import { parseProject, serializeProject, projectFileName } from '../src/export/project'
 import { DEFAULT_DIMENSIONS } from '../src/geometry/dimensions'
 import type { Piece } from '../src/types'
+import { reflowFrom, worldPortFrame } from '../src/lib/ports'
 
 let fails = 0
 const check = (label: string, ok: boolean, extra = '') => {
@@ -13,7 +14,10 @@ const piece = (id: string, over: Partial<Piece> = {}): Piece => ({
   name: `Piece ${id}`,
   kind: 'straight',
   lanes: 2,
+  lanesB: 3,
   length: 137.5,
+  cornerRadius: 6,
+  flatEnd: 38,
   radius: 120,
   angleDeg: 45,
   position: [1, 2, 3],
@@ -99,6 +103,42 @@ for (const [label, bad] of [
     msg = (e as Error).message
   }
   check(`rejects ${label}`, msg.length > 0, msg)
+}
+
+// Resizing a piece has to carry whatever is clipped to it, or the two overlap.
+{
+  const a = piece('a', { kind: 'transition', length: 100, links: { a: null, b: { pieceId: 'b', port: 'a' } } })
+  const b = piece('b', { kind: 'straight', length: 100, position: [0, 0, 0], rotation: [0, 0, 0] })
+  b.links = { a: { pieceId: 'a', port: 'b' }, b: null }
+  const c = piece('c', { kind: 'straight', length: 100 })
+  c.links = { a: { pieceId: 'b', port: 'b' }, b: null }
+  b.links.b = { pieceId: 'c', port: 'a' }
+
+  // Seat the run properly first, then grow the transition and reflow again.
+  const seated = reflowFrom([a, b, c], 'a')
+  const grown = reflowFrom(
+    seated.map((p) => (p.id === 'a' ? { ...p, length: 160 } : p)),
+    'a',
+  )
+
+  const gap = (pieces: typeof grown, host: string, port: 'a' | 'b', other: string, otherPort: 'a' | 'b') => {
+    const h = pieces.find((p) => p.id === host)!
+    const o = pieces.find((p) => p.id === other)!
+    return worldPortFrame(h, port).position.distanceTo(worldPortFrame(o, otherPort).position)
+  }
+
+  check('run seats end to end', gap(seated, 'a', 'b', 'b', 'a') < 1e-9 && gap(seated, 'b', 'b', 'c', 'a') < 1e-9)
+  check('resizing carries the neighbour', gap(grown, 'a', 'b', 'b', 'a') < 1e-9, `gap ${gap(grown, 'a', 'b', 'b', 'a')}`)
+  check('and everything beyond it', gap(grown, 'b', 'b', 'c', 'a') < 1e-9)
+  // Growing the transition by 60mm has to slide the far side by exactly that.
+  const shift = (id: string) => {
+    const [x0, y0, z0] = seated.find((p) => p.id === id)!.position
+    const [x1, y1, z1] = grown.find((p) => p.id === id)!.position
+    return Math.hypot(x1 - x0, y1 - y0, z1 - z0)
+  }
+  check('the far side moved by the growth', Math.abs(shift('b') - 60) < 1e-9, `moved ${shift('b').toFixed(4)}`)
+  check('so did the piece past it', Math.abs(shift('c') - 60) < 1e-9)
+  check('the edited piece stayed put', shift('a') === 0)
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nall passed')

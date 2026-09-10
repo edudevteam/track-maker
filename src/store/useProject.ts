@@ -19,7 +19,9 @@ import {
   DEFAULT_TRACK_COLOR,
   type Dimensions,
 } from '../geometry/dimensions'
-import { pieceMatrix, transformToMate, worldPortFrame } from '../lib/ports'
+import { lanesAt } from '../geometry/parts'
+import { defaultTransitionLength } from '../geometry/transition'
+import { pieceMatrix, reflowFrom, transformToMate, worldPortFrame } from '../lib/ports'
 import { pieceBounds } from '../lib/printVolume'
 import { loadUnits, saveUnits } from '../lib/units'
 import type { ProjectDocument } from '../export/project'
@@ -135,6 +137,11 @@ export interface ProjectActions {
 
   addPiece: (init?: Partial<Piece>, opts?: AddOptions) => string
   updatePiece: (id: string, patch: Partial<Piece>) => void
+  /**
+   * Fit a transition part into a joint whose two sides are different widths,
+   * sliding the far side along to make room for it.
+   */
+  insertTransition: (at: { pieceId: string; port: PortId }) => string | null
   removeSelected: () => void
   duplicateSelected: () => void
 
@@ -181,14 +188,24 @@ export interface ProjectActions {
   loadProject: (doc: ProjectDocument) => void
 }
 
+/** Fields that move a piece's ends, so a joined neighbour has to be re-seated. */
+const RESHAPES: (keyof Piece)[] = ['kind', 'length', 'radius', 'angleDeg', 'flatEnd']
+
+/** The default name for a part of this kind, before the user renames it. */
+export const kindName = (kind: PieceKind) =>
+  kind === 'curve' ? 'Curve' : kind === 'transition' ? 'Transition' : 'Straight'
+
 function makePiece(dims: Dimensions, init: Partial<Piece> = {}): Piece {
   const kind: PieceKind = init.kind ?? 'straight'
   return {
     id: nextId(),
-    name: init.name ?? (kind === 'straight' ? 'Straight' : 'Curve'),
+    name: init.name ?? kindName(kind),
     kind,
     lanes: init.lanes ?? 1,
+    lanesB: init.lanesB ?? (init.lanes ?? 1) + 1,
     length: init.length ?? dims.assembly.defaultStraightLength,
+    cornerRadius: init.cornerRadius ?? dims.assembly.transitionCornerRadius,
+    flatEnd: init.flatEnd ?? dims.assembly.transitionFlatEnd,
     radius: init.radius ?? 120,
     angleDeg: init.angleDeg ?? 45,
     position: init.position ?? [0, 0, 0],
@@ -307,7 +324,81 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
   },
 
   updatePiece: (id, patch) =>
-    set((s) => ({ pieces: s.pieces.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
+    set((s) => {
+      const pieces = s.pieces.map((p) => (p.id === id ? { ...p, ...patch } : p))
+      // Resizing a piece moves the end its neighbour is clipped to, so the rest
+      // of the assembly has to follow or the two would overlap.
+      return { pieces: RESHAPES.some((k) => k in patch) ? reflowFrom(pieces, id) : pieces }
+    }),
+
+  insertTransition: (at) => {
+    const { pieces, dims, commit } = get()
+    const host = pieces.find((p) => p.id === at.pieceId)
+    const link = host?.links[at.port]
+    if (!host || !link) return null
+    const neighbour = pieces.find((p) => p.id === link.pieceId)
+    if (!neighbour) return null
+
+    const from = lanesAt(host, at.port)
+    const to = lanesAt(neighbour, link.port)
+    if (from === to) return null
+
+    commit()
+
+    const piece = makePiece(dims, {
+      kind: 'transition',
+      lanes: from,
+      lanesB: to,
+      length: defaultTransitionLength(dims, from, to),
+      name: `Transition ${from}× → ${to}×`,
+      color: host.color,
+      connectorColor: host.connectorColor,
+    })
+
+    // Sit the new part on the host's end, then carry the far side along to meet
+    // its other end so the joints beyond the neighbour hold.
+    const seat = transformToMate(piece, 'a', worldPortFrame(host, at.port))
+    piece.position = seat.position
+    piece.rotation = seat.rotation
+    piece.links = { a: { pieceId: host.id, port: at.port }, b: { pieceId: neighbour.id, port: link.port } }
+    piece.connectors = { a: true, b: true }
+
+    const severed = pieces.map((p) =>
+      p.id === host.id ? { ...p, links: { ...p.links, [at.port]: null } } : p,
+    )
+    const group = collectGroup(severed, neighbour.id)
+    // A closed loop would otherwise drag the host along with the far side.
+    group.delete(host.id)
+
+    const moved = transformToMate(neighbour, link.port, worldPortFrame(piece, 'b'))
+    const delta = pieceMatrix({ ...neighbour, ...moved }).multiply(pieceMatrix(neighbour).invert())
+
+    set({
+      pieces: [
+        ...pieces.map((p) => {
+          let next = p
+          if (group.has(p.id)) next = { ...next, ...applyMatrix(next, delta) }
+          if (p.id === host.id)
+            next = {
+              ...next,
+              links: { ...next.links, [at.port]: { pieceId: piece.id, port: 'a' as PortId } },
+              connectors: { ...next.connectors, [at.port]: true },
+            }
+          if (p.id === neighbour.id)
+            next = {
+              ...next,
+              links: { ...next.links, [link.port]: { pieceId: piece.id, port: 'b' as PortId } },
+              connectors: { ...next.connectors, [link.port]: true },
+            }
+          return next
+        }),
+        piece,
+      ],
+      selection: { pieceIds: [piece.id], anchor: 'middle' },
+      activePort: null,
+    })
+    return piece.id
+  },
 
   removeSelected: () => {
     const { selection, pieces, commit } = get()
@@ -615,6 +706,40 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
     })
   },
 }))
+
+/** A joint whose two sides are different widths, so the track steps rather than flows. */
+export interface WidthMismatch {
+  pieceId: string
+  port: PortId
+  otherId: string
+  otherName: string
+  /** Lanes on this side of the joint, and on the other. */
+  from: number
+  to: number
+}
+
+/**
+ * Joints where a resized piece no longer matches what it is clipped to. Each
+ * joint is reported once, against the piece with the lower id, so the layers
+ * list offers a transition part in one place rather than two.
+ */
+export function widthMismatches(pieces: Piece[]): WidthMismatch[] {
+  const byId = new Map(pieces.map((p) => [p.id, p]))
+  const out: WidthMismatch[] = []
+  for (const p of pieces) {
+    for (const port of ['a', 'b'] as PortId[]) {
+      const link = p.links[port]
+      if (!link || p.id > link.pieceId) continue
+      const other = byId.get(link.pieceId)
+      if (!other) continue
+      const from = lanesAt(p, port)
+      const to = lanesAt(other, link.port)
+      if (from === to) continue
+      out.push({ pieceId: p.id, port, otherId: other.id, otherName: other.name, from, to })
+    }
+  }
+  return out
+}
 
 /** Every piece reachable through links from `startId` — a connected assembly. */
 export function collectGroup(pieces: Piece[], startId: string): Set<string> {

@@ -15,7 +15,7 @@ export type Unit = 'mm' | 'in'
 /** The two ends of every piece. `a` is the local origin end, `b` the far end. */
 export type PortId = 'a' | 'b'
 
-export type PieceKind = 'straight' | 'curve'
+export type PieceKind = 'straight' | 'curve' | 'transition'
 
 export interface PortLink {
   pieceId: string
@@ -28,8 +28,23 @@ export interface Piece {
   kind: PieceKind
   /** Track width in lanes. 1 = single, 2 = double width with the middle walls removed, etc. */
   lanes: number
-  /** Straight pieces only — centreline length in mm. */
+  /**
+   * Transition pieces only — the width in lanes at port `b`. Everywhere else the
+   * piece is `lanes` wide from end to end, so this is ignored.
+   */
+  lanesB: number
+  /** Straight and transition pieces only — centreline length in mm. */
   length: number
+  /**
+   * Transition pieces only — radius the two taper corners are rounded to, mm.
+   * 0 leaves them square. Clamped to whatever the taper has room for.
+   */
+  cornerRadius: number
+  /**
+   * Transition pieces only — how much of each end stays full width before the
+   * taper starts, mm. Shorter ends make a slower taper.
+   */
+  flatEnd: number
   /** Curve pieces only — centreline radius in mm. */
   radius: number
   /** Curve pieces only — sweep in degrees. Positive turns left. */
@@ -56,7 +71,10 @@ export interface Piece {
 export interface PartSpec {
   kind: PieceKind
   lanes: number
+  lanesB: number
   length: number
+  cornerRadius: number
+  flatEnd: number
   radius: number
   angleDeg: number
   name: string

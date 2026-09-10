@@ -42,10 +42,40 @@ export function toCCW(pts: Pt2[]): Pt2[] {
  * you, without needing an edge-angle pass.
  */
 export function sweepProfile(profile: Pt2[], frames: Frame[], capStart = true, capEnd = true): THREE.BufferGeometry {
-  const poly = toCCW(profile)
-  const n = poly.length
+  return sweepSections(
+    frames.map(() => profile),
+    frames,
+    capStart,
+    capEnd,
+  )
+}
+
+/**
+ * Sweeps a cross-section that changes from station to station — a loft.
+ *
+ * `profiles[i]` is the section at `frames[i]`, and every section must list the
+ * same points in the same order so the side strips join up. Orientation is
+ * decided once, from the first section, so a section that happens to come out
+ * clockwise cannot flip half the solid inside out.
+ *
+ * `orient` re-winds the finished mesh so its signed volume is positive. Leave it
+ * off for a zone that is deliberately left open at one end — an open tube has no
+ * meaningful volume to test — and orient the assembled solid instead.
+ */
+export function sweepSections(
+  profiles: Pt2[][],
+  frames: Frame[],
+  capStart = true,
+  capEnd = true,
+  orient = true,
+): THREE.BufferGeometry {
   const m = frames.length
-  if (n < 3 || m < 2) return new THREE.BufferGeometry()
+  if (profiles.length !== m || m < 2) return new THREE.BufferGeometry()
+  const reversed = signedArea(profiles[0]) < 0
+  const polys = reversed ? profiles.map((p) => p.slice().reverse()) : profiles
+  const poly = polys[0]
+  const n = poly.length
+  if (n < 3 || polys.some((p) => p.length !== n)) return new THREE.BufferGeometry()
 
   const positions: number[] = []
   const indices: number[] = []
@@ -53,9 +83,9 @@ export function sweepProfile(profile: Pt2[], frames: Frame[], capStart = true, c
   const lateral = new THREE.Vector3()
 
   // Precompute the world position of every profile vertex at every station.
-  const rings: THREE.Vector3[][] = frames.map((f) => {
+  const rings: THREE.Vector3[][] = frames.map((f, i) => {
     lateral.copy(UP).cross(f.tangent).normalize()
-    return poly.map((p) =>
+    return polys[i].map((p) =>
       new THREE.Vector3()
         .copy(f.position)
         .addScaledVector(lateral, p.x)
@@ -86,12 +116,11 @@ export function sweepProfile(profile: Pt2[], frames: Frame[], capStart = true, c
   }
 
   // End caps, triangulated in profile space then mapped through each frame.
-  const capTris = THREE.ShapeUtils.triangulateShape(
-    poly.map((p) => new THREE.Vector2(p.x, p.y)),
-    [],
-  )
-
   const addCap = (frameIndex: number, flip: boolean) => {
+    const capTris = THREE.ShapeUtils.triangulateShape(
+      polys[frameIndex].map((p) => new THREE.Vector2(p.x, p.y)),
+      [],
+    )
     const ring = rings[frameIndex]
     const base = positions.length / 3
     for (const v of ring) positions.push(v.x, v.y, v.z)
@@ -107,7 +136,7 @@ export function sweepProfile(profile: Pt2[], frames: Frame[], capStart = true, c
   const geom = new THREE.BufferGeometry()
   geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
   geom.setIndex(indices)
-  ensureOutwardWinding(geom)
+  if (orient) ensureOutwardWinding(geom)
   geom.computeVertexNormals()
   geom.computeBoundingBox()
   geom.computeBoundingSphere()
@@ -141,6 +170,36 @@ export function ensureOutwardWinding(geom: THREE.BufferGeometry): void {
     }
     index.needsUpdate = true
   }
+}
+
+/** Minimal position-only merge — enough for the parts we build here. */
+export function mergeGeometries(geoms: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const positions: number[] = []
+  const normals: number[] = []
+  const indices: number[] = []
+  let offset = 0
+  for (const g of geoms) {
+    const src = g.index ? g.toNonIndexed() : g
+    const pos = src.getAttribute('position')
+    const nor = src.getAttribute('normal')
+    for (let i = 0; i < pos.count; i++) {
+      positions.push(pos.getX(i), pos.getY(i), pos.getZ(i))
+      if (nor) normals.push(nor.getX(i), nor.getY(i), nor.getZ(i))
+      indices.push(offset + i)
+    }
+    offset += pos.count
+  }
+  const out = new THREE.BufferGeometry()
+  out.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  out.setIndex(indices)
+  if (normals.length === positions.length) {
+    out.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
+  } else {
+    out.computeVertexNormals()
+  }
+  out.computeBoundingBox()
+  out.computeBoundingSphere()
+  return out
 }
 
 /** Stations along a straight run of `length` starting at the origin, heading +X. */

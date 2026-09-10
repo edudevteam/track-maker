@@ -3,6 +3,14 @@ import { DEFAULT_DIMENSIONS, floorTopY, laneWidth, validateDimensions } from '..
 import { buildConnectorGeometry, buildTrackGeometry } from '../src/geometry/parts.ts'
 import { trackProfile } from '../src/geometry/trackProfile.ts'
 import { signedArea } from '../src/geometry/sweep.ts'
+import {
+  buildTransitionGeometry,
+  maxFlatEnd,
+  minFlatEnd,
+  transitionCornerLimit,
+  transitionVolume,
+  transitionZones,
+} from '../src/geometry/transition.ts'
 
 const d = DEFAULT_DIMENSIONS
 
@@ -85,6 +93,118 @@ for (const spec of [
       ` vol=${volume(g).toFixed(1)}mm³${expected ? ` (expect ${expected.toFixed(1)})` : ''}` +
       ` bbox=[${bb.min.toArray().map((n) => n.toFixed(1))}]→[${bb.max.toArray().map((n) => n.toFixed(1))}]` +
       ` nonManifoldEdges=${audit.nonManifold}/${audit.edges}`,
+  )
+}
+
+bar('transition solids')
+for (const spec of [
+  { lanesA: 1, lanesB: 2, length: 110 },
+  { lanesA: 2, lanesB: 1, length: 110 },
+  { lanesA: 1, lanesB: 4, length: 140 },
+  { lanesA: 3, lanesB: 2, length: 120 },
+  { lanesA: 2, lanesB: 5, length: 200 },
+]) {
+  const g = buildTransitionGeometry(d, spec)
+  const bb = g.boundingBox!
+  const audit = edgeAudit(g)
+  const expected = transitionVolume(d, spec)
+  const got = volume(g)
+  const off = Math.abs(got - expected) / expected
+  console.log(
+    `${spec.lanesA}->${spec.lanesB} len=${spec.length} tris=${g.getIndex()!.count / 3}` +
+      ` vol=${got.toFixed(1)}mm³ (expect ${expected.toFixed(1)}, off ${(off * 100).toFixed(3)}%)` +
+      ` bbox=[${bb.min.toArray().map((n) => n.toFixed(1))}]→[${bb.max.toArray().map((n) => n.toFixed(1))}]` +
+      ` nonManifoldEdges=${audit.nonManifold}/${audit.edges}`,
+  )
+  for (const s of audit.samples) console.log('  bad edge', s)
+}
+
+bar('rounded transition corners')
+for (const spec of [
+  { lanesA: 1, lanesB: 2, length: 110 },
+  { lanesA: 1, lanesB: 4, length: 140 },
+  { lanesA: 3, lanesB: 2, length: 120 },
+  { lanesA: 2, lanesB: 5, length: 200 },
+]) {
+  const limit = transitionCornerLimit(d, spec)
+  // Square, part-way, right on the limit, and past it — the last must clamp.
+  for (const r of [limit * 0.5, limit, limit * 2]) {
+    const rounded = { ...spec, cornerRadius: r }
+    const z = transitionZones(d, rounded)
+    const g = buildTransitionGeometry(d, rounded)
+    const audit = edgeAudit(g)
+    const expected = transitionVolume(d, rounded)
+    const got = volume(g)
+    const taper = z.zones[1]
+    // The taper has to leave both end zones level, or the slots and the joint
+    // fit would not be the width they claim.
+    const endsLevel =
+      Math.abs(taper.xs[0] - z.x0) + Math.abs(taper.xs[taper.xs.length - 1] - z.x1)
+    console.log(
+      `${spec.lanesA}->${spec.lanesB} r=${r.toFixed(1)} (limit ${limit.toFixed(1)}, used ${z.cornerRadius.toFixed(1)})` +
+        ` stations=${taper.xs.length} vol off ${(Math.abs(got - expected) / expected * 100).toFixed(3)}%` +
+        ` endsOffBy=${endsLevel.toExponential(0)}mm nonManifoldEdges=${audit.nonManifold}/${audit.edges}`,
+    )
+    for (const s of audit.samples) console.log('  bad edge', s)
+  }
+}
+
+bar('slow tapers — short flat ends')
+for (const spec of [
+  { lanesA: 1, lanesB: 2, length: 150 },
+  { lanesA: 1, lanesB: 4, length: 192 },
+  { lanesA: 4, lanesB: 1, length: 192 },
+]) {
+  const min = minFlatEnd(d)
+  for (const flatEnd of [min, min * 1.5, maxFlatEnd(spec.length), 5]) {
+    for (const cornerRadius of [0, 1e6]) {
+      const part = { ...spec, flatEnd, cornerRadius }
+      const z = transitionZones(d, part)
+      const g = buildTransitionGeometry(d, part)
+      const audit = edgeAudit(g)
+      const expected = transitionVolume(d, part)
+      const got = volume(g)
+      const span = (z.x1 - z.x0) / z.length
+      // Whatever the flat ends were asked for, the clip still has to find slot.
+      const seats = z.flatEnd >= min - 1e-9 || z.flatEnd === maxFlatEnd(spec.length)
+      console.log(
+        `${spec.lanesA}->${spec.lanesB} flat=${flatEnd.toFixed(1)}→${z.flatEnd.toFixed(1)}` +
+          ` round=${cornerRadius ? 'full' : 'square'} taper=${(span * 100).toFixed(0)}%` +
+          ` vol off ${(Math.abs(got - expected) / expected * 100).toFixed(3)}%` +
+          ` clipSeats=${seats} nonManifoldEdges=${audit.nonManifold}/${audit.edges}`,
+      )
+      for (const s of audit.samples) console.log('  bad edge', s)
+    }
+  }
+}
+
+bar('transition slots line up with a plain piece')
+for (const spec of [
+  { lanesA: 1, lanesB: 2, length: 110 },
+  { lanesA: 3, lanesB: 2, length: 120 },
+  { lanesA: 2, lanesB: 5, length: 200 },
+]) {
+  const z = transitionZones(d, spec)
+  // Mouth edges the transition offers each end, against the ones a plain piece
+  // of that width has — a clip only seats if these agree.
+  const wanted = (n: number) => {
+    const half = (laneWidth(d.track) * n) / 2
+    const mouth = Math.min(
+      d.track.slotMouthWidth / 2,
+      Math.min(d.track.slotOuterWidth / 2, laneWidth(d.track) / 2 - 0.2) - 0.05,
+    )
+    return Array.from({ length: n }, (_, i) => -half + laneWidth(d.track) * (i + 0.5)).flatMap((c) => [
+      c - mouth,
+      c + mouth,
+    ])
+  }
+  const gotA = z.slotsA.flatMap((s) => [s.uLeft * z.halfA, s.uRight * z.halfA])
+  const gotB = z.slotsB.flatMap((s) => [s.uLeft * z.halfB, s.uRight * z.halfB])
+  const worst = (got: number[], want: number[]) =>
+    got.length !== want.length ? Infinity : Math.max(...got.map((v, i) => Math.abs(v - want[i])))
+  console.log(
+    `${spec.lanesA}->${spec.lanesB} a-end slots=${z.slotsA.length} off by ${worst(gotA, wanted(spec.lanesA)).toExponential(1)}mm,` +
+      ` b-end slots=${z.slotsB.length} off by ${worst(gotB, wanted(spec.lanesB)).toExponential(1)}mm`,
   )
 }
 

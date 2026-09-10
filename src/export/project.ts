@@ -130,13 +130,17 @@ function readPiece(v: unknown, index: number, ids: Set<string>): Piece | null {
   if (!isObj(v)) return null
   const id = typeof v.id === 'string' && v.id.length ? v.id : null
   if (!id) return null
-  const kind: PieceKind = v.kind === 'curve' ? 'curve' : 'straight'
+  const kind: PieceKind = v.kind === 'curve' || v.kind === 'transition' ? v.kind : 'straight'
+  const lanes = Math.max(1, Math.round(num(v.lanes, 1)))
   return {
     id,
     name: str(v.name, kind === 'straight' ? 'Straight' : `Piece ${index + 1}`),
     kind,
-    lanes: Math.max(1, Math.round(num(v.lanes, 1))),
+    lanes,
+    lanesB: Math.max(1, Math.round(num(v.lanesB, lanes))),
     length: num(v.length, DEFAULT_DIMENSIONS.assembly.defaultStraightLength),
+    cornerRadius: Math.max(0, num(v.cornerRadius, DEFAULT_DIMENSIONS.assembly.transitionCornerRadius)),
+    flatEnd: Math.max(0, num(v.flatEnd, DEFAULT_DIMENSIONS.assembly.transitionFlatEnd)),
     radius: num(v.radius, 120),
     angleDeg: num(v.angleDeg, 45),
     position: vec3(v.position, [0, 0, 0]),

@@ -45,6 +45,8 @@ function trackKey(d: Dimensions): string {
     d.connector.bodyHeight,
     d.connector.wingThickness,
     d.assembly.fitClearance,
+    // A transition sets its taper against the connector inset.
+    d.assembly.connectorInset,
   ].join('|')
 }
 
@@ -69,9 +71,11 @@ function connectorKey(d: Dimensions): string {
 
 export function getTrackGeometry(piece: Piece, d: Dimensions): THREE.BufferGeometry {
   const shape =
-    piece.kind === 'straight'
-      ? `s:${piece.length}`
-      : `c:${piece.radius}:${piece.angleDeg}`
+    piece.kind === 'curve'
+      ? `c:${piece.radius}:${piece.angleDeg}`
+      : piece.kind === 'transition'
+        ? `t:${piece.length}:${piece.lanesB}:${piece.cornerRadius}:${piece.flatEnd}`
+        : `s:${piece.length}`
   return take(`track|${shape}|${piece.lanes}|${trackKey(d)}`, () => buildTrackGeometry(piece, d))
 }
 

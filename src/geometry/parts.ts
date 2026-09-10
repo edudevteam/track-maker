@@ -1,18 +1,36 @@
 import * as THREE from 'three'
 import type { Dimensions } from './dimensions'
-import type { Piece } from '../types'
-import { arcFrames, straightFrames, sweepProfile } from './sweep'
+import type { Piece, PortId } from '../types'
+import { arcFrames, mergeGeometries, straightFrames, sweepProfile } from './sweep'
 import { trackProfile } from './trackProfile'
+import { buildTransitionGeometry } from './transition'
 import { chamferedPlan, loftPrism, type LoftLevel } from './loft'
+
+export { mergeGeometries }
 
 /** Geometry for a track piece, in its local frame (port `a` at the origin, +X down the centreline). */
 export function buildTrackGeometry(piece: Piece, d: Dimensions): THREE.BufferGeometry {
+  if (piece.kind === 'transition') {
+    return buildTransitionGeometry(d, {
+      lanesA: piece.lanes,
+      lanesB: piece.lanesB,
+      length: Math.max(1, piece.length),
+      cornerRadius: piece.cornerRadius,
+      flatEnd: piece.flatEnd,
+    })
+  }
   const profile = trackProfile(d, piece.lanes)
   const frames =
-    piece.kind === 'straight'
-      ? straightFrames(Math.max(1, piece.length))
-      : arcFrames(Math.max(1, piece.radius), piece.angleDeg)
+    piece.kind === 'curve'
+      ? arcFrames(Math.max(1, piece.radius), piece.angleDeg)
+      : straightFrames(Math.max(1, piece.length))
   return sweepProfile(profile, frames)
+}
+
+/** Width in lanes at one end of a piece. Only a transition differs end to end. */
+export function lanesAt(piece: Pick<Piece, 'kind' | 'lanes' | 'lanesB'>, port: PortId): number {
+  const n = piece.kind === 'transition' && port === 'b' ? piece.lanesB : piece.lanes
+  return Math.max(1, Math.round(n))
 }
 
 /**
@@ -89,10 +107,10 @@ export function counterSinkRadius(d: Dimensions): number {
   return Math.max(d.connector.holeDia / 2 + 0.2, d.connector.counterSinkDia / 2)
 }
 
-/** Lateral offsets of each lane's T-slot centre, in the piece's local frame. */
-export function laneOffsets(piece: Piece, d: Dimensions): number[] {
+/** Lateral offsets of each lane's T-slot centre at one end, in the piece's local frame. */
+export function laneOffsets(piece: Piece, d: Dimensions, port: PortId = 'a'): number[] {
   const pitch = d.track.channelTopWidth + 2 * d.track.wallThickness
-  const lanes = Math.max(1, Math.round(piece.lanes))
+  const lanes = lanesAt(piece, port)
   const half = (pitch * lanes) / 2
   return Array.from({ length: lanes }, (_, i) => -half + pitch * (i + 0.5))
 }
@@ -104,8 +122,8 @@ export function laneOffsets(piece: Piece, d: Dimensions): number[] {
  * two clips: the outermost lanes. Three or more clips add print time and
  * assembly fiddle without holding the joint any straighter.
  */
-export function connectorOffsets(piece: Piece, d: Dimensions): number[] {
-  const offsets = laneOffsets(piece, d)
+export function connectorOffsets(piece: Piece, d: Dimensions, port: PortId = 'a'): number[] {
+  const offsets = laneOffsets(piece, d, port)
   if (offsets.length <= 2) return offsets
   return [offsets[0], offsets[offsets.length - 1]]
 }
@@ -138,32 +156,3 @@ export function buildCarGeometry(d: Dimensions): THREE.BufferGeometry {
   return mergeGeometries(parts)
 }
 
-/** Minimal position-only merge — enough for the parts we build here. */
-export function mergeGeometries(geoms: THREE.BufferGeometry[]): THREE.BufferGeometry {
-  const positions: number[] = []
-  const normals: number[] = []
-  const indices: number[] = []
-  let offset = 0
-  for (const g of geoms) {
-    const src = g.index ? g.toNonIndexed() : g
-    const pos = src.getAttribute('position')
-    const nor = src.getAttribute('normal')
-    for (let i = 0; i < pos.count; i++) {
-      positions.push(pos.getX(i), pos.getY(i), pos.getZ(i))
-      if (nor) normals.push(nor.getX(i), nor.getY(i), nor.getZ(i))
-      indices.push(offset + i)
-    }
-    offset += pos.count
-  }
-  const out = new THREE.BufferGeometry()
-  out.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
-  out.setIndex(indices)
-  if (normals.length === positions.length) {
-    out.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
-  } else {
-    out.computeVertexNormals()
-  }
-  out.computeBoundingBox()
-  out.computeBoundingSphere()
-  return out
-}
