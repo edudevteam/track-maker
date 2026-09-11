@@ -17,15 +17,19 @@ export function PieceMesh({ piece }: { piece: Piece }) {
   const dims = useProject((s) => s.dims)
   const selected = useProject((s) => s.selection.pieceIds.includes(piece.id))
   const select = useProject((s) => s.select)
+  const simulating = useProject((s) => s.simulating)
 
   const geometry = getTrackGeometry(piece, dims)
 
   if (!piece.visible) return null
 
-  const onClick = (e: ThreeEvent<MouseEvent>) => {
-    e.stopPropagation()
-    select([piece.id], e.shiftKey)
-  }
+  // Driving, the track is scenery: a click on it is not meant to pick a part.
+  const onClick = simulating
+    ? undefined
+    : (e: ThreeEvent<MouseEvent>) => {
+        e.stopPropagation()
+        select([piece.id], e.shiftKey)
+      }
 
   // The id on the group lets Fit Selected read this piece's bounds off the scene.
   return (
@@ -44,9 +48,10 @@ export function PieceMesh({ piece }: { piece: Piece }) {
         ownsConnector(piece, port) ? <ConnectorAt key={`c-${port}`} piece={piece} port={port} /> : null,
       )}
 
-      {(['a', 'b'] as PortId[]).map((port) => (
-        <PortHandle key={`h-${port}`} piece={piece} port={port} />
-      ))}
+      {!simulating &&
+        (['a', 'b'] as PortId[]).map((port) => (
+          <PortHandle key={`h-${port}`} piece={piece} port={port} />
+        ))}
     </group>
   )
 }

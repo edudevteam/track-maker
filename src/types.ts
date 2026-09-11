@@ -108,7 +108,21 @@ export interface CarState {
   pieceId: string | null
   /** Arc-length position along that piece's centreline, in mm. */
   s: number
-  /** Speed along the centreline, mm/s. Positive runs a -> b. */
+  /** Speed along the nose, mm/s. Positive drives forward, negative reverses. */
   v: number
+  /** Which way the nose points on that piece: 1 towards port `b`, -1 towards `a`. */
+  dir: 1 | -1
+  /**
+   * How far the car sits from the centreline, mm, measured across the piece with
+   * port `b` ahead. Held inside the channel walls by the width of the track.
+   */
+  offset: number
+  /** How far the wheels are turned, radians. Positive is to the car's right. */
+  steer: number
+  /**
+   * How far the nose has come off the track's own direction, radians. It follows
+   * the wheels rather than matching them, so it has to be carried frame to frame.
+   */
+  yaw: number
   running: boolean
 }

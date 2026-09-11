@@ -161,6 +161,30 @@ export function transitionCornerLimit(d: Dimensions, spec: TransitionSpec): numb
 }
 
 /**
+ * Half-width of the piece at `x` along its length, mm.
+ *
+ * Read off the same stations the geometry is swept through rather than
+ * interpolated between the two ends, so the walls a driven car is held inside
+ * are the walls that get printed — a filleted taper leaves each end level for a
+ * while, and a straight line between the ends would put the car through one.
+ */
+export function transitionHalfWidthAt(d: Dimensions, spec: TransitionSpec, x: number): number {
+  const { halfA, halfB, x0, x1, cornerRadius, length } = transitionLayout(d, spec)
+  const at = THREE.MathUtils.clamp(x, 0, length)
+  if (at <= x0) return halfA
+  if (at >= x1) return halfB
+  const stations = taperStations(x0, x1, halfA, halfB, cornerRadius)
+  for (let i = 1; i < stations.length; i++) {
+    const from = stations[i - 1]
+    const to = stations[i]
+    if (at > to.x) continue
+    const span = to.x - from.x
+    return span > 1e-9 ? from.half + ((to.half - from.half) * (at - from.x)) / span : to.half
+  }
+  return halfB
+}
+
+/**
  * Half-width along the taper, sampled station by station: level where it leaves
  * each end zone, rolling through a fillet of `radius` into a straight ramp and
  * back out again. Being level at both ends is what keeps the two end zones — and

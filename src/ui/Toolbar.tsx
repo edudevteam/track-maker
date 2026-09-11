@@ -98,6 +98,8 @@ export function Toolbar({ onAddPart }: { onAddPart: () => void }) {
   const carModels = useProject((s) => s.carLibrary.models)
   const showVehicle = useProject((s) => s.showVehicle)
   const toggleVehicle = useProject((s) => s.toggleVehicle)
+  const simulating = useProject((s) => s.simulating)
+  const toggleSimulator = useProject((s) => s.toggleSimulator)
   const hasPieces = useProject((s) => s.pieces.length > 0)
 
   return (
@@ -105,7 +107,7 @@ export function Toolbar({ onAddPart }: { onAddPart: () => void }) {
       className="flex shrink-0 items-stretch gap-2 overflow-x-auto border-b px-3 py-1.5"
       style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}
     >
-      <Group>
+      <Group off={simulating}>
         <Action label="Undo" hint="Step back one change" shortcut="⌘Z" onClick={undo} disabled={!canUndo}>
           <Undo2 size={15} />
         </Action>
@@ -114,7 +116,7 @@ export function Toolbar({ onAddPart }: { onAddPart: () => void }) {
         </Action>
       </Group>
 
-      <Group>
+      <Group off={simulating}>
         <Tooltip title="Parts library" body="Pick a part and its width, then drop it on the workplane" shortcut="A">
           <button className="tm-btn tm-btn-orange h-[34px] px-2.5" onClick={onAddPart}>
             <Plus size={14} /> Add Part
@@ -122,7 +124,7 @@ export function Toolbar({ onAddPart }: { onAddPart: () => void }) {
         </Tooltip>
       </Group>
 
-      <Group>
+      <Group off={simulating}>
         {MODES.map((t) => (
           <Mode key={t.id} {...t} active={tool === t.id} onClick={() => setTool(t.id)} />
         ))}
@@ -160,7 +162,7 @@ export function Toolbar({ onAddPart }: { onAddPart: () => void }) {
         </Action>
       </Group>
 
-      <Group>
+      <Group off={simulating}>
         {JOINTS.map((t) => (
           <Mode key={t.id} {...t} active={tool === t.id} onClick={() => setTool(t.id)} />
         ))}
@@ -198,38 +200,51 @@ export function Toolbar({ onAddPart }: { onAddPart: () => void }) {
         >
           <Car size={15} />
         </Latch>
-        <Tooltip title="Simulator" body="Under development.">
-          <button
-            aria-label="Simulator"
-            aria-disabled
-            onClick={() => {}}
-            className="grid h-[34px] w-[34px] place-items-center rounded border opacity-45 transition"
-            style={{
-              background: 'var(--color-surface-2)',
-              borderColor: 'var(--color-line)',
-              color: 'var(--color-ink)',
-            }}
-          >
-            <SteeringWheel />
-          </button>
-        </Tooltip>
+        <Latch
+          label="Simulator"
+          hint={
+            simulating
+              ? 'Driving — W A S D or the arrow keys. Esc hands the camera back.'
+              : hasPieces
+                ? 'Drive the car round the track, with the camera behind it.'
+                : 'Add a part first, then there is something to drive on.'
+          }
+          shortcut="Esc"
+          active={simulating}
+          disabled={!hasPieces}
+          onClick={toggleSimulator}
+        >
+          <SteeringWheel />
+        </Latch>
       </Group>
 
       <div className="flex min-w-0 flex-1 items-center pl-1">
         <p className="truncate text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
-          {[...MODES, ...JOINTS].find((t) => t.id === tool)?.hint}
+          {simulating
+            ? 'Driving — W A S D or the arrow keys, space for the handbrake, R to go back to the start'
+            : [...MODES, ...JOINTS].find((t) => t.id === tool)?.hint}
         </p>
       </div>
     </div>
   )
 }
 
-/** A bordered cluster of related buttons. Each button names itself on hover. */
-function Group({ children }: { children: ReactNode }) {
+/**
+ * A bordered cluster of related buttons. Each button names itself on hover.
+ * `off` stands the whole group down — what every editing tool does while the
+ * simulator has the car.
+ */
+function Group({ children, off }: { children: ReactNode; off?: boolean }) {
   return (
     <div
-      className="flex shrink-0 items-center gap-1 rounded-[6px] border p-1"
-      style={{ borderColor: 'var(--color-line)', background: 'var(--color-surface)' }}
+      className="flex shrink-0 items-center gap-1 rounded-[6px] border p-1 transition-opacity"
+      style={{
+        borderColor: 'var(--color-line)',
+        background: 'var(--color-surface)',
+        opacity: off ? 0.4 : 1,
+        pointerEvents: off ? 'none' : undefined,
+      }}
+      aria-hidden={off || undefined}
     >
       {children}
     </div>

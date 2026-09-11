@@ -15,6 +15,7 @@ import {
   type Dimensions,
 } from '../geometry/dimensions'
 import { AXES, facingIsValid, type Axis, type VehicleFacing } from '../geometry/vehicle'
+import { DEFAULT_TOP_SPEED } from '../lib/driving'
 
 /** Marker written into every `.track.json` so we can tell our files from any other JSON. */
 export const PROJECT_FORMAT = 'track-maker'
@@ -42,6 +43,15 @@ export interface ProjectDocument {
   customPrinterSize: Vec3
   gravity: number
   friction: number
+  /**
+   * How fast the car itself goes flat out, mm/s — the simulator's Top speed.
+   *
+   * Written under its own key rather than the `topSpeed` a 1.3.5 file holds,
+   * because that one meant the speed of the real vehicle the car copies and is
+   * some sixty times this. A file from that version opens at today's default
+   * rather than at a number that means something else.
+   */
+  carTopSpeed: number
 }
 
 export interface ProjectSnapshot {
@@ -56,6 +66,7 @@ export interface ProjectSnapshot {
   customPrinterSize: Vec3
   gravity: number
   friction: number
+  topSpeed: number
 }
 
 export function serializeProject(s: ProjectSnapshot): ProjectDocument {
@@ -75,6 +86,7 @@ export function serializeProject(s: ProjectSnapshot): ProjectDocument {
     customPrinterSize: s.customPrinterSize,
     gravity: s.gravity,
     friction: s.friction,
+    carTopSpeed: s.topSpeed,
   }
 }
 
@@ -278,5 +290,8 @@ export function parseProject(text: string): ProjectDocument {
     customPrinterSize: vec3(raw.customPrinterSize, [256, 256, 256]),
     gravity: num(raw.gravity, 9810),
     friction: num(raw.friction, 0.35),
+    // Files written before the simulator had a Top speed setting — and 1.3.5
+    // files, whose `topSpeed` was the real vehicle's — get the default.
+    carTopSpeed: num(raw.carTopSpeed, DEFAULT_TOP_SPEED),
   }
 }

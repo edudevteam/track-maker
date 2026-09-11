@@ -7,6 +7,7 @@ import { themeBackground, useTheme } from '../store/useTheme'
 import { PieceMesh } from './PieceMesh'
 import { PrintVolume } from './PrintVolume'
 import { Car } from './Car'
+import { ChaseCamera } from './ChaseCamera'
 import { SkyDome } from './SkyDome'
 import { ViewCube } from './ViewCube'
 import { AxisTriad } from './AxisTriad'
@@ -20,6 +21,7 @@ export function Viewport() {
   const showPrintVolume = useProject((s) => s.showPrintVolume)
   const pieces = useProject((s) => s.pieces)
   const select = useProject((s) => s.select)
+  const simulating = useProject((s) => s.simulating)
   const background = useProject((s) => s.background)
   const skyTop = useProject((s) => s.skyTop)
   const skyBottom = useProject((s) => s.skyBottom)
@@ -60,22 +62,36 @@ export function Viewport() {
         <PieceMesh key={p.id} piece={p} />
       ))}
 
-      {showPrintVolume && <PrintVolume />}
+      {showPrintVolume && !simulating && <PrintVolume />}
       <Car />
+      {simulating && <ChaseCamera />}
       <Gizmo />
 
-      <OrbitControls makeDefault enableDamping dampingFactor={0.12} maxDistance={6000} minDistance={20} />
-      <GizmoHelper alignment="top-right" margin={[76, 76]}>
-        <ViewCube />
-      </GizmoHelper>
+      {/* Still mounted while driving, so the view it was left in comes back. */}
+      <OrbitControls
+        makeDefault
+        enabled={!simulating}
+        enableDamping
+        dampingFactor={0.12}
+        maxDistance={6000}
+        minDistance={20}
+      />
+      {/* Nothing to aim at while driving, and the cube would take the pointer. */}
+      {!simulating && (
+        <GizmoHelper alignment="top-right" margin={[76, 76]}>
+          <ViewCube />
+        </GizmoHelper>
+      )}
       {/*
         A second HUD layer for the corner axis triad. Its render priority has to
         sit above the cube's: the first layer is the one that draws the main
         scene, and every later one just clears depth and stacks on top.
       */}
-      <GizmoHelper alignment="bottom-left" margin={[76, 76]} renderPriority={2}>
-        <AxisTriad />
-      </GizmoHelper>
+      {!simulating && (
+        <GizmoHelper alignment="bottom-left" margin={[76, 76]} renderPriority={2}>
+          <AxisTriad />
+        </GizmoHelper>
+      )}
       <CameraBridge />
     </Canvas>
   )

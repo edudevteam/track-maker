@@ -39,6 +39,7 @@ import { facingIsValid, type VehicleFacing } from '../geometry/vehicle'
 import { lanesAt } from '../geometry/parts'
 import { defaultTransitionLength } from '../geometry/transition'
 import { collectGroup, pieceMatrix, reflowFrom, transformToMate, worldPortFrame } from '../lib/ports'
+import { DEFAULT_TOP_SPEED, TOP_SPEED_RANGE } from '../lib/driving'
 import { fitOf, measureGap, type PortRef } from '../lib/closure'
 import { pieceBounds } from '../lib/printVolume'
 import { loadUnits, saveUnits } from '../lib/units'
@@ -157,8 +158,18 @@ export interface ProjectState {
   car: CarState
   /** Whether the vehicle is drawn on the track. Hiding it parks it where it stands. */
   showVehicle: boolean
+  /**
+   * Whether the keys are driving the car. On, the camera follows it and the
+   * editing tools stand down; off, the car is back to rolling under gravity.
+   */
+  simulating: boolean
   gravity: number
   friction: number
+  /**
+   * How fast the car itself goes flat out, mm/s — the number the driving bar's
+   * readout climbs to, set in the box beside it.
+   */
+  topSpeed: number
 
   history: Piece[][]
   future: Piece[][]
@@ -241,8 +252,16 @@ export interface ProjectActions {
   dropCar: () => void
   /** Show or hide the vehicle, dropping it on the track the first time it is shown. */
   toggleVehicle: () => void
+  /**
+   * Hand the car over to the keys, or take it back. Entering puts the car on the
+   * track if it is not on it already; either way it starts from a standstill, so
+   * a speed picked up rolling is not carried into the drive or back out of it.
+   */
+  toggleSimulator: () => void
   setGravity: (g: number) => void
   setFriction: (f: number) => void
+  /** Wind the simulator's top speed up or down, mm/s. Clamped to what it allows. */
+  setTopSpeed: (mmPerSecond: number) => void
 
   commit: () => void
   undo: () => void
@@ -253,6 +272,24 @@ export interface ProjectActions {
   /** Replace the whole build with a project read from a `.track.json` file. */
   loadProject: (doc: ProjectDocument) => void
 }
+
+/** No car on the track: nothing to place, nothing moving. */
+const PARKED_CAR: CarState = {
+  pieceId: null,
+  s: 0,
+  v: 0,
+  dir: 1,
+  offset: 0,
+  steer: 0,
+  yaw: 0,
+  running: false,
+}
+
+/**
+ * Where the car starts: the first piece with a free `a` end, so a run begins at
+ * the beginning. A closed loop has no free end, and then any piece will do.
+ */
+const startOfTrack = (pieces: Piece[]) => pieces.find((p) => !p.links.a) ?? pieces[0]
 
 /** Fields that move a piece's ends, so a joined neighbour has to be re-seated. */
 const RESHAPES: (keyof Piece)[] = ['kind', 'length', 'radius', 'angleDeg', 'flatEnd']
@@ -336,10 +373,12 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
   printer: PRINTER_PRESETS[0],
   customPrinterSize: [256, 256, 256],
 
-  car: { pieceId: null, s: 0, v: 0, running: false },
+  car: PARKED_CAR,
   showVehicle: false,
+  simulating: false,
   gravity: 9810,
   friction: 0.35,
+  topSpeed: DEFAULT_TOP_SPEED,
 
   history: [],
   future: [],
@@ -839,15 +878,15 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
 
   setCar: (patch) => set((s) => ({ car: { ...s.car, ...patch } })),
   dropCar: () => {
-    const { pieces } = get()
-    const first = pieces.find((p) => !p.links.a) ?? pieces[0]
-    set({ car: { pieceId: first?.id ?? null, s: 2, v: 0, running: true } })
+    const start = startOfTrack(get().pieces)
+    set({ car: { ...PARKED_CAR, pieceId: start?.id ?? null, s: 2, running: true } })
   },
   toggleVehicle: () => {
     const { showVehicle, car, pieces, dropCar } = get()
     if (showVehicle) {
       // Hiding parks it: it keeps its place on the track and picks up from there.
-      set({ showVehicle: false, car: { ...car, running: false } })
+      // Nothing is left to drive, so the simulator comes off with it.
+      set({ showVehicle: false, simulating: false, car: { ...car, v: 0, running: false } })
       return
     }
     const parked = car.pieceId && pieces.some((p) => p.id === car.pieceId)
@@ -857,8 +896,33 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       set({ showVehicle: true })
     }
   },
+  toggleSimulator: () => {
+    const { simulating, car, pieces, dropCar } = get()
+    if (simulating) {
+      // Leaving stops the car dead and puts it back at the start, so the next
+      // run begins from the beginning rather than from wherever it was left.
+      const start = startOfTrack(pieces)
+      set({ simulating: false, car: { ...PARKED_CAR, pieceId: start?.id ?? null, s: 2 } })
+      return
+    }
+    if (!pieces.length) return
+    const parked = car.pieceId && pieces.some((p) => p.id === car.pieceId)
+    if (!parked) dropCar()
+    set((s) => ({
+      simulating: true,
+      showVehicle: true,
+      // Driving is a mode of its own: nothing stays selected behind it, so
+      // nothing is left highlighted or draggable under the chase camera.
+      tool: 'select',
+      selection: { pieceIds: [], anchor: 'middle' },
+      activePort: null,
+      car: { ...s.car, v: 0, steer: 0, running: true },
+    }))
+  },
   setGravity: (gravity) => set({ gravity }),
   setFriction: (friction) => set({ friction }),
+  setTopSpeed: (mmPerSecond) =>
+    set({ topSpeed: THREE.MathUtils.clamp(mmPerSecond, TOP_SPEED_RANGE.min, TOP_SPEED_RANGE.max) }),
 
   commit: () => set((s) => ({ history: [...s.history.slice(-49), s.pieces], future: [] })),
   undo: () =>
@@ -882,8 +946,9 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       activePort: null,
       closure: null,
       tool: 'select',
-      car: { pieceId: null, s: 0, v: 0, running: false },
+      car: PARKED_CAR,
       showVehicle: false,
+      simulating: false,
       // Dimensions, printer, the chosen vehicle and view settings are workshop
       // setup, not part of the build, so a new project keeps them.
       history: [],
@@ -906,13 +971,15 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       customPrinterSize: doc.customPrinterSize,
       gravity: doc.gravity,
       friction: doc.friction,
+      topSpeed: doc.carTopSpeed,
       // An opened file starts a fresh session: nothing selected, nothing to undo past.
       selection: { pieceIds: [], anchor: 'middle' },
       activePort: null,
       closure: null,
       tool: 'select',
-      car: { pieceId: null, s: 0, v: 0, running: false },
+      car: PARKED_CAR,
       showVehicle: false,
+      simulating: false,
       history: [],
       future: [],
     })

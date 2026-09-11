@@ -20,6 +20,155 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.3.6] — 2026-09-11
+
+### Changed
+
+- **Top speed is now the car's own speed, and the driving bar agrees with
+  itself.** It was set as what the *real* vehicle the model copies would do, so
+  a box reading 40 km/h sat beside a readout climbing to 0.17 km/h and neither
+  number explained the other. It is set in millimetres a second now — the unit
+  the track is built in and the one the readout already counts in — with the
+  kilometres and miles an hour underneath. Set 174 and the car reaches 174; the
+  0.63 km/h · 0.39 mph under the box is what appears in the readout at that
+  speed. The default is 500mm/s, which is about what a die-cast car was doing
+  before.
+- **Scale no longer decides how fast a car goes.** The same setting now moves
+  every car at the same speed across the track, whatever size it is drawn.
+  Nothing on the track is a real vehicle, so nothing is divided by a scale to
+  work out what it would be doing if it were. Size still sets gravity, which is
+  a separate thing and still worth having: a ramp is a scale copy of a hill, and
+  without it a die-cast car takes one at sixty-four times the acceleration.
+- **The real-vehicle column has gone from the driving bar**, along with the
+  1:64 it was labelled with. It is the same fiction and the bar reads better
+  without it — the car's scale is still in **Settings ▸ Vehicle**, where it
+  describes the model rather than pretending to describe a road.
+
+### Fixed
+
+- **A project saved by 1.3.5 opens at the default top speed** rather than at a
+  number that used to mean something sixty-odd times larger. The setting is
+  written under its own name in the file now, so the old one is simply not read.
+
+---
+
+## [1.3.5] — 2026-09-11
+
+### Added
+
+- **Top speed is set in the driving bar.** A box with a minus and a plus beside
+  it, in tens, anywhere from 10 to 400 km/h, with the miles an hour and what it
+  comes to for the car on the track underneath. It is stated as what the *real*
+  vehicle would do flat out, not as the model's own millimetres a second, which
+  is what lets one number drive every car: a die-cast and an RC model of the same
+  vehicle both do it, each divided by its own scale, so swapping cars is not
+  re-tuning the track. It is saved with the project, and a file written before
+  the setting existed opens at the default.
+- **Clicking back onto the track hands the keys back.** Typing in the top speed
+  box holds the keyboard and the driving keys stand aside for it, so a click on
+  the workplane now returns them — otherwise the car would sit ignoring the
+  throttle with nothing on screen to say why.
+
+### Changed
+
+- **The car goes twice as fast.** Flat out is now 120 km/h for the vehicle a car
+  is a model of rather than 60 — 521mm/s for a die-cast car where it was 260.
+  Acceleration comes off the same figure, so it still launches the same way
+  rather than taking twice as long to get there: 90% of flat out in about five
+  seconds either way.
+- **A slower setting is a weaker car, as it should be.** Power is worked back
+  from top speed, so winding it right down leaves an engine that cannot climb
+  much: at 10 km/h the car slides back down anything steeper than about six
+  degrees. Nothing runs away downhill at any setting — a 30° descent flat out at
+  the default tops out under a quarter over top speed.
+
+---
+
+## [1.3.4] — 2026-09-11
+
+### Changed
+
+- **The speed readout says what the car is really doing, in km/h and mph.** It
+  used to lead with the scale speed — 60 km/h for a die-cast car that was in fact
+  covering 260mm a second, about a fifth of walking pace. The headline is now the
+  model's own speed in both units, with the millimetres a second under it, and
+  what the vehicle it copies would be doing kept beside it in both units too,
+  since that is the speed the driving is tuned around. Enough decimals to watch
+  it move: a 1:64 car flat out reads 0.94 km/h · 0.58 mph.
+- **And it is now the ground the car actually covers.** Pressed against a wall
+  with the wheels turned, the car went on claiming the sideways speed the wall
+  was taking off it — up to 3.5% of the number on screen. It now squares up and
+  runs along the wall instead of grinding into it at an angle, which both looks
+  right and leaves the readout exact on a straight. The tenth of a percent left
+  on a curve is the arithmetic of stepping round one, not the car.
+
+---
+
+## [1.3.3] — 2026-09-10
+
+### Changed
+
+- **Steering eases in and out instead of flicking.** Two things were making a
+  held key read as a twitch. The rack turned at a fixed number of degrees a
+  second, and since lock at speed is only eight degrees wide it arrived in a
+  frame and a half — it now takes the same fraction of a second to wind on
+  whatever speed the car is doing. And the car snapped straight to the angle its
+  wheels were at, where a real one has to be turned: the nose now follows the
+  wheels rather than matching them, and settles back straight after they do. The
+  sideways speed comes on over about half a second either way, and the chase
+  camera inherits it, since it looks the way the nose is pointing.
+- **Leaving the simulator stops the car and puts it back at the start.** Escape
+  used to hand the camera back and leave the car standing wherever it had got to,
+  which meant the next run began from the middle of the track. It now goes back
+  to the beginning, stopped — and so does the steering-wheel button and the
+  **Esc Leave** button on the readout.
+
+---
+
+## [1.3.2] — 2026-09-10
+
+### Added
+
+- **Drive the car.** The steering wheel in the toolbar is live. It hands the car
+  over to **W A S D** or the arrow keys — up to pull away, down to brake and then
+  reverse, left and right to steer, space for the handbrake — and puts the camera
+  behind it, looking the way it is going. **R** puts the car back at the start and
+  **Esc** hands the view back to the workplane, exactly where it was left.
+- **Steering, where there is room to steer.** The car sits anywhere across the
+  channel floor and is held off the walls by its own width. A die-cast car fills
+  a single lane within a millimetre, so it tracks dead straight there; on a
+  two-lane piece it has 20mm either side to play with, and on a four-lane piece
+  57mm. Steering lock winds off with speed the way a real rack does, so the car
+  is not undriveable above a crawl.
+- **The inside line is shorter.** Tucking into a corner covers less ground than
+  running round the outside of it, so a tidy line through a curve is quicker.
+- **A speed readout, in the speed that means something.** A model doing 260mm/s
+  says nothing until it is said as the 60km/h it stands for, so the readout gives
+  the scale speed with the millimetres underneath, alongside the keys as they are
+  pressed.
+- **The editing tools stand down while driving.** The parts, the joints, the
+  handles, the port tabs and the navigation cube all come off, so a click on the
+  track does not pick a part and nothing is left over the view.
+
+### Changed
+
+- **A scale car drives in a scaled world, gravity included.** Left at its real
+  value, gravity gives a 1:64 car sixty-four times the acceleration down a ramp
+  that the real vehicle gets — which is why the rolling preview reads as a marble
+  run rather than as driving. Driven, gravity is divided by the car's scale along
+  with everything else, so a 1:28 car and a 1:64 car take the same corner at the
+  same scale speed and the big one simply covers more millimetres doing it.
+- **Nothing runs away down a hill any more.** Drag grows with speed and is set to
+  come into balance with the engine at exactly top speed, so a long descent tops
+  out about a sixth over it rather than climbing without limit. A car left facing
+  down a slope steeper than about one in sixty-six rolls away; anything gentler
+  and the tyres hold it.
+- **The car sits square on a rolled piece.** It is now placed on the piece's own
+  up rather than the world's, so it banks with the track instead of staying level
+  over it.
+
+---
+
 ## [1.3.1] — 2026-09-10
 
 ### Added

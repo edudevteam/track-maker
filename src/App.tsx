@@ -13,6 +13,7 @@ import { CloseLoop } from './ui/CloseLoop'
 import { Viewport, viewApi } from './scene/Viewport'
 import { ViewTools } from './ui/ViewTools'
 import { NavHint } from './ui/NavHint'
+import { DriveHud } from './ui/DriveHud'
 import { useProject } from './store/useProject'
 
 export function App() {
@@ -30,6 +31,9 @@ export function App() {
   const setTool = useProject((s) => s.setTool)
   const toggleGrid = useProject((s) => s.toggleGrid)
   const panels = useProject((s) => s.panels)
+  const simulating = useProject((s) => s.simulating)
+  const toggleSimulator = useProject((s) => s.toggleSimulator)
+  const dropCar = useProject((s) => s.dropCar)
   // Picking the second open end with the closing tool puts a pair here, which is
   // what raises the part picker.
   const closure = useProject((s) => s.closure)
@@ -50,6 +54,14 @@ export function App() {
       const target = e.target as HTMLElement | null
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return
       const mod = e.metaKey || e.ctrlKey
+
+      // Driving, the keyboard belongs to the car — see `bindDriveKeys`. All that
+      // is left up here is the way out and the way back to the start.
+      if (simulating) {
+        if (e.key === 'Escape') toggleSimulator()
+        else if (!mod && e.key.toLowerCase() === 'r') dropCar()
+        return
+      }
 
       if (mod && e.key.toLowerCase() === 'z') {
         e.preventDefault()
@@ -114,6 +126,9 @@ export function App() {
     setTool,
     toggleGrid,
     dialogOpen,
+    simulating,
+    toggleSimulator,
+    dropCar,
   ])
 
   return (
@@ -131,14 +146,17 @@ export function App() {
           {/* The panels stack down the left edge over the workplane. Settings ▸
               Show / Hide takes any of them off; with none left the stack goes too,
               so nothing sits over the viewport catching the pointer. */}
-          {(panels.selectedPart || panels.allParts) && (
+          {!simulating && (panels.selectedPart || panels.allParts) && (
             <div className="absolute top-3 left-3 z-10 flex max-h-[calc(100%-24px)] w-[268px] flex-col gap-2 overflow-y-auto">
               {panels.selectedPart && <PartDetails />}
               {panels.allParts && <AllParts />}
             </div>
           )}
-          <ViewTools />
-          <NavHint />
+          {/* Framing the build and orbiting it are both off while the camera is
+              behind the car, so their controls come off the workplane with them. */}
+          {!simulating && <ViewTools />}
+          {!simulating && <NavHint />}
+          {simulating && <DriveHud />}
         </main>
       </div>
       <StatusBar />

@@ -2,6 +2,7 @@ import { parseProject, serializeProject, projectFileName } from '../src/export/p
 import { DEFAULT_DIMENSIONS } from '../src/geometry/dimensions'
 import type { Piece } from '../src/types'
 import { reflowFrom, worldPortFrame } from '../src/lib/ports'
+import { DEFAULT_TOP_SPEED } from '../src/lib/driving'
 
 let fails = 0
 const check = (label: string, ok: boolean, extra = '') => {
@@ -45,6 +46,7 @@ const snapshot = {
   customPrinterSize: [200, 210, 220] as [number, number, number],
   gravity: 9810,
   friction: 0.42,
+  topSpeed: 750,
 }
 
 const text = JSON.stringify(serializeProject(snapshot), null, 2)
@@ -58,6 +60,7 @@ check('piece count', back.pieces.length === 2)
 check('pieces identical', JSON.stringify(back.pieces) === JSON.stringify(snapshot.pieces))
 check('printer round-trips', back.printerId === 'prusa-mk4')
 check('friction round-trips', back.friction === 0.42)
+check('top speed round-trips', back.carTopSpeed === 750, String(back.carTopSpeed))
 check('custom printer size', JSON.stringify(back.customPrinterSize) === '[200,210,220]')
 check('vehicle round-trips', back.vehicle === 'diecast')
 
@@ -65,9 +68,15 @@ check('vehicle round-trips', back.vehicle === 'diecast')
 const missingDim = JSON.parse(text)
 delete missingDim.dims.connector.holeSpan
 delete missingDim.gravity
+delete missingDim.carTopSpeed
 const patched = parseProject(JSON.stringify(missingDim))
 check('missing dimension falls back to default', patched.dims.connector.holeSpan === DEFAULT_DIMENSIONS.connector.holeSpan)
 check('missing gravity falls back to default', patched.gravity === 9810)
+check('missing top speed falls back to default', patched.carTopSpeed === DEFAULT_TOP_SPEED)
+const oldMeaning = JSON.parse(text)
+delete oldMeaning.carTopSpeed
+oldMeaning.topSpeed = 33333
+check("a 1.3.5 file's top speed is not read as this one", parseProject(JSON.stringify(oldMeaning)).carTopSpeed === DEFAULT_TOP_SPEED)
 
 // Files saved before Settings existed, and the retired 'marble' track type,
 // open as a car track with the die-cast vehicle rather than failing.
