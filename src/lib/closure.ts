@@ -49,14 +49,14 @@ export interface Gap {
 const X_AXIS = new THREE.Vector3(1, 0, 0)
 
 /** Measure the hole between two open ends. Null when either end has gone. */
-export function measureGap(pieces: Piece[], a: PortRef, b: PortRef): Gap | null {
+export function measureGap(pieces: Piece[], a: PortRef, b: PortRef, d: Dimensions): Gap | null {
   const pieceA = pieces.find((p) => p.id === a.pieceId)
   const pieceB = pieces.find((p) => p.id === b.pieceId)
   if (!pieceA || !pieceB) return null
   if (pieceA.id === pieceB.id && a.port === b.port) return null
 
-  const from = worldPortFrame(pieceA, a.port)
-  const to = worldPortFrame(pieceB, b.port)
+  const from = worldPortFrame(pieceA, a.port, d)
+  const to = worldPortFrame(pieceB, b.port, d)
   const intoPart = from.quaternion.clone().invert()
   const offset = to.position.clone().sub(from.position).applyQuaternion(intoPart)
   // The part's far end has to face back down the other end's outward axis.
@@ -89,8 +89,8 @@ export interface Fit {
  * in the part's own frame, so nothing has to be placed on the workplane to
  * answer the question.
  */
-export function fitOf(spec: PartSpec, gap: Gap): Fit {
-  const far = localPortFrame(spec, 'b')
+export function fitOf(spec: PartSpec, gap: Gap, d: Dimensions): Fit {
+  const far = localPortFrame(spec, 'b', d)
   const distance = far.position.distanceTo(gap.offset)
   const angle = THREE.MathUtils.radToDeg(
     X_AXIS.clone().applyQuaternion(far.quaternion).angleTo(gap.tangent),
@@ -142,6 +142,8 @@ export function suggestPart(kind: PieceKind, gap: Gap, d: Dimensions): PartSpec 
     flatEnd: d.assembly.transitionFlatEnd,
     radius: 120,
     angleDeg: 45,
+    openLeft: false,
+    openRight: false,
     name: '',
   }
 
@@ -163,9 +165,9 @@ export function suggestPart(kind: PieceKind, gap: Gap, d: Dimensions): PartSpec 
     // The short way round is the one to show — except where only the long way
     // closes the gap, which is how a hairpin that comes back on itself is made.
     const short = arc(gap.turnDeg)
-    if (fitOf(short, gap).exact) return short
+    if (fitOf(short, gap, d).exact) return short
     const long = arc(gap.turnDeg > 0 ? gap.turnDeg - 360 : gap.turnDeg + 360)
-    return fitOf(long, gap).exact ? long : short
+    return fitOf(long, gap, d).exact ? long : short
   }
 
   if (kind === 'transition') {

@@ -1,7 +1,7 @@
 import { laneWidth, type Dimensions } from '../geometry/dimensions'
 import { transitionHalfWidthAt } from '../geometry/transition'
 import { wallMetrics } from '../geometry/trackProfile'
-import type { Piece, VehicleSize } from '../types'
+import type { Piece, PortId, VehicleSize } from '../types'
 
 /**
  * Driving the car rather than watching it roll.
@@ -258,6 +258,37 @@ export function steerTowards(current: number, input: DriveInput, speed: number, 
 export function stepYaw(current: number, steer: number, speed: number, perf: Performance, dt: number): number {
   const want = steer * clamp01(Math.abs(speed) / (perf.topSpeed * YAW_SETTLES_AT))
   return current + (want - current) * (1 - Math.exp(-dt / YAW_LAG))
+}
+
+/**
+ * Which opening a junction hands the car out of, or null to carry straight on.
+ *
+ * The turn is taken on the driver's asking: holding left or right as the car
+ * goes over the middle of the opening puts it onto whatever is joined there.
+ * Nothing else does it — an opening with nothing attached, or a wall that is not
+ * open, leaves the car on the run it is already on, which is also what happens
+ * when the keys are not asking for anything.
+ *
+ * `from` and `to` are where along the centreline the car was and now is, so the
+ * turn is taken once, as the middle of the opening goes by, rather than for
+ * every frame spent inside it.
+ */
+export function junctionExit(
+  piece: Piece,
+  from: number,
+  to: number,
+  dir: 1 | -1,
+  steer: number,
+): PortId | null {
+  if (piece.kind !== 'junction' || steer === 0) return null
+  const middle = Math.max(1, piece.length) / 2
+  if ((from - middle) * (to - middle) > 0) return null
+  // Left and right are the driver's, and a car going the other way down the
+  // piece has them the other way round from the part's own.
+  const wantsLeft = steer < 0
+  const port: PortId = wantsLeft === (dir > 0) ? 'l' : 'r'
+  if (port === 'l' ? !piece.openLeft : !piece.openRight) return null
+  return piece.links[port] ? port : null
 }
 
 /**

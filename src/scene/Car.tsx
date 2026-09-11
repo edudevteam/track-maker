@@ -3,12 +3,20 @@ import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { useProject } from '../store/useProject'
 import { getBlockGeometry, getCarGeometry } from '../geometry/cache'
-import { centrelineLength, pieceQuaternion, sampleCentreline } from '../lib/ports'
+import { centrelineLength, pieceQuaternion, portEntry, sampleCentreline } from '../lib/ports'
 import { railHeight } from '../geometry/trackProfile'
 import { vehicleScale, vehicleSizeOf } from '../geometry/vehicle'
 import { BLOCK_CAR, BUILT_IN_CAR, useLoadedCar, withFacing } from '../lib/carLibrary'
 import { REFERENCE_VEHICLE } from '../lib/carScales'
-import { driveInput, lateralRoom, performanceOf, stepSpeed, stepYaw, steerTowards } from '../lib/driving'
+import {
+  driveInput,
+  junctionExit,
+  lateralRoom,
+  performanceOf,
+  stepSpeed,
+  stepYaw,
+  steerTowards,
+} from '../lib/driving'
 import { carPose } from './carPose'
 import type { PortId } from '../types'
 
@@ -136,7 +144,21 @@ export function Car() {
       const turn = Math.sign(piece.angleDeg) || 1
       const factor =
         piece.kind === 'curve' ? piece.radius / Math.max(1e-3, piece.radius + turn * offset) : 1
+      const was = s
       s += dir * v * Math.cos(yaw) * factor * dt
+
+      // A junction: holding a direction over the middle of an opening takes the
+      // branch. It leaves across the run rather than along it, so nothing it was
+      // carrying sideways — the crab angle, how far over it was sitting — means
+      // anything on the piece it arrives on.
+      const branch = simulating ? junctionExit(piece, was, s, dir, driveInput.steer) : null
+      const onto = branch && piece.links[branch]
+      const joined = onto ? pieces.find((p) => p.id === onto.pieceId) : undefined
+      if (onto && joined) {
+        const entry = portEntry(joined, onto.port)
+        setCar({ pieceId: joined.id, s: entry.s, v, dir: entry.dir, offset: 0, yaw: 0, steer })
+        return
+      }
 
       if (s > len || s < 0) {
         const exit: PortId = s > len ? 'b' : 'a'
@@ -147,18 +169,19 @@ export function Car() {
           // Which way the next piece is travelled through, and so which way the
           // nose ends up pointing in its frame. Entering it backwards swaps its
           // left and right, so the car stays on the same side of the track.
-          const motion = link.port === 'a' ? 1 : -1
-          const nextLen = centrelineLength(next)
-          const nextS = motion > 0 ? overflow : nextLen - overflow
-          const flipped = motion !== (exit === 'b' ? 1 : -1)
-          const room = lateralRoom(dims, next, nextS, drawn.width)
+          const entry = portEntry(next, link.port, overflow)
+          const side = link.port === 'a' || link.port === 'b'
+          const flipped = entry.dir !== (exit === 'b' ? 1 : -1)
+          const room = lateralRoom(dims, next, entry.s, drawn.width)
           setCar({
             pieceId: next.id,
-            s: nextS,
+            s: entry.s,
             v,
-            dir: (motion * (Math.sign(v) || dir)) as 1 | -1,
-            yaw,
-            offset: THREE.MathUtils.clamp(flipped ? -offset : offset, -room, room),
+            // Arriving through the side of a junction, the car is across the run
+            // rather than along it, so it takes that piece's own direction.
+            dir: side ? ((entry.dir * (Math.sign(v) || dir)) as 1 | -1) : entry.dir,
+            yaw: side ? yaw : 0,
+            offset: side ? THREE.MathUtils.clamp(flipped ? -offset : offset, -room, room) : 0,
             steer,
           })
           return

@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { DEFAULT_DIMENSIONS, floorTopY, laneWidth, validateDimensions } from '../src/geometry/dimensions.ts'
 import { buildConnectorGeometry, buildTrackGeometry } from '../src/geometry/parts.ts'
-import { trackProfile } from '../src/geometry/trackProfile.ts'
+import { trackProfile, wallMetrics } from '../src/geometry/trackProfile.ts'
 import { signedArea } from '../src/geometry/sweep.ts'
 import {
   buildTransitionGeometry,
@@ -11,6 +11,13 @@ import {
   transitionVolume,
   transitionZones,
 } from '../src/geometry/transition.ts'
+import {
+  buildJunctionGeometry,
+  junctionClipLength,
+  junctionGrid,
+  junctionSide,
+  junctionVolume,
+} from '../src/geometry/junction.ts'
 
 const d = DEFAULT_DIMENSIONS
 
@@ -176,6 +183,87 @@ for (const spec of [
       for (const s of audit.samples) console.log('  bad edge', s)
     }
   }
+}
+
+bar('junction solids')
+for (const spec of [
+  { lanes: 1, openLeft: true, openRight: false },
+  { lanes: 1, openLeft: false, openRight: true },
+  { lanes: 1, openLeft: true, openRight: true },
+  { lanes: 1, openLeft: false, openRight: false },
+  { lanes: 2, openLeft: true, openRight: true },
+  { lanes: 2, openLeft: true, openRight: false },
+  { lanes: 3, openLeft: true, openRight: true },
+  { lanes: 4, openLeft: true, openRight: true },
+]) {
+  const g = buildJunctionGeometry(d, spec)
+  const bb = g.boundingBox!
+  const audit = edgeAudit(g)
+  const expected = junctionVolume(d, spec)
+  const got = volume(g)
+  const grid = junctionGrid(d, spec)
+  const sides = `${spec.openLeft ? 'L' : '-'}${spec.openRight ? 'R' : '-'}`
+  console.log(
+    `lanes=${spec.lanes} ${sides} side=${grid.side.toFixed(2)} cells=${grid.n}×${grid.n}` +
+      ` tris=${g.getIndex()!.count / 3}` +
+      ` vol=${got.toFixed(1)}mm³ (expect ${expected.toFixed(1)}, off ${(Math.abs(got - expected) / expected * 100).toFixed(3)}%)` +
+      ` bbox=[${bb.min.toArray().map((n) => n.toFixed(1))}]→[${bb.max.toArray().map((n) => n.toFixed(1))}]` +
+      ` nonManifoldEdges=${audit.nonManifold}/${audit.edges}`,
+  )
+  for (const s of audit.samples) console.log('  bad edge', s)
+}
+
+bar('junction takes a clip on every side')
+console.log('junction clip   ', junctionClipLength(d).toFixed(1), 'mm (standard is', d.connector.length, 'mm)')
+for (const lanes of [1, 2, 3, 4]) {
+  const grid = junctionGrid(d, { lanes, openLeft: true, openRight: true })
+  const outerHalf = d.track.slotOuterWidth / 2
+  // An end slot reaches `reach` in from its face; the nearest a side slot comes
+  // to that face is its outermost lane centre less half a slot. The two must not
+  // meet, or the clips would have nowhere to sit.
+  const nearestSide = grid.half + grid.centres[0] - outerHalf
+  const clearance = nearestSide - grid.reach
+  // And the channel through the tile has to be the one a straight of that width
+  // has, or a car would step sideways crossing the joint.
+  const straightChannel = wallMetrics(d.track, (laneWidth(d.track) * lanes) / 2)
+  console.log(
+    `lanes=${lanes} side=${grid.side.toFixed(2)} (${(grid.side / laneWidth(d.track)).toFixed(2)} pitches)` +
+      ` opening=${(laneWidth(d.track) * lanes).toFixed(2)} reach=${grid.reach.toFixed(2)}` +
+      ` slotClearance=${clearance.toFixed(2)}mm` +
+      ` channelHalf=${grid.chanHalf.toFixed(3)} (straight ${straightChannel.innerX.toFixed(3)})` +
+      ` floorHalf=${grid.rampInner.toFixed(3)} (straight ${straightChannel.rampBottomX.toFixed(3)})`,
+  )
+}
+
+bar('junction slots line up with a plain piece')
+for (const lanes of [1, 2, 3]) {
+  const grid = junctionGrid(d, { lanes, openLeft: true, openRight: true })
+  // Mouth and undercut edges the junction offers on each of its four sides,
+  // against the ones a straight of that width has. A clip only passes from one
+  // piece into the other if these agree.
+  const mouth = Math.min(
+    d.track.slotMouthWidth / 2,
+    Math.min(d.track.slotOuterWidth / 2, laneWidth(d.track) / 2 - 0.2) - 0.05,
+  )
+  const half = (laneWidth(d.track) * lanes) / 2
+  const want = Array.from({ length: lanes }, (_, i) => -half + laneWidth(d.track) * (i + 0.5)).flatMap(
+    (c) => [c - grid.outerHalf, c - mouth, c + mouth, c + grid.outerHalf],
+  )
+  const got = grid.centres.flatMap((c) => [
+    c - grid.outerHalf,
+    c - grid.mouthHalf,
+    c + grid.mouthHalf,
+    c + grid.outerHalf,
+  ])
+  const worst = got.length !== want.length ? Infinity : Math.max(...got.map((v, i) => Math.abs(v - want[i])))
+  console.log(
+    `lanes=${lanes} slots=${grid.centres.length} per side, edges off by ${worst.toExponential(1)}mm`,
+  )
+}
+
+bar('junction side follows the lane count')
+for (const lanes of [1, 2, 4, 8]) {
+  console.log(`lanes=${lanes} side=${junctionSide(d, lanes).toFixed(3)}mm`)
 }
 
 bar('transition slots line up with a plain piece')

@@ -8,7 +8,16 @@ import {
   type Frame,
   type Pt2,
 } from './sweep'
-import { slotMetrics, topOutline, wallMetrics } from './trackProfile'
+import { slotMetrics } from './trackProfile'
+import {
+  at,
+  capGeometry,
+  ribbon,
+  sectionCap,
+  trackSection,
+  type Slot,
+  type Tri,
+} from './section'
 
 /**
  * A transition piece — track that opens from one width to the next, so a single
@@ -51,19 +60,11 @@ export interface TransitionSpec {
 /** Bottom-face vertices closer than this are merged into one, mm. */
 const WELD = 0.05
 
-/** A T-slot, as the two bottom vertices that bound its mouth. */
-interface Slot {
-  uLeft: number
-  uRight: number
-}
-
 /** One end zone or the tapering middle, as the cross-section at each station along it. */
 interface Zone {
   xs: number[]
   sections: Pt2[][]
 }
-
-type Tri = [Pt2, Pt2, Pt2]
 
 /**
  * The shortest full-width run each end can keep.
@@ -297,72 +298,20 @@ export function transitionZones(d: Dimensions, spec: TransitionSpec) {
   const usA = outsideSlots(slotsA)
   const usB = outsideSlots(slotsB)
 
-  const sectionA = transitionSection(d, halfA, usA, slotsA)
-  const sectionB = transitionSection(d, halfB, usB, slotsB)
+  const sectionA = trackSection(d, halfA, usA, slotsA)
+  const sectionB = trackSection(d, halfB, usB, slotsB)
   const taper = taperStations(x0, x1, halfA, halfB, cornerRadius)
 
   const zones: Zone[] = [
     { xs: [0, x0], sections: [sectionA, sectionA] },
     {
       xs: taper.map((p) => p.x),
-      sections: taper.map((p) => transitionSection(d, p.half, us, [])),
+      sections: taper.map((p) => trackSection(d, p.half, us, [])),
     },
     { xs: [x1, L], sections: [sectionB, sectionB] },
   ]
 
   return { ...layout, us, usA, usB, slotsA, slotsB, zones }
-}
-
-/**
- * The cross-section of a transition at one station.
- *
- * `bottom` lists the bottom-face vertices as fractions of the half-width, and
- * `slots` says which neighbouring pairs of them open into a T-slot. The outer
- * walls carry an extra vertex at every height a face changes, so the end cap
- * built band by band lines up with the swept sides exactly.
- */
-function transitionSection(d: Dimensions, halfW: number, bottom: number[], slots: Slot[]): Pt2[] {
-  const t = d.track
-  const { floorY, rampTopY } = wallMetrics(t, halfW)
-  const { slotH, mouthH, outerHalf } = slotMetrics(d)
-
-  const wallYs = wallHeights(mouthH, slotH, floorY, rampTopY, t.totalHeight)
-  const pts: Pt2[] = [...topOutline(t, halfW)]
-
-  // Down the right-hand outer wall.
-  for (let i = wallYs.length - 1; i >= 0; i--) pts.push({ x: halfW, y: wallYs[i] })
-
-  // Bottom face, right to left, detouring up and over each T-slot.
-  const byRight = new Map(slots.map((s) => [s.uRight, s]))
-  for (let i = bottom.length - 1; i >= 0; i--) {
-    const u = bottom[i]
-    pts.push({ x: u * halfW, y: 0 })
-    const slot = byRight.get(u)
-    if (!slot) continue
-    const c = ((slot.uLeft + slot.uRight) / 2) * halfW
-    pts.push({ x: slot.uRight * halfW, y: mouthH })
-    pts.push({ x: c + outerHalf, y: mouthH })
-    pts.push({ x: c + outerHalf, y: slotH })
-    pts.push({ x: c - outerHalf, y: slotH })
-    pts.push({ x: c - outerHalf, y: mouthH })
-    pts.push({ x: slot.uLeft * halfW, y: mouthH })
-  }
-
-  // Up the left-hand outer wall, back to the start of the top surface.
-  for (const y of wallYs) pts.push({ x: -halfW, y })
-
-  return pts
-}
-
-/** Heights the outer wall is split at, low to high, with anything degenerate dropped. */
-function wallHeights(mouthH: number, slotH: number, floorY: number, rampTopY: number, H: number): number[] {
-  const out: number[] = []
-  for (const y of [mouthH, slotH, floorY, rampTopY]) {
-    if (y <= 1e-6 || y >= H - 1e-6) continue
-    if (out.length && y - out[out.length - 1] <= 1e-6) continue
-    out.push(y)
-  }
-  return out
 }
 
 /** Geometry for a transition piece, port `a` at the origin and +X down the centreline. */
@@ -398,90 +347,6 @@ export function buildTransitionGeometry(d: Dimensions, spec: TransitionSpec): TH
 }
 
 /**
- * Triangles filling the region between two left-to-right polylines, joined by a
- * straight edge at each end. Both polylines keep every vertex they were given,
- * so the face meets its neighbours without leaving an edge split down one side.
- */
-function ribbon(lower: Pt2[], upper: Pt2[], out: Tri[]): void {
-  if (lower.length < 2 || upper.length < 2) return
-  let i = 0
-  let j = 0
-  while (i < lower.length - 1 || j < upper.length - 1) {
-    const ti = i / (lower.length - 1)
-    const tj = j / (upper.length - 1)
-    if (j >= upper.length - 1 || (i < lower.length - 1 && ti <= tj)) {
-      out.push([lower[i], lower[i + 1], upper[j]])
-      i++
-    } else {
-      out.push([lower[i], upper[j + 1], upper[j]])
-      j++
-    }
-  }
-}
-
-const at = (x: number, y: number): Pt2 => ({ x, y })
-
-/**
- * The full end face of a transition, built as horizontal bands rather than by
- * ear-clipping: a bottom face carrying the far end's vertices has long runs of
- * collinear points, which general triangulation is entitled to drop.
- */
-function sectionCap(d: Dimensions, halfW: number, bottom: number[], slots: Slot[]): Tri[] {
-  const t = d.track
-  const { floorY, innerX, rampBottomX, rampTopY } = wallMetrics(t, halfW)
-  const { slotH, mouthH, outerHalf } = slotMetrics(d)
-  const H = t.totalHeight
-
-  const mouths = slots
-    .map((s) => {
-      const c = ((s.uLeft + s.uRight) / 2) * halfW
-      return { left: s.uLeft * halfW, right: s.uRight * halfW, outL: c - outerHalf, outR: c + outerHalf }
-    })
-    .sort((a, b) => a.left - b.left)
-
-  const tris: Tri[] = []
-  const xs = bottom.map((u) => u * halfW)
-
-  // Band 1: bottom face up to the slot mouths, in the spans between them.
-  for (let k = 0; k <= mouths.length; k++) {
-    const xl = k === 0 ? -halfW : mouths[k - 1].right
-    const xr = k === mouths.length ? halfW : mouths[k].left
-    if (xr - xl <= 1e-9) continue
-    const lower = xs.filter((x) => x >= xl - 1e-9 && x <= xr + 1e-9).map((x) => at(x, 0))
-    // The undercut ledges start part-way along, so the top of this band is split
-    // where the band above it begins.
-    const upper = [xl, ...(k > 0 ? [mouths[k - 1].outR] : []), ...(k < mouths.length ? [mouths[k].outL] : []), xr]
-    ribbon(lower, upper.map((x) => at(x, mouthH)), tris)
-  }
-
-  // Band 2: past the ledges, in the spans between the undercuts.
-  for (let k = 0; k <= mouths.length; k++) {
-    const xl = k === 0 ? -halfW : mouths[k - 1].outR
-    const xr = k === mouths.length ? halfW : mouths[k].outL
-    if (xr - xl <= 1e-9) continue
-    ribbon([at(xl, mouthH), at(xr, mouthH)], [at(xl, slotH), at(xr, slotH)], tris)
-  }
-
-  // Band 3: solid slab from the slot ceilings up to the channel floor.
-  const slabLower = [-halfW]
-  for (const m of mouths) slabLower.push(m.outL, m.outR)
-  slabLower.push(halfW)
-  ribbon(
-    slabLower.map((x) => at(x, slotH)),
-    [-halfW, -rampBottomX, rampBottomX, halfW].map((x) => at(x, floorY)),
-    tris,
-  )
-
-  // Bands 4 and 5: the two walls, up the ramp and then straight to the top.
-  ribbon([at(-halfW, floorY), at(-rampBottomX, floorY)], [at(-halfW, rampTopY), at(-innerX, rampTopY)], tris)
-  ribbon([at(rampBottomX, floorY), at(halfW, floorY)], [at(innerX, rampTopY), at(halfW, rampTopY)], tris)
-  ribbon([at(-halfW, rampTopY), at(-innerX, rampTopY)], [at(-halfW, H), at(-innerX, H)], tris)
-  ribbon([at(innerX, rampTopY), at(halfW, rampTopY)], [at(innerX, H), at(halfW, H)], tris)
-
-  return tris
-}
-
-/**
  * The wall that closes off one end's T-slots where the taper takes over. Only
  * the slot cross-sections are filled — the rest of that plane is solid on both
  * sides.
@@ -506,26 +371,6 @@ function slotCaps(d: Dimensions, halfW: number, bottom: number[], slots: Slot[])
   }
 
   return tris
-}
-
-/**
- * Lifts profile-space triangles onto the plane at `x`, using the same mapping
- * the sweep uses so shared vertices land on exactly the same coordinates.
- * `flip` reverses the winding for a face whose outside points back along -X.
- */
-function capGeometry(tris: Tri[], x: number, flip: boolean): THREE.BufferGeometry {
-  const positions: number[] = []
-  const indices: number[] = []
-  for (const tri of tris) {
-    const base = positions.length / 3
-    const ordered = flip ? [tri[0], tri[2], tri[1]] : tri
-    for (const p of ordered) positions.push(x, p.y, -p.x)
-    indices.push(base, base + 1, base + 2)
-  }
-  const geom = new THREE.BufferGeometry()
-  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
-  geom.setIndex(indices)
-  return geom
 }
 
 /**

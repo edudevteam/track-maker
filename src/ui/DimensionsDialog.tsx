@@ -189,6 +189,17 @@ export function DimensionsDialog({ onClose }: { onClose: () => void }) {
                 />
               </Field>
               <Field
+                label="Junction clip"
+                hint="The shorter clip a junction's four joints take. A standard clip will not fit."
+              >
+                <LengthInput
+                  value={draft.assembly.junctionConnectorLength}
+                  step={1}
+                  min={8}
+                  onChange={(v) => setValue('assembly', 'junctionConnectorLength', v)}
+                />
+              </Field>
+              <Field
                 label="Transition flat ends"
                 hint="Full-width run each end of a new transition keeps. Shorter tapers more slowly."
               >

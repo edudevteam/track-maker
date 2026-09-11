@@ -6,8 +6,8 @@ import { useProject } from '../store/useProject'
 import { getConnectorGeometry, getTrackGeometry } from '../geometry/cache'
 import { connectorOffsets, lanesAt } from '../geometry/parts'
 import { laneWidth } from '../geometry/dimensions'
-import { localPortFrame } from '../lib/ports'
-import { ownsConnector } from '../lib/connectors'
+import { localPortFrame, portsOf } from '../lib/ports'
+import { clipLength, ownsConnector } from '../lib/connectors'
 
 const SELECT_EMISSIVE = new THREE.Color('#2f7fd1')
 const X_AXIS = new THREE.Vector3(1, 0, 0)
@@ -44,14 +44,12 @@ export function PieceMesh({ piece }: { piece: Piece }) {
         />
       </mesh>
 
-      {(['a', 'b'] as PortId[]).map((port) =>
+      {portsOf(piece).map((port) =>
         ownsConnector(piece, port) ? <ConnectorAt key={`c-${port}`} piece={piece} port={port} /> : null,
       )}
 
       {!simulating &&
-        (['a', 'b'] as PortId[]).map((port) => (
-          <PortHandle key={`h-${port}`} piece={piece} port={port} />
-        ))}
+        portsOf(piece).map((port) => <PortHandle key={`h-${port}`} piece={piece} port={port} />)}
     </group>
   )
 }
@@ -63,18 +61,21 @@ export function PieceMesh({ piece }: { piece: Piece }) {
  */
 function ConnectorAt({ piece, port }: { piece: Piece; port: PortId }) {
   const dims = useProject((s) => s.dims)
-  const geometry = getConnectorGeometry(dims, dims.connector.length)
+  const link = piece.links[port]
+  const neighbour = useProject((s) => s.pieces.find((p) => p.id === link?.pieceId))
+  const length = clipLength(piece, neighbour, dims)
+  const geometry = getConnectorGeometry(dims, length)
   const lanes = useMemo(() => connectorOffsets(piece, dims, port), [piece.kind, piece.lanes, piece.lanesB, port, dims])
 
   const placement = useMemo(() => {
-    const frame = localPortFrame(piece, port)
+    const frame = localPortFrame(piece, port, dims)
     const outward = X_AXIS.clone().applyQuaternion(frame.quaternion)
     const lateral = Z_AXIS.clone().applyQuaternion(frame.quaternion)
-    const origin = frame.position.clone().addScaledVector(outward, -dims.connector.length / 2)
+    const origin = frame.position.clone().addScaledVector(outward, -length / 2)
     // Push the wings up against the undercut ceiling; the body fills the mouth.
     origin.y = dims.assembly.fitClearance
     return { origin, quaternion: frame.quaternion, lateral }
-  }, [piece.kind, piece.length, piece.radius, piece.angleDeg, port, dims])
+  }, [piece.kind, piece.lanes, piece.length, piece.radius, piece.angleDeg, port, length, dims])
 
   return (
     <>
@@ -114,14 +115,19 @@ function PortHandle({ piece, port }: { piece: Piece; port: PortId }) {
   const isActive = activePort?.pieceId === piece.id && activePort.port === port
 
   const placement = useMemo(() => {
-    const frame = localPortFrame(piece, port)
+    const frame = localPortFrame(piece, port, dims)
     const inward = X_AXIS.clone().applyQuaternion(frame.quaternion).multiplyScalar(-1)
-    // A small tab, per the plan — enough to grab without masking the piece.
-    const depth = Math.min(12, (piece.kind === 'curve' ? piece.radius : piece.length) * 0.2)
+    // A small tab, per the plan — enough to grab without masking the piece. A
+    // side opening is grabbed at a fixed depth, since the length it is cut into
+    // says nothing about how far into the wall the tab should reach.
+    const depth =
+      port === 'l' || port === 'r'
+        ? 6
+        : Math.min(12, (piece.kind === 'curve' ? piece.radius : piece.length) * 0.2)
     const pos = frame.position.clone().addScaledVector(inward, depth / 2)
     pos.y = dims.track.totalHeight / 2
     return { pos, quaternion: frame.quaternion, depth }
-  }, [piece.kind, piece.length, piece.radius, piece.angleDeg, port, dims])
+  }, [piece.kind, piece.lanes, piece.lanesB, piece.length, piece.radius, piece.angleDeg, piece.openLeft, piece.openRight, port, dims])
 
   if (!showPorts && !toolMode) return null
   // Outside the connect tools an already-joined end has nothing to offer, and

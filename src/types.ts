@@ -23,10 +23,18 @@ export interface VehicleSize {
  */
 export type Unit = 'mm' | 'in'
 
-/** The two ends of every piece. `a` is the local origin end, `b` the far end. */
-export type PortId = 'a' | 'b'
+/**
+ * Every way onto a piece. `a` is the local origin end and `b` the far end; a
+ * junction adds `l` and `r`, the openings in its left and right walls, which are
+ * left and right as the driver sees them with port `b` ahead.
+ */
+export const PORT_IDS = ['a', 'b', 'l', 'r'] as const
+export type PortId = (typeof PORT_IDS)[number]
 
-export type PieceKind = 'straight' | 'curve' | 'transition'
+/** The two side openings, in the order they are offered. */
+export const SIDE_PORTS = ['l', 'r'] as const satisfies readonly PortId[]
+
+export type PieceKind = 'straight' | 'curve' | 'transition' | 'junction'
 
 export interface PortLink {
   pieceId: string
@@ -40,12 +48,19 @@ export interface Piece {
   /** Track width in lanes. 1 = single, 2 = double width with the middle walls removed, etc. */
   lanes: number
   /**
-   * Transition pieces only — the width in lanes at port `b`. Everywhere else the
-   * piece is `lanes` wide from end to end, so this is ignored.
+   * The second width, in lanes. A transition uses it for port `b`; a junction
+   * uses it for how wide its side openings are, and so for the branch they take.
+   * A straight or a curve is `lanes` wide throughout and ignores it.
    */
   lanesB: number
-  /** Straight and transition pieces only — centreline length in mm. */
+  /** Straight, transition and junction pieces only — centreline length in mm. */
   length: number
+  /**
+   * Junction pieces only — whether the wall is opened on that side, leaving a
+   * port a branch can join. Left and right are the driver's, with port `b` ahead.
+   */
+  openLeft: boolean
+  openRight: boolean
   /**
    * Transition pieces only — radius the two taper corners are rounded to, mm.
    * 0 leaves them square. Clamped to whatever the taper has room for.
@@ -88,6 +103,8 @@ export interface PartSpec {
   flatEnd: number
   radius: number
   angleDeg: number
+  openLeft: boolean
+  openRight: boolean
   name: string
 }
 

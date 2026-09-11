@@ -20,6 +20,115 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.3.9] — 2026-09-11
+
+### Fixed
+
+- **A junction's side joints get their clip.** The tile grew a slot on all four
+  sides last version, but the rule that a side joining was a butt joint with
+  nothing to hold it was left in place from the version before — so the two side
+  joints of every junction quietly drew nothing, exported nothing, and turned
+  their own connector off again the moment anything was joined to them. Every way
+  onto a piece is held the same way now, and there is no special case left to
+  fall out of step.
+- **The connector toggles cover every side a part has.** They were fixed at two,
+  side A and side B, which is every part but the junction — a crossroads has four
+  and a T has three, and the two that were listed were not necessarily the ones
+  you wanted to change. They are now one per way onto the piece, named for the
+  side they sit on: **side A**, **side B**, **the left**, **the right**.
+- **An exported clip is named for the side it belongs to** rather than for a
+  bare letter, and a clip on a transition's wider end is now placed against that
+  end's lanes rather than against the other one's.
+
+---
+
+## [1.3.8] — 2026-09-11
+
+### Changed
+
+- **The junction is a square tile now, and every one of its four sides takes a
+  clip.** It was a length of straight with holes in its walls, so its two ends
+  joined like any straight and its two sides had nothing to hold them. All four
+  sides are the same thing now: the same opening, the same slot underneath, the
+  same clip. Lanes is the only size setting — pick 1, 2, 3 and all four sides
+  change together — and the openings line up with a straight of that width so a
+  car crosses the joint without stepping sideways.
+- **The tile is one lane pitch wider than the track it carries**, which is why a
+  single-lane crossroads comes out 74.9mm square rather than 37.5mm. A slot has
+  to reach far enough in to hold a clip, and the slots coming in from two
+  neighbouring sides must not run into each other; a tile the width of the track
+  leaves no room at all for that. The extra half a pitch at each end of each side
+  is what the corners are made of — walls carrying on round the crossing, with
+  the same section and the same ramp a straight has, so the channel through the
+  junction is continuous with the channel either side of it.
+- **A junction's clip is its own, shorter one — 40mm, set in Settings ▸
+  Dimensions ▸ Junction clip.** The standard 70mm clip reaches 35mm into a piece
+  from each side, and four of those would meet in the middle of the tile long
+  before they were holding anything. The piece on the other side of the joint
+  uses the same one, since there is only the one clip between them. Wind it past
+  what the tile will take and the Dimensions panel says so and shortens it.
+- **Length and Branch width have gone from the junction's fields.** The tile is
+  square and its side follows from its lanes, so there was nothing for either of
+  them to say. What is shown instead is the size it comes out and the width of
+  the way on and off each side.
+
+### Fixed
+
+- **A junction now keeps its size in step with the lane pitch.** Changing a track
+  dimension that moves the pitch resizes every junction on the workplane, so the
+  geometry, the four ports and the run the car drives across never disagree.
+
+### Removed
+
+- **A junction saved by 1.3.7 opens as the square tile.** Its old shape — a
+  straight with wall openings and no way to hold a branch — is gone, so it takes
+  the size its lane count now asks for. Nothing else in a project moves.
+
+---
+
+## [1.3.7] — 2026-09-11
+
+### Added
+
+- **A junction part, in the library beside the straight, the curve and the
+  transition.** It is a straight run with one or both of its walls opened, so
+  something can join it side-on: pick **Left**, **Right** or **Both** and it
+  comes out a T or a crossroads. The wall is taken out over the width of the
+  branch and the channel floor runs out to the outer face in its place, so there
+  is a way through rather than a hole in a wall, and a run of wall is left
+  standing at each end so the part still reads as a piece of track. It is one
+  solid, watertight and the volume it should be, both walls open or one.
+- **Two more ends to join onto.** An opening is an end like any other: it shows
+  the same tab, the connect tool joins to it, moving the junction carries the
+  branch with it, and a branch left on a junction that is then made wider is
+  carried along rather than left hanging. **Branch width** sets how wide the
+  opening is, in whole lanes, and All Parts offers a transition where a branch
+  meets an opening of a different width, exactly as it does at any other step.
+- **The car takes the branch when you ask it to.** Driving over the middle of an
+  opening while holding left or right puts it onto whatever is joined there;
+  otherwise it carries straight on. Left and right are the driver's, so a car
+  coming back the other way turns the way the keys say rather than the way the
+  part is drawn. An opening with nothing attached, or a wall that is shut, leaves
+  the car on the run it is already on.
+
+### Changed
+
+- **A side joint is a butt joint and carries no clip.** The branch meets a flat
+  outer face and there is no slot cut across the junction's underside for a clip
+  to seat in, so none is drawn and none is exported — the two ends of the
+  junction still take their clips as any straight does. A crosswise clip is worth
+  having and is not here yet.
+- **The open-ends count in the status bar counts openings too**, so a crossroads
+  with nothing on its sides reads as four ends open rather than two.
+
+### Fixed
+
+- **A project saved before junctions existed opens exactly as it did.** Every
+  piece reads back with both walls shut, which is a straight in all but name, and
+  nothing about the file changes.
+
+---
+
 ## [1.3.6] — 2026-09-11
 
 ### Changed

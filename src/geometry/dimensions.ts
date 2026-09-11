@@ -95,6 +95,15 @@ export interface AssemblyDims {
   /** Shorter clip for tight corners, per the plan. */
   cornerConnectorLength: number
   /**
+   * The clip a junction's four joints take.
+   *
+   * Shorter than the standard one because it has to be: a junction takes a clip
+   * in from every side, and a 70mm clip reaching 35mm in from four sides would
+   * have opposite pairs meeting in the middle long before they were holding
+   * anything. `maxJunctionClipLength` is as long as the tile will take.
+   */
+  junctionConnectorLength: number
+  /**
    * The radius a new transition piece rounds its two taper corners to. 0 leaves
    * them square. Each piece carries its own, so this is only the starting value.
    */
@@ -146,6 +155,7 @@ export const DEFAULT_DIMENSIONS: Dimensions = {
     defaultStraightLength: 100,
     fitClearance: 0.15,
     cornerConnectorLength: 40,
+    junctionConnectorLength: 40,
     transitionCornerRadius: 0,
     transitionFlatEnd: 35,
   },
@@ -238,6 +248,15 @@ export function validateDimensions(d: Dimensions, fmt: LengthFormatter = asMilli
     w.push({
       field: 'slotOuterWidth',
       message: `Slot (${fmt(t.slotOuterWidth)}) is wider than the lane pitch (${fmt(laneWidth(t))}).`,
+    })
+  }
+  const junctionRoom = 2 * (laneWidth(t) - t.slotOuterWidth / 2 - 1)
+  if (d.assembly.junctionConnectorLength > junctionRoom) {
+    w.push({
+      field: 'junctionConnectorLength',
+      message: `A junction takes a clip in from all four sides, and two of the slots would meet past ${fmt(
+        junctionRoom,
+      )}. The clip is being shortened to that.`,
     })
   }
   if (c.counterSinkDia <= c.holeDia) {

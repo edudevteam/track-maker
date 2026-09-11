@@ -7,9 +7,8 @@ import { downloadBlob, exportParts, type ExportFormat, type ExportPart } from '.
 import { safeBaseName } from '../export/project'
 import { getConnectorGeometry, getTrackGeometry } from '../geometry/cache'
 import { connectorOffsets } from '../geometry/parts'
-import { localPortFrame, pieceMatrix } from '../lib/ports'
-import { ownsConnector } from '../lib/connectors'
-import type { PortId } from '../types'
+import { localPortFrame, pieceMatrix, portLabel, portsOf } from '../lib/ports'
+import { clipLength, ownsConnector } from '../lib/connectors'
 
 const X_AXIS = new THREE.Vector3(1, 0, 0)
 const Z_AXIS = new THREE.Vector3(0, 0, 1)
@@ -38,15 +37,18 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         color: piece.color,
       })
       if (!includeConnectors) continue
-      const connGeom = getConnectorGeometry(dims, dims.connector.length)
-      for (const port of ['a', 'b'] as PortId[]) {
+      for (const port of portsOf(piece)) {
         if (!ownsConnector(piece, port)) continue
-        const frame = localPortFrame(piece, port)
+        const link = piece.links[port]
+        const neighbour = link ? pieces.find((p) => p.id === link.pieceId) : undefined
+        const length = clipLength(piece, neighbour, dims)
+        const connGeom = getConnectorGeometry(dims, length)
+        const frame = localPortFrame(piece, port, dims)
         const outward = X_AXIS.clone().applyQuaternion(frame.quaternion)
         const lateral = Z_AXIS.clone().applyQuaternion(frame.quaternion)
-        const origin = frame.position.clone().addScaledVector(outward, -dims.connector.length / 2)
+        const origin = frame.position.clone().addScaledVector(outward, -length / 2)
         origin.y = dims.assembly.fitClearance
-        const offsets = connectorOffsets(piece, dims)
+        const offsets = connectorOffsets(piece, dims, port)
         offsets.forEach((v, index) => {
           const local = new THREE.Matrix4().compose(
             origin.clone().addScaledVector(lateral, v),
@@ -56,8 +58,8 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           out.push({
             name:
               offsets.length > 1
-                ? `${piece.name} clip ${port.toUpperCase()} ${index === 0 ? 'left' : 'right'}`
-                : `${piece.name} clip ${port.toUpperCase()}`,
+                ? `${piece.name} clip on ${portLabel(port)} ${index === 0 ? 'left' : 'right'}`
+                : `${piece.name} clip on ${portLabel(port)}`,
             geometry: connGeom,
             matrix: matrix.clone().multiply(local),
             color: piece.connectorColor,

@@ -51,7 +51,7 @@ export function CloseLoop({ ends, onClose }: { ends: { a: PortRef; b: PortRef };
   const select = useProject((s) => s.select)
   const { fmt, val } = useUnits()
 
-  const gap = useMemo(() => measureGap(pieces, ends.a, ends.b), [pieces, ends])
+  const gap = useMemo(() => measureGap(pieces, ends.a, ends.b, dims), [pieces, ends, dims])
 
   // Whichever part comes closest to closing it is the one already picked.
   const [kind, setKind] = useState<PieceKind>(() => (gap ? bestKind(gap, dims) : 'straight'))
@@ -63,7 +63,7 @@ export function CloseLoop({ ends, onClose }: { ends: { a: PortRef; b: PortRef };
   }
 
   const spec = gap ? shaped({ ...suggestPart(kind, gap, dims), ...edits }, dims) : null
-  const fit = gap && spec ? fitOf(spec, gap) : null
+  const fit = gap && spec ? fitOf(spec, gap, dims) : null
   const step = gap && spec ? widthNote(spec, gap) : null
   const closes = !!gap && (!gap.sameRun || !!fit?.exact)
 
@@ -145,7 +145,7 @@ export function CloseLoop({ ends, onClose }: { ends: { a: PortRef; b: PortRef };
                       key={part.kind}
                       {...part}
                       active={kind === part.kind}
-                      fit={fitOf(shaped(suggestPart(part.kind, gap, dims), dims), gap)}
+                      fit={fitOf(shaped(suggestPart(part.kind, gap, dims), dims), gap, dims)}
                       sameRun={gap.sameRun}
                       onClick={() => pick(part.kind)}
                     />
@@ -422,7 +422,7 @@ function bestKind(gap: Gap, dims: Dimensions): PieceKind {
       const spec = shaped(suggestPart(kind, gap, dims), dims)
       // A step at either joint is a real cost, so a part that spans the gap but
       // lands on the wrong width loses to one that does both.
-      const fit = fitOf(spec, gap)
+      const fit = fitOf(spec, gap, dims)
       return { kind, fit, miss: score(fit) + (widthNote(spec, gap) ? 0.5 : 0) }
     })
     .sort((x, y) => x.miss - y.miss)

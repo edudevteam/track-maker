@@ -108,6 +108,7 @@ function Gizmo() {
   const tool = useProject((s) => s.tool)
   const selection = useProject((s) => s.selection)
   const pieces = useProject((s) => s.pieces)
+  const dims = useProject((s) => s.dims)
   const updatePiece = useProject((s) => s.updatePiece)
   const commit = useProject((s) => s.commit)
 
@@ -130,7 +131,7 @@ function Gizmo() {
     let pos: THREE.Vector3
     if (selection.anchor === 'middle') pos = pieceMidpoint(piece)
     else {
-      const local = localPortFrame(piece, selection.anchor)
+      const local = localPortFrame(piece, selection.anchor, dims)
       pos = local.position.clone().applyQuaternion(q).add(new THREE.Vector3(...piece.position))
     }
     proxy.current.position.copy(pos)

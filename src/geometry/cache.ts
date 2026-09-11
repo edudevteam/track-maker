@@ -46,8 +46,10 @@ function trackKey(d: Dimensions): string {
     d.connector.bodyHeight,
     d.connector.wingThickness,
     d.assembly.fitClearance,
-    // A transition sets its taper against the connector inset.
+    // A transition sets its taper against the connector inset, and a junction
+    // sets how far its slots reach against the clip that goes in them.
     d.assembly.connectorInset,
+    d.assembly.junctionConnectorLength,
   ].join('|')
 }
 
@@ -76,7 +78,9 @@ export function getTrackGeometry(piece: Piece, d: Dimensions): THREE.BufferGeome
       ? `c:${piece.radius}:${piece.angleDeg}`
       : piece.kind === 'transition'
         ? `t:${piece.length}:${piece.lanesB}:${piece.cornerRadius}:${piece.flatEnd}`
-        : `s:${piece.length}`
+        : piece.kind === 'junction'
+          ? `j:${piece.openLeft ? 'l' : ''}${piece.openRight ? 'r' : ''}`
+          : `s:${piece.length}`
   return take(`track|${shape}|${piece.lanes}|${trackKey(d)}`, () => buildTrackGeometry(piece, d))
 }
 

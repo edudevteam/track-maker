@@ -1,3 +1,4 @@
+import { PORT_IDS } from '../types'
 import type {
   Piece,
   PieceKind,
@@ -189,16 +190,23 @@ const isAxis = (v: unknown): v is Axis => typeof v === 'string' && (AXES as read
 function readLink(v: unknown, ids: Set<string>): PortLink | null {
   if (!isObj(v)) return null
   const pieceId = typeof v.pieceId === 'string' ? v.pieceId : null
-  const port = v.port === 'a' || v.port === 'b' ? (v.port as PortId) : null
+  const port = (PORT_IDS as readonly string[]).includes(v.port as string) ? (v.port as PortId) : null
   if (!pieceId || !port || !ids.has(pieceId)) return null
   return { pieceId, port }
+}
+
+/** One entry per way onto a piece, read off whatever the file happened to hold. */
+function readPorts<T>(v: unknown, read: (saved: unknown) => T): Record<PortId, T> {
+  const saved = isObj(v) ? v : {}
+  return Object.fromEntries(PORT_IDS.map((port) => [port, read(saved[port])])) as Record<PortId, T>
 }
 
 function readPiece(v: unknown, index: number, ids: Set<string>): Piece | null {
   if (!isObj(v)) return null
   const id = typeof v.id === 'string' && v.id.length ? v.id : null
   if (!id) return null
-  const kind: PieceKind = v.kind === 'curve' || v.kind === 'transition' ? v.kind : 'straight'
+  const kind: PieceKind =
+    v.kind === 'curve' || v.kind === 'transition' || v.kind === 'junction' ? v.kind : 'straight'
   const lanes = Math.max(1, Math.round(num(v.lanes, 1)))
   return {
     id,
@@ -207,6 +215,11 @@ function readPiece(v: unknown, index: number, ids: Set<string>): Piece | null {
     lanes,
     lanesB: Math.max(1, Math.round(num(v.lanesB, lanes))),
     length: num(v.length, DEFAULT_DIMENSIONS.assembly.defaultStraightLength),
+    // A junction saved with neither wall open is a straight in all but name, so
+    // a file written before junctions existed opens with both shut and nothing
+    // about it changes.
+    openLeft: bool(v.openLeft, false),
+    openRight: bool(v.openRight, false),
     cornerRadius: Math.max(0, num(v.cornerRadius, DEFAULT_DIMENSIONS.assembly.transitionCornerRadius)),
     flatEnd: Math.max(0, num(v.flatEnd, DEFAULT_DIMENSIONS.assembly.transitionFlatEnd)),
     radius: num(v.radius, 120),
@@ -214,15 +227,9 @@ function readPiece(v: unknown, index: number, ids: Set<string>): Piece | null {
     position: vec3(v.position, [0, 0, 0]),
     rotation: vec3(v.rotation, [0, 0, 0]),
     color: str(v.color, DEFAULT_TRACK_COLOR),
-    connectors: {
-      a: bool(isObj(v.connectors) ? v.connectors.a : undefined, false),
-      b: bool(isObj(v.connectors) ? v.connectors.b : undefined, false),
-    },
+    connectors: readPorts(v.connectors, (saved) => bool(saved, false)),
     connectorColor: str(v.connectorColor, DEFAULT_CONNECTOR_COLOR),
-    links: {
-      a: readLink(isObj(v.links) ? v.links.a : undefined, ids),
-      b: readLink(isObj(v.links) ? v.links.b : undefined, ids),
-    },
+    links: readPorts(v.links, (saved) => readLink(saved, ids)),
     visible: bool(v.visible, true),
     locked: bool(v.locked, false),
   }
@@ -238,10 +245,10 @@ function pruneOneSidedLinks(pieces: Piece[]): Piece[] {
     return !!other && other.pieceId === p.id && other.port === port
   }
   return pieces.map((p) => {
-    const a = mutual(p, 'a')
-    const b = mutual(p, 'b')
-    if (a && b) return p
-    return { ...p, links: { a: a ? p.links.a : null, b: b ? p.links.b : null } }
+    if (PORT_IDS.every((port) => !p.links[port] || mutual(p, port))) return p
+    const links = { ...p.links }
+    for (const port of PORT_IDS) if (!mutual(p, port)) links[port] = null
+    return { ...p, links }
   })
 }
 

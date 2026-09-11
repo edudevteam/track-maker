@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { Grid3x3, Package, Target } from 'lucide-react'
+import { portsOf } from '../lib/ports'
 import { useProject } from '../store/useProject'
 import { VIEW_DIRECTIONS, viewApi } from '../scene/Viewport'
 import { unitSuffix } from '../lib/units'
@@ -15,7 +16,10 @@ export function StatusBar() {
   const snapToPort = useProject((s) => s.snapToPort)
   const units = useProject((s) => s.units)
 
-  const openEnds = pieces.reduce((n, p) => n + (p.links.a ? 0 : 1) + (p.links.b ? 0 : 1), 0)
+  const openEnds = pieces.reduce(
+    (n, p) => n + portsOf(p).filter((port) => !p.links[port]).length,
+    0,
+  )
 
   return (
     <footer

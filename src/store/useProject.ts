@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import * as THREE from 'three'
+import { PORT_IDS } from '../types'
 import type {
   CarState,
   GizmoAnchor,
@@ -38,7 +39,15 @@ import {
 import { facingIsValid, type VehicleFacing } from '../geometry/vehicle'
 import { lanesAt } from '../geometry/parts'
 import { defaultTransitionLength } from '../geometry/transition'
-import { collectGroup, pieceMatrix, reflowFrom, transformToMate, worldPortFrame } from '../lib/ports'
+import { junctionSide } from '../geometry/junction'
+import {
+  collectGroup,
+  pieceMatrix,
+  portsOf,
+  reflowFrom,
+  transformToMate,
+  worldPortFrame,
+} from '../lib/ports'
 import { DEFAULT_TOP_SPEED, TOP_SPEED_RANGE } from '../lib/driving'
 import { fitOf, measureGap, type PortRef } from '../lib/closure'
 import { pieceBounds } from '../lib/printVolume'
@@ -291,15 +300,45 @@ const PARKED_CAR: CarState = {
  */
 const startOfTrack = (pieces: Piece[]) => pieces.find((p) => !p.links.a) ?? pieces[0]
 
-/** Fields that move a piece's ends, so a joined neighbour has to be re-seated. */
-const RESHAPES: (keyof Piece)[] = ['kind', 'length', 'radius', 'angleDeg', 'flatEnd']
+/**
+ * Fields that move a piece's ends, so a joined neighbour has to be re-seated. A
+ * junction's side openings sit half way down its outer face, so its width and
+ * which walls are open move them too.
+ */
+const RESHAPES: (keyof Piece)[] = [
+  'kind',
+  'length',
+  'radius',
+  'angleDeg',
+  'flatEnd',
+  'lanes',
+  'lanesB',
+  'openLeft',
+  'openRight',
+]
 
 /** Fields that change how wide a piece is, so a transition clipped to it has to follow. */
 const WIDTHS: (keyof Piece)[] = ['lanes', 'lanesB']
 
 /** The default name for a part of this kind, before the user renames it. */
 export const kindName = (kind: PieceKind) =>
-  kind === 'curve' ? 'Curve' : kind === 'transition' ? 'Transition' : 'Straight'
+  kind === 'curve'
+    ? 'Curve'
+    : kind === 'transition'
+      ? 'Transition'
+      : kind === 'junction'
+        ? 'Junction'
+        : 'Straight'
+
+/** What a junction is called before the user renames it — the shape it makes. */
+export const junctionName = (openLeft: boolean, openRight: boolean) =>
+  openLeft && openRight
+    ? 'Crossroads'
+    : openLeft
+      ? 'T-junction left'
+      : openRight
+        ? 'T-junction right'
+        : 'Junction'
 
 /** What a transition is called before the user renames it — the step it makes. */
 export const transitionName = (lanesA: number, lanesB: number) =>
@@ -307,13 +346,20 @@ export const transitionName = (lanesA: number, lanesB: number) =>
 
 function makePiece(dims: Dimensions, init: Partial<Piece> = {}): Piece {
   const kind: PieceKind = init.kind ?? 'straight'
+  const junction = kind === 'junction'
   return {
     id: nextId(),
     name: init.name ?? kindName(kind),
     kind,
     lanes: init.lanes ?? 1,
     lanesB: init.lanesB ?? (init.lanes ?? 1) + 1,
-    length: init.length ?? dims.assembly.defaultStraightLength,
+    // A junction is a square whose side follows from its lanes, so its length is
+    // not a field of its own — it is kept in step with the width.
+    length: junction
+      ? junctionSide(dims, init.lanes ?? 1)
+      : (init.length ?? dims.assembly.defaultStraightLength),
+    openLeft: init.openLeft ?? junction,
+    openRight: init.openRight ?? junction,
     cornerRadius: init.cornerRadius ?? dims.assembly.transitionCornerRadius,
     flatEnd: init.flatEnd ?? dims.assembly.transitionFlatEnd,
     radius: init.radius ?? 120,
@@ -322,13 +368,37 @@ function makePiece(dims: Dimensions, init: Partial<Piece> = {}): Piece {
     rotation: init.rotation ?? [0, 0, 0],
     color: init.color ?? DEFAULT_TRACK_COLOR,
     // A loose piece carries no clips. They are fitted when a joint is made.
-    connectors: init.connectors ?? { a: false, b: false },
+    connectors: init.connectors ?? noConnectors(),
     connectorColor: init.connectorColor ?? DEFAULT_CONNECTOR_COLOR,
-    links: init.links ?? { a: null, b: null },
+    links: init.links ?? noLinks(),
     visible: init.visible ?? true,
     locked: init.locked ?? false,
   }
 }
+
+/**
+ * Put every junction back to the square its lane count asks for. A junction has
+ * no length of its own, so this is what keeps its geometry, its four ports and
+ * the car's run across it all saying the same thing after a width or a dimension
+ * changes.
+ */
+function syncJunctions(pieces: Piece[], dims: Dimensions): Piece[] {
+  let changed = false
+  const out = pieces.map((p) => {
+    if (p.kind !== 'junction') return p
+    const side = junctionSide(dims, p.lanes)
+    if (Math.abs(p.length - side) < 1e-9) return p
+    changed = true
+    return { ...p, length: side }
+  })
+  return changed ? out : pieces
+}
+
+/** A fresh, unjoined set of links — one entry per way onto a piece. */
+const noLinks = (): Piece['links'] => ({ a: null, b: null, l: null, r: null })
+
+/** And the clips that go with them: none, until a joint is made. */
+const noConnectors = (): Piece['connectors'] => ({ a: false, b: false, l: false, r: false })
 
 /** The given end, or null when it is missing or already joined. */
 function freePort(pieces: Piece[], at: { pieceId: string; port: PortId } | null) {
@@ -439,12 +509,22 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
     saveUnits(units)
     set({ units })
   },
-  setDims: (patch) => set((s) => ({ dims: { ...s.dims, ...patch } })),
+  // A junction is sized in lane pitches, so a dimension change can resize one.
+  setDims: (patch) =>
+    set((s) => {
+      const dims = { ...s.dims, ...patch }
+      return { dims, pieces: syncJunctions(s.pieces, dims) }
+    }),
   setDimValue: (group, field, value) =>
-    set((s) => ({
-      dims: { ...s.dims, [group]: { ...(s.dims[group] as object), [field]: value } } as Dimensions,
-    })),
-  resetDims: () => set({ dims: DEFAULT_DIMENSIONS }),
+    set((s) => {
+      const dims = {
+        ...s.dims,
+        [group]: { ...(s.dims[group] as object), [field]: value },
+      } as Dimensions
+      return { dims, pieces: syncJunctions(s.pieces, dims) }
+    }),
+  resetDims: () =>
+    set((s) => ({ dims: DEFAULT_DIMENSIONS, pieces: syncJunctions(s.pieces, DEFAULT_DIMENSIONS) })),
 
   addPiece: (init = {}, opts = {}) => {
     const state = get()
@@ -455,11 +535,11 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
     if (target) {
       const host = state.pieces.find((p) => p.id === target.pieceId)
       if (host && !host.links[target.port]) {
-        const frame = worldPortFrame(host, target.port)
-        const t = transformToMate(piece, 'a', frame)
+        const frame = worldPortFrame(host, target.port, state.dims)
+        const t = transformToMate(piece, 'a', frame, state.dims)
         piece.position = t.position
         piece.rotation = t.rotation
-        piece.links = { a: { pieceId: host.id, port: target.port }, b: null }
+        piece.links = { ...noLinks(), a: { pieceId: host.id, port: target.port } }
         piece.connectors = { ...piece.connectors, a: true }
         set((s) => ({
           pieces: [
@@ -492,13 +572,18 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
 
   updatePiece: (id, patch) =>
     set((s) => {
-      let pieces = s.pieces.map((p) => (p.id === id ? { ...p, ...patch } : p))
+      let pieces = syncJunctions(
+        s.pieces.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+        s.dims,
+      )
       // A joint only fits when both sides are the same width, so a width change
       // is carried out through the run rather than left as a step.
       if (WIDTHS.some((k) => k in patch)) pieces = refitFromWidth(pieces, id, patch)
       // Resizing a piece moves the end its neighbour is clipped to, so the rest
       // of the assembly has to follow or the two would overlap.
-      return { pieces: RESHAPES.some((k) => k in patch) ? reflowFrom(pieces, id) : pieces }
+      return {
+        pieces: RESHAPES.some((k) => k in patch) ? reflowFrom(pieces, id, s.dims) : pieces,
+      }
     }),
 
   insertTransition: (at) => {
@@ -527,11 +612,15 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
 
     // Sit the new part on the host's end, then carry the far side along to meet
     // its other end so the joints beyond the neighbour hold.
-    const seat = transformToMate(piece, 'a', worldPortFrame(host, at.port))
+    const seat = transformToMate(piece, 'a', worldPortFrame(host, at.port, dims), dims)
     piece.position = seat.position
     piece.rotation = seat.rotation
-    piece.links = { a: { pieceId: host.id, port: at.port }, b: { pieceId: neighbour.id, port: link.port } }
-    piece.connectors = { a: true, b: true }
+    piece.links = {
+      ...noLinks(),
+      a: { pieceId: host.id, port: at.port },
+      b: { pieceId: neighbour.id, port: link.port },
+    }
+    piece.connectors = { ...noConnectors(), a: true, b: true }
 
     const severed = pieces.map((p) =>
       p.id === host.id ? { ...p, links: { ...p.links, [at.port]: null } } : p,
@@ -540,7 +629,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
     // A closed loop would otherwise drag the host along with the far side.
     group.delete(host.id)
 
-    const moved = transformToMate(neighbour, link.port, worldPortFrame(piece, 'b'))
+    const moved = transformToMate(neighbour, link.port, worldPortFrame(piece, 'b', dims), dims)
     const delta = pieceMatrix({ ...neighbour, ...moved }).multiply(pieceMatrix(neighbour).invert())
 
     set({
@@ -580,17 +669,14 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
         .filter((p) => !gone.has(p.id))
         .map((p) => {
           const orphaned = (port: PortId) => !!p.links[port] && gone.has(p.links[port]!.pieceId)
-          return {
-            ...p,
-            links: {
-              a: orphaned('a') ? null : p.links.a,
-              b: orphaned('b') ? null : p.links.b,
-            },
-            connectors: {
-              a: orphaned('a') ? false : p.connectors.a,
-              b: orphaned('b') ? false : p.connectors.b,
-            },
+          const links = { ...p.links }
+          const connectors = { ...p.connectors }
+          for (const port of PORT_IDS) {
+            if (!orphaned(port)) continue
+            links[port] = null
+            connectors[port] = false
           }
+          return { ...p, links, connectors }
         }),
       selection: { pieceIds: [], anchor: 'middle' },
       activePort: null,
@@ -609,8 +695,8 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       const copy = makePiece(dims, {
         ...p,
         name: `${p.name} copy`,
-        links: { a: null, b: null },
-        connectors: { a: false, b: false },
+        links: noLinks(),
+        connectors: noConnectors(),
       })
       idMap.set(p.id, copy.id)
       return copy
@@ -618,7 +704,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
     // A joint between two copied pieces is copied too, so duplicating a run of
     // track hands back a run of track rather than a pile of loose parts.
     copies.forEach((copy, i) => {
-      for (const port of ['a', 'b'] as PortId[]) {
+      for (const port of portsOf(sources[i])) {
         const link = sources[i].links[port]
         const twin = link && idMap.get(link.pieceId)
         if (link && twin) {
@@ -642,8 +728,8 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
         copies.filter((c) => !c.links[other]).map((c) => ({ piece: c, port: other }))[0]
 
       if (mate) {
-        const frame = worldPortFrame(host, target.port)
-        const t = transformToMate(mate.piece, mate.port, frame)
+        const frame = worldPortFrame(host, target.port, dims)
+        const t = transformToMate(mate.piece, mate.port, frame, dims)
         // Every copy rides the same transform, so the joints made above hold.
         const delta = pieceMatrix({ ...mate.piece, position: t.position, rotation: t.rotation }).multiply(
           pieceMatrix(mate.piece).invert(),
@@ -725,15 +811,15 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
   setActivePort: (activePort) => set({ activePort }),
 
   connectPorts: (a, b) => {
-    const { pieces, commit } = get()
+    const { pieces, dims, commit } = get()
     const pieceA = pieces.find((p) => p.id === a.pieceId)
     const pieceB = pieces.find((p) => p.id === b.pieceId)
     if (!pieceA || !pieceB || pieceA.id === pieceB.id) return
     if (pieceA.links[a.port] || pieceB.links[b.port]) return
     commit()
     // Move B's subtree onto A's port. A stays put.
-    const frame = worldPortFrame(pieceA, a.port)
-    const t = transformToMate(pieceB, b.port, frame)
+    const frame = worldPortFrame(pieceA, a.port, dims)
+    const t = transformToMate(pieceB, b.port, frame, dims)
     const before = new THREE.Matrix4().compose(
       new THREE.Vector3(...pieceB.position),
       new THREE.Quaternion().setFromEuler(new THREE.Euler(...pieceB.rotation, 'XYZ')),
@@ -798,7 +884,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
     const hostA = pieces.find((p) => p.id === a.pieceId)
     const hostB = pieces.find((p) => p.id === b.pieceId)
     if (!hostA || !hostB || hostA.links[a.port] || hostB.links[b.port]) return null
-    const gap = measureGap(pieces, a, b)
+    const gap = measureGap(pieces, a, b, dims)
     if (!gap) return null
 
     commit()
@@ -808,19 +894,19 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       color: hostA.color,
       connectorColor: hostA.connectorColor,
     })
-    const seat = transformToMate(piece, 'a', worldPortFrame(hostA, a.port))
+    const seat = transformToMate(piece, 'a', worldPortFrame(hostA, a.port, dims), dims)
     piece.position = seat.position
     piece.rotation = seat.rotation
-    piece.links = { a: { pieceId: hostA.id, port: a.port }, b: null }
-    piece.connectors = { a: true, b: false }
+    piece.links = { ...noLinks(), a: { pieceId: hostA.id, port: a.port } }
+    piece.connectors = { ...noConnectors(), a: true }
 
     // Two ends of one run are both pinned down, so the part has to span the gap
     // as it is. Two separate runs can be swung together, so anything closes.
-    const closes = !gap.sameRun || fitOf(spec, gap).exact
+    const closes = !gap.sameRun || fitOf(spec, gap, dims).exact
 
     let placed = pieces
     if (closes && !gap.sameRun) {
-      const moved = transformToMate(hostB, b.port, worldPortFrame(piece, 'b'))
+      const moved = transformToMate(hostB, b.port, worldPortFrame(piece, 'b', dims), dims)
       const delta = pieceMatrix({ ...hostB, ...moved }).multiply(pieceMatrix(hostB).invert())
       const group = collectGroup(pieces, hostB.id)
       placed = pieces.map((p) => (group.has(p.id) ? { ...p, ...applyMatrix(p, delta) } : p))
@@ -966,7 +1052,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       vehicleSizes: doc.vehicleSizes,
       vehicleFacing: doc.vehicleFacing,
       dims: doc.dims,
-      pieces: doc.pieces,
+      pieces: syncJunctions(doc.pieces, doc.dims),
       printer: preset.id === 'custom' ? { ...preset, size: doc.customPrinterSize } : preset,
       customPrinterSize: doc.customPrinterSize,
       gravity: doc.gravity,
@@ -1006,7 +1092,7 @@ export function widthMismatches(pieces: Piece[]): WidthMismatch[] {
   const byId = new Map(pieces.map((p) => [p.id, p]))
   const out: WidthMismatch[] = []
   for (const p of pieces) {
-    for (const port of ['a', 'b'] as PortId[]) {
+    for (const port of portsOf(p)) {
       const link = p.links[port]
       if (!link || p.id > link.pieceId) continue
       const other = byId.get(link.pieceId)
@@ -1076,8 +1162,10 @@ function refitFromWidth(pieces: Piece[], id: string, patch: Partial<Piece>): Pie
   if (start.kind === 'transition') {
     if ('lanes' in patch) offer(start, 'a')
     if ('lanesB' in patch) offer(start, 'b')
+    // A junction is the same width on all four of its sides, so a change to it
+    // is offered out of every one of them.
   } else if ('lanes' in patch) {
-    for (const port of ['a', 'b'] as PortId[]) offer(start, port)
+    for (const port of portsOf(start)) offer(start, port)
   }
 
   const settled = new Set<string>([start.id])
@@ -1103,14 +1191,12 @@ function refitFromWidth(pieces: Piece[], id: string, patch: Partial<Piece>): Pie
     if (!wave.fromTransition) continue
     settled.add(neighbour.id)
     refits.set(neighbour.id, { ...neighbour, lanes: wave.lanes })
-    // A straight or curve is the same width at both ends, so its far end now
-    // offers the new width to whatever is clipped beyond it.
-    queue.push({
-      pieceId: neighbour.id,
-      port: link.port === 'a' ? 'b' : 'a',
-      lanes: wave.lanes,
-      fromTransition: false,
-    })
+    // A straight, a curve or a junction is the same width all round, so its
+    // other ways on now offer the new width to whatever is clipped beyond them.
+    for (const port of portsOf(neighbour)) {
+      if (port === link.port) continue
+      queue.push({ pieceId: neighbour.id, port, lanes: wave.lanes, fromTransition: false })
+    }
   }
 
   return refits.size ? pieces.map((p) => refits.get(p.id) ?? p) : pieces

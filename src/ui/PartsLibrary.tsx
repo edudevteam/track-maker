@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Plus, X } from 'lucide-react'
-import { transitionName, useProject } from '../store/useProject'
+import { junctionName, transitionName, useProject } from '../store/useProject'
 import { Field, NumberInput, Segmented } from './controls'
 import { LengthInput, useUnits } from './units'
 import { laneWidth } from '../geometry/dimensions'
@@ -11,6 +11,7 @@ import {
   minTransitionLength,
   transitionCornerLimit,
 } from '../geometry/transition'
+import { junctionSide } from '../geometry/junction'
 import type { PartSpec, PieceKind } from '../types'
 
 /** Lanes are free-typed, so they need sane bounds. Widths are whole lanes. */
@@ -28,6 +29,7 @@ const CATALOGUE: { kind: PieceKind; name: string; blurb: string }[] = [
   { kind: 'straight', name: 'Straight', blurb: 'A flat run of any length.' },
   { kind: 'curve', name: 'Curve', blurb: 'A turn on a fixed radius.' },
   { kind: 'transition', name: 'Transition', blurb: 'Opens one width into the next.' },
+  { kind: 'junction', name: 'Junction', blurb: 'Opens one or both sides.' },
 ]
 
 /**
@@ -50,6 +52,11 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
   const [radius, setRadius] = useState(120)
   const [angleDeg, setAngleDeg] = useState(45)
   const [turn, setTurn] = useState<Turn>('left')
+  // A junction is a square whose side follows from its lanes, so the only thing
+  // to pick is which of its walls are open.
+  const [openLeft, setOpenLeft] = useState(true)
+  const [openRight, setOpenRight] = useState(true)
+  const junctionLen = junctionSide(dims, lanes)
   // A transition sizes itself to the step it has to make, until it is typed over.
   const [taperLength, setTaperLength] = useState<number | null>(null)
   const [cornerRadius, setCornerRadius] = useState<number | null>(null)
@@ -65,42 +72,26 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
   // Starts at whatever Dimensions says a new transition should round to.
   const corner = Math.min(Math.max(cornerRadius ?? dims.assembly.transitionCornerRadius, 0), cornerLimit)
 
+  const base = {
+    lanes,
+    lanesB,
+    length,
+    cornerRadius: corner,
+    flatEnd: flat,
+    radius,
+    angleDeg,
+    openLeft: false,
+    openRight: false,
+  }
+
   const spec: PartSpec =
     kind === 'curve'
-      ? {
-          kind,
-          lanes,
-          lanesB,
-          length,
-          cornerRadius: corner,
-          flatEnd: flat,
-          radius,
-          angleDeg: turn === 'left' ? angleDeg : -angleDeg,
-          name: `Curve ${angleDeg}°`,
-        }
+      ? { ...base, kind, angleDeg: turn === 'left' ? angleDeg : -angleDeg, name: `Curve ${angleDeg}°` }
       : kind === 'transition'
-        ? {
-            kind,
-            lanes,
-            lanesB,
-            length: taperLen,
-            cornerRadius: corner,
-            flatEnd: flat,
-            radius,
-            angleDeg,
-            name: transitionName(lanes, lanesB),
-          }
-        : {
-            kind,
-            lanes,
-            lanesB,
-            length,
-            cornerRadius: corner,
-            flatEnd: flat,
-            radius,
-            angleDeg,
-            name: `Straight ${fmt(length, 0)}`,
-          }
+        ? { ...base, kind, length: taperLen, name: transitionName(lanes, lanesB) }
+        : kind === 'junction'
+          ? { ...base, kind, length: junctionLen, openLeft, openRight, name: junctionName(openLeft, openRight) }
+          : { ...base, kind, name: `Straight ${fmt(length, 0)}` }
 
   const add = () => {
     addPiece({ ...spec })
@@ -175,6 +166,9 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
               lanesB={lanesB}
               rounding={cornerLimit > 0 ? corner / cornerLimit : 0}
               taperSpan={Math.max(0, taperLen - 2 * flat) / Math.max(1, taperLen)}
+              openSpan={(laneWidth(dims.track) * lanes) / Math.max(1, junctionLen)}
+              openLeft={openLeft}
+              openRight={openRight}
               angleDeg={angleDeg}
               turn={turn}
             />
@@ -243,6 +237,18 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
                 </Field>
                 <TaperField length={taperLen} value={flat} onChange={setFlatEnd} />
                 <CornerRoundingField value={corner} limit={cornerLimit} onChange={setCornerRadius} />
+              </>
+            ) : kind === 'junction' ? (
+              <>
+                <OpenSidesField
+                  left={openLeft}
+                  right={openRight}
+                  onChange={(l, r) => {
+                    setOpenLeft(l)
+                    setOpenRight(r)
+                  }}
+                />
+                <JunctionSizeNote lanes={lanes} />
               </>
             ) : kind === 'straight' ? (
               <Field label="Length">
@@ -437,6 +443,64 @@ export function CornerRoundingField({
   )
 }
 
+/**
+ * What size the junction comes out, and why it is not simply the track's width.
+ * There is nothing to set here — the tile is square and its side follows from
+ * the lanes — but the extra pitch is surprising enough to be worth saying.
+ */
+export function JunctionSizeNote({ lanes }: { lanes: number }) {
+  const dims = useProject((s) => s.dims)
+  const { fmt } = useUnits()
+  const side = junctionSide(dims, lanes)
+  return (
+    <Field label="Size" hint="A lane pitch wider than the track, so a clip fits on every side.">
+      <p className="text-[11px]" style={{ color: 'var(--color-ink-2)' }}>
+        {fmt(side)} square, with a {fmt(laneWidth(dims.track) * Math.max(1, Math.round(lanes)))} way
+        on and off each side.
+      </p>
+    </Field>
+  )
+}
+
+/**
+ * Which walls a junction has open. A part with neither open is a straight with
+ * extra fields, so picking one side off always leaves the other on.
+ */
+export function OpenSidesField({
+  left,
+  right,
+  onChange,
+}: {
+  left: boolean
+  right: boolean
+  onChange: (left: boolean, right: boolean) => void
+}) {
+  const options: { label: string; left: boolean; right: boolean }[] = [
+    { label: 'Left', left: true, right: false },
+    { label: 'Right', left: false, right: true },
+    { label: 'Both', left: true, right: true },
+  ]
+  return (
+    <Field label="Open sides" hint="Left and right as the driver sees them, running towards side B.">
+      <div className="grid grid-cols-3 gap-1">
+        {options.map((o) => (
+          <button
+            key={o.label}
+            className="tm-btn px-0"
+            aria-pressed={left === o.left && right === o.right}
+            style={
+              left === o.left && right === o.right ? { borderColor: 'var(--color-accent)' } : undefined
+            }
+            onClick={() => onChange(o.left, o.right)}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </Field>
+  )
+}
+
 /** One end's width, for the transition's pair of pickers. */
 function LaneField({
   label,
@@ -484,6 +548,12 @@ export function PartIcon({ kind }: { kind: PieceKind }) {
       {kind === 'transition' && (
         <path d="M3 10.5h8l4-5h8v15h-8l-4-5H3z" fill="var(--color-track)" />
       )}
+      {kind === 'junction' && (
+        <>
+          <path d="M3 13h20" stroke="var(--color-track)" strokeWidth={7} strokeLinecap="round" fill="none" />
+          <path d="M13 3v20" stroke="var(--color-track)" strokeWidth={7} strokeLinecap="round" fill="none" />
+        </>
+      )}
     </svg>
   )
 }
@@ -495,6 +565,9 @@ function Preview({
   lanesB,
   rounding,
   taperSpan,
+  openSpan,
+  openLeft,
+  openRight,
   angleDeg,
   turn,
 }: {
@@ -505,12 +578,55 @@ function Preview({
   rounding: number
   /** How much of the length the taper covers, 0 to 1. */
   taperSpan: number
+  /** How much of a junction's length the side opening covers, 0 to 1. */
+  openSpan: number
+  openLeft: boolean
+  openRight: boolean
   angleDeg: number
   turn: Turn
 }) {
   // A lane is 11px on screen, clamped so an 8-wide piece still fits the box.
   const bandFor = (n: number) => Math.min(46, 6 + n * 11)
   const band = bandFor(lanes)
+
+  if (kind === 'junction') {
+    // The run across the box with a branch coming off each open side, drawn the
+    // width it will actually take. Left is up here, as it is looking down on the
+    // track with side B to the right.
+    const span = 140 * Math.min(Math.max(openSpan, 0.05), 0.9)
+    return (
+      <div
+        className="mb-3 grid h-[104px] place-items-center rounded border"
+        style={{ background: 'var(--color-surface-2)', borderColor: 'var(--color-line)' }}
+      >
+        <svg width={190} height={92} viewBox="0 0 190 92" aria-hidden>
+          {openLeft && (
+            <path d={`M95 46V4`} stroke="var(--color-track)" strokeWidth={span} fill="none" opacity={0.55} />
+          )}
+          {openRight && (
+            <path d={`M95 46v42`} stroke="var(--color-track)" strokeWidth={span} fill="none" opacity={0.55} />
+          )}
+          <path d="M25 46h140" stroke="var(--color-track)" strokeWidth={band} fill="none" />
+          {laneLines(lanes).map((t) => (
+            <path
+              key={t}
+              d={`M25 ${46 + (t - 0.5) * band}h140`}
+              stroke="var(--color-surface)"
+              strokeWidth={1.5}
+              opacity={0.65}
+              fill="none"
+            />
+          ))}
+          <text x={170} y={49} fontSize={9} fill="var(--color-ink-2)">
+            B
+          </text>
+          <text x={13} y={49} fontSize={9} fill="var(--color-ink-2)">
+            A
+          </text>
+        </svg>
+      </div>
+    )
+  }
 
   if (kind === 'transition') {
     const a = band / 2

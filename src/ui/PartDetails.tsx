@@ -1,15 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
 import { Copy, Trash2 } from 'lucide-react'
 import { useProject } from '../store/useProject'
+import { portLabel, portsOf } from '../lib/ports'
 import { ColorInput, Field, NumberInput, Panel, Section, Segmented, Toggle } from './controls'
 import { LengthInput, useUnits } from './units'
-import { CornerRoundingField, LENGTH_PRESETS, MAX_LANES, TaperField } from './PartsLibrary'
+import {
+  CornerRoundingField,
+  JunctionSizeNote,
+  LENGTH_PRESETS,
+  MAX_LANES,
+  OpenSidesField,
+  TaperField,
+} from './PartsLibrary'
 import { laneWidth } from '../geometry/dimensions'
 import {
   defaultTransitionLength,
   minTransitionLength,
   transitionCornerLimit,
 } from '../geometry/transition'
+
+import { PORT_IDS } from '../types'
 import type { GizmoAnchor, Vec3 } from '../types'
 
 /**
@@ -68,7 +78,7 @@ function Properties() {
     for (const p of selected) updatePiece(p.id, patch)
   }
 
-  const joined = piece.links.a !== null || piece.links.b !== null
+  const joined = PORT_IDS.some((port) => piece.links[port] !== null)
   const cornerLimit = transitionCornerLimit(dims, {
     lanesA: piece.lanes,
     lanesB: piece.lanesB,
@@ -193,7 +203,18 @@ function Properties() {
           </>
         )}
 
-        {piece.kind === 'transition' ? null : piece.kind === 'straight' ? (
+        {piece.kind === 'junction' && (
+          <>
+            <OpenSidesField
+              left={piece.openLeft}
+              right={piece.openRight}
+              onChange={(openLeft, openRight) => set({ openLeft, openRight })}
+            />
+            <JunctionSizeNote lanes={piece.lanes} />
+          </>
+        )}
+
+        {piece.kind === 'transition' || piece.kind === 'junction' ? null : piece.kind === 'straight' ? (
           <>
             <Field label="Length" hint="Connector ends keep their width, so joins still fit.">
               <LengthInput
@@ -260,16 +281,16 @@ function Properties() {
         <Field label="Connector colour">
           <ColorInput value={piece.connectorColor} onChange={(connectorColor) => set({ connectorColor })} />
         </Field>
-        <Toggle
-          checked={piece.connectors.a}
-          onChange={(v) => set({ connectors: { ...piece.connectors, a: v } })}
-          label="Connector on side A"
-        />
-        <Toggle
-          checked={piece.connectors.b}
-          onChange={(v) => set({ connectors: { ...piece.connectors, b: v } })}
-          label="Connector on side B"
-        />
+        {/* One per way onto the piece, so a junction offers all four of its
+            sides rather than the two a straight has. */}
+        {portsOf(piece).map((port) => (
+          <Toggle
+            key={port}
+            checked={piece.connectors[port]}
+            onChange={(v) => set({ connectors: { ...piece.connectors, [port]: v } })}
+            label={`Connector on ${portLabel(port)}`}
+          />
+        ))}
       </Section>
 
       <Section title="Transform">

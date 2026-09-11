@@ -4,10 +4,16 @@ import type { Piece, PortId, VehicleSize } from '../types'
 import { arcFrames, mergeGeometries, straightFrames, sweepProfile } from './sweep'
 import { trackProfile } from './trackProfile'
 import { buildTransitionGeometry } from './transition'
+import { buildJunctionGeometry, type JunctionSpec } from './junction'
 import { chamferedPlan, loftPrism, type LoftLevel } from './loft'
 import { seatVehicleGeometry } from './vehicle'
 
 export { mergeGeometries }
+
+/** What a junction piece asks the geometry for. Its size follows from its lanes. */
+export function junctionSpecOf(piece: Pick<Piece, 'lanes' | 'openLeft' | 'openRight'>): JunctionSpec {
+  return { lanes: piece.lanes, openLeft: piece.openLeft, openRight: piece.openRight }
+}
 
 /** Geometry for a track piece, in its local frame (port `a` at the origin, +X down the centreline). */
 export function buildTrackGeometry(piece: Piece, d: Dimensions): THREE.BufferGeometry {
@@ -20,6 +26,7 @@ export function buildTrackGeometry(piece: Piece, d: Dimensions): THREE.BufferGeo
       flatEnd: piece.flatEnd,
     })
   }
+  if (piece.kind === 'junction') return buildJunctionGeometry(d, junctionSpecOf(piece))
   const profile = trackProfile(d, piece.lanes)
   const frames =
     piece.kind === 'curve'
@@ -28,10 +35,13 @@ export function buildTrackGeometry(piece: Piece, d: Dimensions): THREE.BufferGeo
   return sweepProfile(profile, frames)
 }
 
-/** Width in lanes at one end of a piece. Only a transition differs end to end. */
+/**
+ * Width in lanes at one way onto a piece. Only a transition differs end to end —
+ * a junction is the same width on all four of its sides.
+ */
 export function lanesAt(piece: Pick<Piece, 'kind' | 'lanes' | 'lanesB'>, port: PortId): number {
-  const n = piece.kind === 'transition' && port === 'b' ? piece.lanesB : piece.lanes
-  return Math.max(1, Math.round(n))
+  const second = piece.kind === 'transition' && port === 'b'
+  return Math.max(1, Math.round(second ? piece.lanesB : piece.lanes))
 }
 
 /**

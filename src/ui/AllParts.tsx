@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { Eye, EyeOff, Pencil, Plus, X } from 'lucide-react'
-import { useProject, kindName, widthMismatches } from '../store/useProject'
+import { useProject, junctionName, kindName, widthMismatches } from '../store/useProject'
 import { Panel } from './controls'
 import type { Piece } from '../types'
 
 /** What the piece is, shown after its name so a renamed piece still reads clearly. */
 const kindLabel = (p: Piece) =>
-  p.kind === 'transition' ? `Transition ${p.lanes}×→${p.lanesB}×` : kindName(p.kind)
+  p.kind === 'transition'
+    ? `Transition ${p.lanes}×→${p.lanesB}×`
+    : p.kind === 'junction'
+      ? junctionName(p.openLeft, p.openRight)
+      : kindName(p.kind)
 
 /**
  * Every piece on the workplane, one row each. The checkbox builds up a selection
