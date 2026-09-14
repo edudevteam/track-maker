@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import type { Dimensions } from './dimensions'
-import type { Pt2 } from './sweep'
+import { framePoint, straightFramesBetween, type Frame, type Pt2 } from './sweep'
 import { slotMetrics, wallMetrics } from './trackProfile'
 
 /**
@@ -225,23 +225,35 @@ export function wallCap(d: Dimensions, halfW: number, side: 'left' | 'right'): T
 }
 
 /**
- * Lifts profile-space triangles onto the plane at `x`, using the same mapping
- * the sweep uses so shared vertices land on exactly the same coordinates.
- * `flip` reverses the winding for a face whose outside points back along -X.
+ * Lifts profile-space triangles onto the plane at one station, through the same
+ * mapping the sweep uses so shared vertices land on exactly the same
+ * coordinates. `flip` reverses the winding for a face whose outside points back
+ * along the path rather than along it.
+ *
+ * Taking a frame rather than an x is what lets a pocket stop part-way round a
+ * curve: the wall closing it off is not on a plane of constant X.
  */
-export function capGeometry(tris: Tri[], x: number, flip: boolean): THREE.BufferGeometry {
+export function capGeometryAt(tris: Tri[], frame: Frame, flip: boolean): THREE.BufferGeometry {
   const positions: number[] = []
   const indices: number[] = []
   for (const tri of tris) {
     const base = positions.length / 3
     const ordered = flip ? [tri[0], tri[2], tri[1]] : tri
-    for (const p of ordered) positions.push(x, p.y, -p.x)
+    for (const p of ordered) {
+      const v = framePoint(frame, p)
+      positions.push(v.x, v.y, v.z)
+    }
     indices.push(base, base + 1, base + 2)
   }
   const geom = new THREE.BufferGeometry()
   geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
   geom.setIndex(indices)
   return geom
+}
+
+/** The same, at a station `x` along a piece that runs straight down +X. */
+export function capGeometry(tris: Tri[], x: number, flip: boolean): THREE.BufferGeometry {
+  return capGeometryAt(tris, straightFramesBetween(x, x)[0], flip)
 }
 
 /**

@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { laneWidth, type Dimensions } from './dimensions'
 import { slotMetrics, wallMetrics } from './trackProfile'
+import { snapClipShape } from './snapClip'
 
 /**
  * A junction — a square tile with a way on and off it on every side.
@@ -32,7 +33,7 @@ import { slotMetrics, wallMetrics } from './trackProfile'
  * an undercut wider than its mouth, so a section taken across the length
  * anywhere inside that undercut has a closed hole in it — material all the way
  * round a void. No single swept outline can say that, however the length is
- * carved up. So the tile is built the way the connector clip is: as horizontal
+ * carved up. So the tile is built as a stack of horizontal
  * bands. Every plan is rectilinear, so each band is a grid of cells that are
  * either solid or not, and the surface is whatever separates solid from empty.
  * That gives a watertight mesh by construction rather than by care.
@@ -57,14 +58,12 @@ export function maxJunctionClipLength(d: Dimensions): number {
 }
 
 /**
- * The clip a junction's joints take, mm.
- *
- * Shorter than the standard one, which does not fit: a 70mm clip reaches 35mm
- * into the tile from each of four sides, and there is nowhere near that much
- * room before the slots meet.
+ * The clip a junction's joints take, mm: the one clip, unless it has been made
+ * longer than the tile has room for. A clip reaches half its length into the
+ * tile from each of four sides, and past this two of the slots would meet.
  */
 export function junctionClipLength(d: Dimensions): number {
-  return Math.min(Math.max(8, d.assembly.junctionConnectorLength), maxJunctionClipLength(d))
+  return Math.min(snapClipShape(d).L, maxJunctionClipLength(d))
 }
 
 /** The side of the square, mm — one lane pitch more than the track it carries. */

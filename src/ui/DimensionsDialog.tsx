@@ -7,6 +7,7 @@ import { formatLength, unitNoun } from '../lib/units'
 import {
   DEFAULT_DIMENSIONS,
   floorTopY,
+  slotDepth,
   laneWidth,
   validateDimensions,
   wallStraightHeight,
@@ -30,24 +31,28 @@ const TRACK_FIELDS: DimField[] = [
   { key: 'wallAngleDeg', label: 'Wall angle', step: 1, kind: 'angle' },
   { key: 'slotOuterWidth', label: 'T-slot undercut width' },
   { key: 'slotMouthWidth', label: 'T-slot mouth width' },
+  { key: 'slotMouthDepth', label: 'T-slot mouth depth' },
   { key: 'slotCeiling', label: 'Material above slot' },
 ]
 
-const CONNECTOR_FIELDS: DimField[] = [
+const SNAP_FIELDS: DimField[] = [
   { key: 'length', label: 'Clip length', step: 1 },
+  { key: 'height', label: 'Height' },
   { key: 'bodyWidth', label: 'Body width' },
-  { key: 'bodyHeight', label: 'Body height' },
   { key: 'wingSpan', label: 'Wing span' },
-  { key: 'wingThickness', label: 'Wing thickness' },
-  { key: 'wingChamfer', label: 'Wing chamfer' },
-  { key: 'wingAngleDeg', label: 'Wing angle', step: 1, kind: 'angle' },
+  { key: 'wingStep', label: 'Wing ledge height' },
+  { key: 'wingTip', label: 'Wing tip (straight)' },
+  { key: 'wingChamfer', label: 'Wing top chamfer' },
   { key: 'endChamfer', label: 'End chamfer' },
+  { key: 'slotWidth', label: 'Relief slot width' },
+  { key: 'centreStripWidth', label: 'Centre strip width' },
+  { key: 'endBridge', label: 'Solid end length' },
   { key: 'holeCount', label: 'Hole count', step: 1, kind: 'count' },
-  { key: 'holeSpan', label: 'Hole span', step: 1 },
+  { key: 'holeInset', label: 'Hole inset from end' },
   { key: 'holeDia', label: 'Hole Ø' },
   { key: 'counterSinkDia', label: 'Countersink Ø' },
-  { key: 'counterSinkDepth', label: 'Countersink depth' },
-  { key: 'innerRingHeight', label: 'Inner ring height' },
+  { key: 'boreHeight', label: 'Bore below cone' },
+  { key: 'coneHeight', label: 'Countersink cone' },
 ]
 
 /**
@@ -149,35 +154,39 @@ export function DimensionsDialog({ onClose }: { onClose: () => void }) {
           </Section>
 
           <Section title="Connector clip">
+            <p className="mb-1.5 text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
+              The one clip every joint takes: the relief-slotted snap design measured off
+              SR2_Single_230116.stl, printed and confirmed to fit. It grips by its arms flexing across the
+              slot rather than by its height. Changing the clip never changes the track.
+            </p>
             <div className="grid grid-cols-2 gap-x-3">
-              {CONNECTOR_FIELDS.map((f) => (
+              {SNAP_FIELDS.map((f) => (
                 <DimensionField
                   key={f.key}
                   field={f}
-                  value={(draft.connector as unknown as Record<string, number>)[f.key]}
-                  onChange={(v) => setValue('connector', f.key, v)}
+                  value={(draft.snapClip as unknown as Record<string, number>)[f.key]}
+                  onChange={(v) => setValue('snapClip', f.key, v)}
                 />
               ))}
             </div>
+            <p className="text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
+              Wings {fmt(draft.snapClip.wingSpan - draft.track.slotOuterWidth, 3)} wider than the undercut ·{' '}
+              {fmt(slotDepth(draft) - draft.snapClip.height, 3)} gap under the clip in the{' '}
+              {fmt(slotDepth(draft), 3)} slot.
+            </p>
           </Section>
 
           <Section title="Assembly">
             <div className="grid grid-cols-2 gap-x-3">
-              <Field label="Connector inset" hint="How far the clip reaches into each piece.">
+              <Field
+                label="Connector inset"
+                hint="How far the slot pocket reaches into each end. The slab between the two pockets stays solid."
+              >
                 <LengthInput
                   value={draft.assembly.connectorInset}
                   step={1}
                   min={5}
                   onChange={(v) => setValue('assembly', 'connectorInset', v)}
-                />
-              </Field>
-              <Field label="Fit clearance" hint="Slop between clip and slot so prints assemble.">
-                <LengthInput
-                  value={draft.assembly.fitClearance}
-                  step={0.05}
-                  min={0}
-                  max={1}
-                  onChange={(v) => setValue('assembly', 'fitClearance', v)}
                 />
               </Field>
               <Field label="Default straight length">
@@ -189,17 +198,6 @@ export function DimensionsDialog({ onClose }: { onClose: () => void }) {
                 />
               </Field>
               <Field
-                label="Junction clip"
-                hint="The shorter clip a junction's four joints take. A standard clip will not fit."
-              >
-                <LengthInput
-                  value={draft.assembly.junctionConnectorLength}
-                  step={1}
-                  min={8}
-                  onChange={(v) => setValue('assembly', 'junctionConnectorLength', v)}
-                />
-              </Field>
-              <Field
                 label="Transition flat ends"
                 hint="Full-width run each end of a new transition keeps. Shorter tapers more slowly."
               >
@@ -208,6 +206,17 @@ export function DimensionsDialog({ onClose }: { onClose: () => void }) {
                   step={1}
                   min={0}
                   onChange={(v) => setValue('assembly', 'transitionFlatEnd', v)}
+                />
+              </Field>
+              <Field
+                label="Transition min flat end"
+                hint="The shortest full-width run a transition may keep at each end. A clip reaches half its length in, so keep this at least that."
+              >
+                <LengthInput
+                  value={draft.assembly.transitionMinFlatEnd}
+                  step={1}
+                  min={6}
+                  onChange={(v) => setValue('assembly', 'transitionMinFlatEnd', v)}
                 />
               </Field>
               <Field

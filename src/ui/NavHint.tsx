@@ -5,12 +5,12 @@ import { navState } from '../scene/Viewport'
  * The navigation hint in the bottom-right of the workplane: a mouse with the
  * button you are holding lit up, and the camera move it is doing named above it.
  *
- * The mapping is OrbitControls' own — left drag orbits, right drag pans, wheel
- * or middle drag zooms — so the graphic reads as documentation of the mouse the
- * user already has in their hand.
+ * The mapping matches the OrbitControls set up in the viewport — left or middle
+ * drag pans, right drag orbits, the wheel zooms — so the graphic reads as
+ * documentation of the mouse the user already has in their hand.
  */
 
-/** How far the pointer has to travel before a left press counts as an orbit. */
+/** How far the pointer has to travel before a left press counts as a pan. */
 const DRAG_PX = 3
 /** How long the wheel stays lit after the last notch, so a flick still registers. */
 const WHEEL_HOLD_MS = 500
@@ -18,10 +18,10 @@ const WHEEL_HOLD_MS = 500
 type NavAction = 'Rotate' | 'Zoom' | 'Pan'
 type Region = 'left' | 'wheel' | 'right'
 
-const REGION: Record<NavAction, Region> = { Rotate: 'left', Zoom: 'wheel', Pan: 'right' }
-
 export function NavHint() {
-  const [action, setAction] = useState<NavAction | null>(null)
+  const [nav, setNav] = useState<{ action: NavAction; region: Region } | null>(null)
+  const setAction = (action: NavAction | null, region: Region = 'left') =>
+    setNav(action ? { action, region } : null)
 
   useEffect(() => {
     // Null when no button is down on the canvas; otherwise the button number.
@@ -39,15 +39,15 @@ export function NavHint() {
       held = e.button
       startX = e.clientX
       startY = e.clientY
-      if (e.button === 1) setAction('Zoom')
-      else if (e.button === 2) setAction('Pan')
+      if (e.button === 1) setAction('Pan', 'wheel')
+      else if (e.button === 2) setAction('Rotate', 'right')
       // A left press waits for movement — a plain click only selects a part.
     }
 
     const onMove = (e: PointerEvent) => {
       if (held !== 0 || navState.gizmoDragging) return
       if (Math.hypot(e.clientX - startX, e.clientY - startY) < DRAG_PX) return
-      setAction('Rotate')
+      setAction('Pan', 'left')
     }
 
     const onUp = () => {
@@ -58,7 +58,7 @@ export function NavHint() {
 
     const onWheel = (e: WheelEvent) => {
       if (!onViewport(e.target)) return
-      setAction('Zoom')
+      setAction('Zoom', 'wheel')
       window.clearTimeout(wheelTimer)
       wheelTimer = window.setTimeout(() => setAction(null), WHEEL_HOLD_MS)
     }
@@ -81,7 +81,8 @@ export function NavHint() {
     }
   }, [])
 
-  const lit = action ? REGION[action] : null
+  const action = nav?.action ?? null
+  const lit = nav?.region ?? null
 
   return (
     <div

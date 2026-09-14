@@ -1,8 +1,9 @@
 import * as THREE from 'three'
 import type { Dimensions } from './dimensions'
 import type { Piece } from '../types'
-import { buildBlockGeometry, buildCarGeometry, buildConnectorGeometry, buildTrackGeometry } from './parts'
+import { buildBlockGeometry, buildCarGeometry, buildTrackGeometry } from './parts'
 import { REFERENCE_VEHICLE } from '../lib/carScales'
+import { buildSnapClipGeometry, snapClipShape } from './snapClip'
 
 /**
  * Geometry is rebuilt only when the inputs that actually shape it change, so
@@ -42,33 +43,13 @@ function trackKey(d: Dimensions): string {
     t.wallAngleDeg,
     t.slotOuterWidth,
     t.slotMouthWidth,
+    t.slotMouthDepth,
     t.slotCeiling,
-    d.connector.bodyHeight,
-    d.connector.wingThickness,
-    d.assembly.fitClearance,
-    // A transition sets its taper against the connector inset, and a junction
-    // sets how far its slots reach against the clip that goes in them.
+    // Where a plain piece's pockets stop, how short a transition's flat ends may
+    // be, and how far a junction's slots reach, which follows the clip's length.
     d.assembly.connectorInset,
-    d.assembly.junctionConnectorLength,
-  ].join('|')
-}
-
-function connectorKey(d: Dimensions): string {
-  const c = d.connector
-  return [
-    c.holeSpan,
-    c.holeCount,
-    c.holeDia,
-    c.counterSinkDia,
-    c.counterSinkDepth,
-    c.innerRingHeight,
-    c.bodyWidth,
-    c.bodyHeight,
-    c.wingThickness,
-    c.wingChamfer,
-    c.wingAngleDeg,
-    c.wingSpan,
-    c.endChamfer,
+    d.assembly.transitionMinFlatEnd,
+    d.snapClip.length,
   ].join('|')
 }
 
@@ -84,12 +65,13 @@ export function getTrackGeometry(piece: Piece, d: Dimensions): THREE.BufferGeome
   return take(`track|${shape}|${piece.lanes}|${trackKey(d)}`, () => buildTrackGeometry(piece, d))
 }
 
-export function getConnectorGeometry(d: Dimensions, length: number): THREE.BufferGeometry {
-  return take(`conn|${length}|${connectorKey(d)}`, () => buildConnectorGeometry(d, length))
-}
-
 export function getCarGeometry(d: Dimensions): THREE.BufferGeometry {
   return take(`car|${d.track.channelTopWidth}`, () => buildCarGeometry(d))
+}
+
+/** The connector clip, at its own length unless a joint asks for a shorter one. */
+export function getSnapClipGeometry(d: Dimensions, length = snapClipShape(d).L): THREE.BufferGeometry {
+  return take(`snap|${length}|${Object.values(d.snapClip).join('|')}`, () => buildSnapClipGeometry(d, length))
 }
 
 /** The placeholder block at its full reference size — a scale divides into it. */

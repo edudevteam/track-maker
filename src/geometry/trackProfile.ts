@@ -3,7 +3,11 @@ import type { Pt2 } from './sweep'
 import { Dimensions, floorTopY, laneWidth, slotDepth, slotMouthDepth } from './dimensions'
 
 /**
- * Builds the track cross-section for an N-lane piece.
+ * Builds the track cross-section for an N-lane piece, taken where the connector
+ * pocket is — i.e. within `connectorInset` of an end. The slab between the two
+ * pockets has no slot in it; `slotted = false` gives that section instead, with
+ * the same bottom-face vertices so the two can be stitched to each other where
+ * the pocket stops without leaving an edge split down one side.
  *
  * A 2-lane piece is two single tracks side by side with the shared middle walls
  * removed (per the plan and drawing 07), so only the two outermost walls survive
@@ -13,11 +17,10 @@ import { Dimensions, floorTopY, laneWidth, slotDepth, slotMouthDepth } from './d
  * Returned points are counter-clockwise in a plane where +x is across the track
  * (0 = centreline) and +y is up (0 = bottom face).
  */
-export function trackProfile(d: Dimensions, lanes: number): Pt2[] {
+export function trackProfile(d: Dimensions, lanes: number, slotted = true): Pt2[] {
   const t = d.track
-  const n = Math.max(1, Math.round(lanes))
-  const pitch = laneWidth(t)
-  const halfW = (pitch * n) / 2
+  const halfW = pieceWidth(d, lanes) / 2
+  const centres = slotCentres(d, lanes)
 
   const { slotH, mouthH, outerHalf, mouthHalf } = slotMetrics(d)
 
@@ -25,20 +28,36 @@ export function trackProfile(d: Dimensions, lanes: number): Pt2[] {
 
   // Bottom face, right to left, notched with one T-slot per lane.
   pts.push({ x: halfW, y: 0 })
-  for (let i = n - 1; i >= 0; i--) {
-    const c = -halfW + pitch * (i + 0.5)
+  for (let i = centres.length - 1; i >= 0; i--) {
+    const c = centres[i]
     pts.push({ x: c + mouthHalf, y: 0 })
-    pts.push({ x: c + mouthHalf, y: mouthH })
-    pts.push({ x: c + outerHalf, y: mouthH })
-    pts.push({ x: c + outerHalf, y: slotH })
-    pts.push({ x: c - outerHalf, y: slotH })
-    pts.push({ x: c - outerHalf, y: mouthH })
-    pts.push({ x: c - mouthHalf, y: mouthH })
+    if (slotted) {
+      pts.push({ x: c + mouthHalf, y: mouthH })
+      pts.push({ x: c + outerHalf, y: mouthH })
+      pts.push({ x: c + outerHalf, y: slotH })
+      pts.push({ x: c - outerHalf, y: slotH })
+      pts.push({ x: c - outerHalf, y: mouthH })
+      pts.push({ x: c - mouthHalf, y: mouthH })
+    }
     pts.push({ x: c - mouthHalf, y: 0 })
   }
   pts.push({ x: -halfW, y: 0 })
 
   return pts
+}
+
+/**
+ * The centre of each lane's slot across the section, mm from the centreline.
+ *
+ * The one place that arithmetic is done. A pocket's end wall has to land on the
+ * same coordinates the swept section put the slot at, and a slot edge that is
+ * out by a rounding step leaves a hairline crack rather than a shared edge.
+ */
+export function slotCentres(d: Dimensions, lanes: number): number[] {
+  const pitch = laneWidth(d.track)
+  const n = Math.max(1, Math.round(lanes))
+  const halfW = (pitch * n) / 2
+  return Array.from({ length: n }, (_, i) => -halfW + pitch * (i + 0.5))
 }
 
 /** Where the walls sit for a piece of half-width `halfW`. */

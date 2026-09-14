@@ -1,6 +1,7 @@
 import type { Piece, PortId } from '../types'
 import { junctionClipLength } from '../geometry/junction'
 import type { Dimensions } from '../geometry/dimensions'
+import { snapClipShape } from '../geometry/snapClip'
 
 /**
  * Whether this piece should draw the clip at `port`.
@@ -24,13 +25,13 @@ export function ownsConnector(piece: Piece, port: PortId): boolean {
 /**
  * How long the clip at this joint is, mm.
  *
- * A junction takes a shorter one on every side — the standard clip reaches
- * further into the tile than there is room for before two of its slots meet — and
- * the piece on the other side of the joint has to use the same one, since there
- * is only the one clip between them. `neighbour` is whatever is joined there, or
+ * Every joint takes the one clip. A junction only shortens it if the clip has
+ * been made longer than the tile has room for before two of its slots meet, and
+ * the piece on the other side of that joint uses the same one, since there is
+ * only the one clip between them. `neighbour` is whatever is joined there, or
  * nothing when the end is still open.
  */
 export function clipLength(piece: Piece, neighbour: Piece | undefined, d: Dimensions): number {
   const junction = piece.kind === 'junction' || neighbour?.kind === 'junction'
-  return junction ? junctionClipLength(d) : d.connector.length
+  return junction ? junctionClipLength(d) : snapClipShape(d).L
 }

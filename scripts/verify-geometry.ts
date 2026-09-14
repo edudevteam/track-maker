@@ -1,7 +1,8 @@
 import * as THREE from 'three'
-import { DEFAULT_DIMENSIONS, floorTopY, laneWidth, validateDimensions } from '../src/geometry/dimensions.ts'
-import { buildConnectorGeometry, buildTrackGeometry } from '../src/geometry/parts.ts'
-import { trackProfile, wallMetrics } from '../src/geometry/trackProfile.ts'
+import { DEFAULT_DIMENSIONS, floorTopY, laneWidth, validateDimensions, type Dimensions } from '../src/geometry/dimensions.ts'
+import { buildSnapClipGeometry, clipSeatY, snapClipShape, snapClipVolume } from '../src/geometry/snapClip.ts'
+import { buildTrackGeometry, plainVolume, plainZones } from '../src/geometry/parts.ts'
+import { slotMetrics, trackProfile, wallMetrics } from '../src/geometry/trackProfile.ts'
 import { signedArea } from '../src/geometry/sweep.ts'
 import {
   buildTransitionGeometry,
@@ -83,23 +84,92 @@ for (const lanes of [1, 2, 4]) {
   )
 }
 
+bar('against the measured part')
+// Every number below was measured off _models/Single-Track-V2.stl. These are
+// the dimensions the printed track actually has, so a drift here is a drift away
+// from something that fits real track. The clip is checked against its own part,
+// _models/SR2_Single_230116.stl, in the clip section.
+{
+  const t = d.track
+  const { slotH, mouthH, outerHalf, mouthHalf } = slotMetrics(d)
+  const { innerX, rampBottomX } = wallMetrics(t, laneWidth(t) / 2)
+  const checks: [string, number, number][] = [
+    ['lane pitch', laneWidth(t), 40.013],
+    ['wall thickness', t.wallThickness, 2.453],
+    ['inner wall face', innerX, 17.554],
+    ['channel floor half-width', rampBottomX, 16.281],
+    ['channel floor height', floorTopY(t), 6.4],
+    ['total height', t.totalHeight, 16.389],
+    ['slot mouth width', 2 * mouthHalf, 21.094],
+    ['slot mouth depth', mouthH, 3.211],
+    ['slot undercut width', 2 * outerHalf, 26.232],
+    ['slot total depth', slotH, 5.111],
+    ['material above slot', floorTopY(t) - slotH, 1.289],
+    // The clip sits up against the slot ceiling, so what the 4.647 clip leaves of
+    // the 5.111 slot is under it.
+    ['clip seat (gap under clip)', clipSeatY(d), 0.464],
+  ]
+  for (const [name, got, want] of checks) {
+    const off = Math.abs(got - want)
+    console.log(`${off < 2e-3 ? 'ok  ' : 'BAD '} ${name.padEnd(26)} ${got.toFixed(3)} (want ${want.toFixed(3)})`)
+  }
+}
+
 bar('track solids')
 for (const spec of [
-  { kind: 'straight' as const, lanes: 1, length: 100, radius: 0, angleDeg: 0 },
+  { kind: 'straight' as const, lanes: 1, length: 135, radius: 0, angleDeg: 0 },
   { kind: 'straight' as const, lanes: 2, length: 100, radius: 0, angleDeg: 0 },
+  // Longer than two insets, exactly two insets, and shorter — the last two have
+  // no solid middle left and must fall back to a slot running the whole way.
+  { kind: 'straight' as const, lanes: 1, length: 80, radius: 0, angleDeg: 0 },
+  { kind: 'straight' as const, lanes: 2, length: 50, radius: 0, angleDeg: 0 },
   { kind: 'curve' as const, lanes: 1, length: 0, radius: 120, angleDeg: 45 },
   { kind: 'curve' as const, lanes: 1, length: 0, radius: 120, angleDeg: -90 },
+  { kind: 'curve' as const, lanes: 2, length: 0, radius: 90, angleDeg: 180 },
+  { kind: 'curve' as const, lanes: 1, length: 0, radius: 60, angleDeg: 30 },
 ]) {
   const piece = { ...spec, id: 'x', name: 'x', position: [0, 0, 0], rotation: [0, 0, 0], color: '#fff', connectors: { a: true, b: true }, connectorColor: '#fff', links: { a: null, b: null }, visible: true, locked: false } as never
   const g = buildTrackGeometry(piece, d)
   const bb = g.boundingBox!
   const audit = edgeAudit(g)
-  const expected = spec.kind === 'straight' ? Math.abs(signedArea(trackProfile(d, spec.lanes))) * spec.length : null
+  const z = plainZones(d, spec)
+  const expected = plainVolume(d, piece)
+  const got = volume(g)
+  // A straight is swept exactly; a curve chords its revolve, so it comes out
+  // slightly under and the tolerance has to allow for the tessellation.
+  const tol = spec.kind === 'straight' ? 1e-6 : 2e-3
+  const off = Math.abs(got - expected) / expected
   console.log(
-    `${spec.kind} lanes=${spec.lanes} tris=${g.getIndex()!.count / 3}` +
-      ` vol=${volume(g).toFixed(1)}mm³${expected ? ` (expect ${expected.toFixed(1)})` : ''}` +
+    `${spec.kind} lanes=${spec.lanes} len=${z.length.toFixed(1)} zones=${z.zones.length}` +
+      `${z.through ? ' (slot runs through)' : ` pocket=${z.inset.toFixed(1)}`}` +
+      ` tris=${g.getIndex()!.count / 3}` +
+      ` vol=${got.toFixed(1)}mm³ (expect ${expected.toFixed(1)}, off ${(off * 100).toFixed(3)}% ${off <= tol ? 'ok' : 'BAD'})` +
       ` bbox=[${bb.min.toArray().map((n) => n.toFixed(1))}]→[${bb.max.toArray().map((n) => n.toFixed(1))}]` +
       ` nonManifoldEdges=${audit.nonManifold}/${audit.edges}`,
+  )
+  for (const s of audit.samples) console.log('  bad edge', s)
+}
+
+bar('the slot is a pocket, not a channel')
+for (const spec of [
+  { kind: 'straight' as const, lanes: 1, length: 135, radius: 0, angleDeg: 0 },
+  { kind: 'straight' as const, lanes: 2, length: 150, radius: 0, angleDeg: 0 },
+]) {
+  const piece = { ...spec, id: 'x', name: 'x', position: [0, 0, 0], rotation: [0, 0, 0], color: '#fff', connectors: { a: true, b: true }, connectorColor: '#fff', links: { a: null, b: null }, visible: true, locked: false } as never
+  const g = buildTrackGeometry(piece, d)
+  const pos = g.getAttribute('position')
+  const { slotH } = slotMetrics(d)
+  const inset = plainZones(d, spec).inset
+  // Every vertex at slot-ceiling height is inside a pocket, so the furthest one
+  // in says where the pocket stops.
+  let deepest = 0
+  for (let i = 0; i < pos.count; i++) {
+    if (Math.abs(pos.getY(i) - slotH) > 1e-6) continue
+    deepest = Math.max(deepest, Math.min(pos.getX(i), spec.length - pos.getX(i)))
+  }
+  console.log(
+    `${spec.kind} lanes=${spec.lanes} len=${spec.length}: slot ceiling reaches ${deepest.toFixed(2)}` +
+      ` in from each end (pocket is ${inset.toFixed(2)}) ${Math.abs(deepest - inset) < 1e-6 ? 'ok' : 'BAD'}`,
   )
 }
 
@@ -214,7 +284,7 @@ for (const spec of [
 }
 
 bar('junction takes a clip on every side')
-console.log('junction clip   ', junctionClipLength(d).toFixed(1), 'mm (standard is', d.connector.length, 'mm)')
+console.log('junction clip   ', junctionClipLength(d).toFixed(1), 'mm (the clip is', snapClipShape(d).L, 'mm)')
 for (const lanes of [1, 2, 3, 4]) {
   const grid = junctionGrid(d, { lanes, openLeft: true, openRight: true })
   const outerHalf = d.track.slotOuterWidth / 2
@@ -296,13 +366,51 @@ for (const spec of [
   )
 }
 
-bar('connector clip')
-const c = buildConnectorGeometry(d)
-const cbb = c.boundingBox!
-const caudit = edgeAudit(c)
-console.log(
-  `tris=${c.getIndex()!.count / 3} vol=${volume(c).toFixed(1)}mm³` +
-    ` bbox=[${cbb.min.toArray().map((n) => n.toFixed(2))}]→[${cbb.max.toArray().map((n) => n.toFixed(2))}]` +
-    ` nonManifoldEdges=${caudit.nonManifold}/${caudit.edges}`,
-)
-for (const s of caudit.samples) console.log('  bad edge', s)
+bar('connector clip (snap)')
+{
+  // The 40mm clip as built, and the same design at the printed part's 70mm with
+  // three holes, which can be held against the part itself.
+  const replica: Dimensions = { ...d, snapClip: { ...d.snapClip, length: 70, holeCount: 3 } }
+  for (const [label, dims] of [
+    ['40mm', d],
+    ['70mm replica', replica],
+  ] as [string, Dimensions][]) {
+    const g = buildSnapClipGeometry(dims)
+    const s = snapClipShape(dims)
+    const bb = g.boundingBox!
+    const audit = edgeAudit(g)
+    const got = volume(g)
+    const want = snapClipVolume(dims)
+    const off = Math.abs(got - want) / want
+    console.log(
+      `${label} tris=${g.getIndex()!.count / 3} vol=${got.toFixed(1)}mm³ (expect ${want.toFixed(1)},` +
+        ` off ${(off * 100).toFixed(4)}% ${off < 1e-5 ? 'ok' : 'BAD'}) holes at [${s.holes.map((x) => x.toFixed(3))}]` +
+        ` bbox=[${bb.min.toArray().map((n) => n.toFixed(3))}]→[${bb.max.toArray().map((n) => n.toFixed(3))}]` +
+        ` nonManifoldEdges=${audit.nonManifold}/${audit.edges} ${audit.nonManifold === 0 ? 'ok' : 'BAD'}`,
+    )
+    for (const smp of audit.samples) console.log('  bad edge', smp)
+  }
+  // Against _models/SR2_Single_230116.stl. Its volume is 4662.5mm³; its holes are
+  // finer circles than the 32-sided ones here, which accounts for a few mm³.
+  const s = snapClipShape(replica)
+  const checks: [string, number, number, number][] = [
+    ['replica volume', volume(buildSnapClipGeometry(replica)), 4662.5, 0.005 * 4662.5],
+    ['body width', 2 * s.hb, 19.593, 2e-3],
+    ['wing span', 2 * s.hw, 26.611, 2e-3],
+    ['wing ledge', s.stepY, 3.211, 2e-3],
+    ['wing tip top', s.tipY, 3.847, 2e-3],
+    ['height', s.H, 4.647, 2e-3],
+    ['slot inner edge', s.stripHalf, 5.0965, 2e-3],
+    ['slot outer edge', s.slotOuter, 8.1955, 2e-3],
+    ['slots start', s.bridge, 3, 2e-3],
+    ['end chamfer', s.endChamfer, 3.407, 2e-3],
+    ['top face corner', s.endChamfer - s.inset, 2.607, 2e-3],
+    ['first hole', s.holes[0], 10.845, 5e-3],
+    ['middle hole', s.holes[1], 35.001, 5e-3],
+    ['last hole', s.holes[2], 59.157, 5e-3],
+    ['countersink Ø', 2 * s.csR, 8.5, 5e-3],
+  ]
+  for (const [name, got, want, tol] of checks) {
+    console.log(`${Math.abs(got - want) <= tol ? 'ok  ' : 'BAD '} ${name.padEnd(18)} ${got.toFixed(3)} (SR2 ${want.toFixed(3)})`)
+  }
+}

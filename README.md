@@ -42,7 +42,9 @@ boxes. Each box is one plate; a run that overflows one box picks up another.
 
 **Export.** The Export button writes the selection or the whole build. 3MF keeps
 per-part colour, which is what you want for a multi-material printer. STL and OBJ
-are there for everything else.
+are there for everything else. **Clip only** writes a single connector clip
+lying flat. There is one clip: the 40mm relief-slotted snap clip measured off
+`SR2_Single_230116.stl`, which every joint takes.
 
 **Tune the dimensions.** The **Dims** tab exposes every dimension of the track
 profile and the connector clip. Change a value and every piece rebuilds. See
@@ -61,14 +63,17 @@ than read straight off the drawings.
 ## How it works
 
 Parts are generated, not imported. A track piece is a 2D cross-section swept
-along a straight or an arc; the connector clip is a stack of plan-view outlines
-lofted into a solid with conical countersunk bores. No boolean kernel is
-involved, which is why length, radius, angle and lane count are all free
-parameters.
+along a straight or an arc — in three runs, because the connector slot is a
+pocket at each end rather than a channel through the piece, so the section
+carries its T-slots near the ends and is solid slab in the middle. The connector
+clip is built face by face from horizontal layers — body, wing ledge, wing tips,
+top chamfer — with its relief slots and countersunk holes cut straight through.
+No boolean kernel is involved, which is why length, radius, angle and lane count
+are all free parameters.
 
 ```
 src/
-  geometry/   dimensions, cross-sections, sweep and loft, part builders, cache
+  geometry/   dimensions, cross-sections, sweep, part and clip builders, cache
   lib/        port frames and mating maths, print-volume tiling
   scene/      react-three-fiber viewport, pieces, print boxes, car, sky
   ui/         panels, controls, export dialog
@@ -107,8 +112,13 @@ scaled to the size set in Settings ▸ Vehicle, and still wearing the colours it
 file carried. Build and run it the same way. 3MF is not covered: its loader reads
 the package with the browser's XML parser, which node has none of.
 
-## Source drawings
+## Source drawings and reference parts
 
-`Plan/Plan.md` is the brief. `Plan/media/` holds the Fusion screenshots the
-dimensions were read from; `CHANGELOG.md` maps each dimension to its drawing and
-lists the readings that could not be reconciled.
+`Plan/Plan.md` is the brief and `Plan/media/` holds the Fusion screenshots the
+dimensions were first read from, but the drawings are no longer what the numbers
+come from. The defaults in `src/geometry/dimensions.ts` are measured off Fusion
+STL exports of the real parts — `Single-Track-V2.stl` for the track and
+`SR2_Single_230116.stl` for the clip, kept
+locally in `_models/`, which is not tracked — and `verify-geometry.ts` checks the
+built geometry back against those measurements. Two drawing readings turned out
+to be wrong, and `CHANGELOG.md` records which.

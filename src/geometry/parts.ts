@@ -1,11 +1,20 @@
 import * as THREE from 'three'
-import type { Dimensions } from './dimensions'
+import { connectorInset, type Dimensions } from './dimensions'
 import type { Piece, PortId, VehicleSize } from '../types'
-import { arcFrames, mergeGeometries, straightFrames, sweepProfile } from './sweep'
-import { trackProfile } from './trackProfile'
+import {
+  arcFramesBetween,
+  arcLength,
+  ensureOutwardWinding,
+  mergeGeometries,
+  signedArea,
+  straightFramesBetween,
+  sweepSections,
+  type Frame,
+} from './sweep'
+import { slotCentres, slotMetrics, trackProfile } from './trackProfile'
+import { at, capGeometryAt, ribbon, type Tri } from './section'
 import { buildTransitionGeometry } from './transition'
 import { buildJunctionGeometry, type JunctionSpec } from './junction'
-import { chamferedPlan, loftPrism, type LoftLevel } from './loft'
 import { seatVehicleGeometry } from './vehicle'
 
 export { mergeGeometries }
@@ -27,12 +36,141 @@ export function buildTrackGeometry(piece: Piece, d: Dimensions): THREE.BufferGeo
     })
   }
   if (piece.kind === 'junction') return buildJunctionGeometry(d, junctionSpecOf(piece))
-  const profile = trackProfile(d, piece.lanes)
-  const frames =
-    piece.kind === 'curve'
-      ? arcFrames(Math.max(1, piece.radius), piece.angleDeg)
-      : straightFrames(Math.max(1, piece.length))
-  return sweepProfile(profile, frames)
+  return buildPlainGeometry(d, piece)
+}
+
+/** A straight or a curve, as the distance along its centreline from end to end. */
+export function plainLength(piece: Pick<Piece, 'kind' | 'length' | 'radius' | 'angleDeg'>): number {
+  return piece.kind === 'curve'
+    ? arcLength(Math.max(1, piece.radius), piece.angleDeg)
+    : Math.max(1, piece.length)
+}
+
+/** Stations along the part of a plain piece's centreline between two distances. */
+function plainFrames(
+  piece: Pick<Piece, 'kind' | 'radius' | 'angleDeg'>,
+  s0: number,
+  s1: number,
+): Frame[] {
+  return piece.kind === 'curve'
+    ? arcFramesBetween(Math.max(1, piece.radius), piece.angleDeg, s0, s1)
+    : straightFramesBetween(s0, s1)
+}
+
+/** A solid middle shorter than this is not worth keeping, mm. */
+const MIN_SOLID_MIDDLE = 0.5
+
+/**
+ * The zones a plain straight or curve is built from.
+ *
+ * The connector slot is a pocket at each end rather than a channel running the
+ * whole way — the clip only ever reaches `connectorInset` in, and a slot cut
+ * past that is a hole in the underside that holds nothing and weakens the piece.
+ * So the section carries its slots for the first and last inset and is solid
+ * slab in between, with a wall stitched across each pocket where it stops.
+ *
+ * Exported so the geometry audit can integrate the section area along the length
+ * independently of the triangulation.
+ */
+export function plainZones(
+  d: Dimensions,
+  piece: Pick<Piece, 'kind' | 'lanes' | 'length' | 'radius' | 'angleDeg'>,
+) {
+  const length = plainLength(piece)
+  const inset = connectorInset(d, length)
+  const slotted = trackProfile(d, piece.lanes, true)
+  const solid = trackProfile(d, piece.lanes, false)
+  // Two pockets that meet leave no solid middle, so the slot runs the whole way
+  // and the piece is a single sweep again — which is all a piece that short has
+  // room for anyway.
+  const through = length - 2 * inset <= MIN_SOLID_MIDDLE
+  const zones = through
+    ? [{ s0: 0, s1: length, section: slotted }]
+    : [
+        { s0: 0, s1: inset, section: slotted },
+        { s0: inset, s1: length - inset, section: solid },
+        { s0: length - inset, s1: length, section: slotted },
+      ]
+  return { length, inset, through, slotted, solid, zones }
+}
+
+/**
+ * The wall that closes a pocket off where it stops short of the middle. Only the
+ * slot cross-sections are filled — the rest of that plane is solid on both sides.
+ *
+ * The mouth is narrower than the undercut, so each slot is two stacked bands
+ * rather than one rectangle, and the ledge between them is an edge the swept
+ * sides share.
+ */
+function pocketWall(d: Dimensions, lanes: number): Tri[] {
+  const { slotH, mouthH, outerHalf, mouthHalf } = slotMetrics(d)
+  const tris: Tri[] = []
+  for (const c of slotCentres(d, lanes)) {
+    // The mouth, bottom face up to where the undercut ledges out.
+    ribbon([at(c - mouthHalf, 0), at(c + mouthHalf, 0)], [at(c - mouthHalf, mouthH), at(c + mouthHalf, mouthH)], tris)
+    // The undercut above it. Its lower edge is split at the mouth so it meets
+    // the ledge either side without leaving an edge split down one face.
+    ribbon(
+      [at(c - outerHalf, mouthH), at(c - mouthHalf, mouthH), at(c + mouthHalf, mouthH), at(c + outerHalf, mouthH)],
+      [at(c - outerHalf, slotH), at(c + outerHalf, slotH)],
+      tris,
+    )
+  }
+  return tris
+}
+
+/** Geometry for a straight or a curve, port `a` at the origin and +X down the centreline. */
+function buildPlainGeometry(d: Dimensions, piece: Piece): THREE.BufferGeometry {
+  const z = plainZones(d, piece)
+  const last = z.zones.length - 1
+
+  // Each zone is capped only where it meets the outside world; the two pocket
+  // walls between them are built below, so the winding is settled once for the
+  // whole assembled solid.
+  const parts = z.zones.map((zone, i) => {
+    const frames = plainFrames(piece, zone.s0, zone.s1)
+    return sweepSections(
+      frames.map(() => zone.section),
+      frames,
+      i === 0,
+      i === last,
+      false,
+    )
+  })
+
+  if (!z.through) {
+    const wall = pocketWall(d, piece.lanes)
+    // The `a` pocket is behind its wall and the `b` pocket ahead of its own, so
+    // the two faces look opposite ways.
+    parts.push(capGeometryAt(wall, plainFrames(piece, z.inset, z.inset)[0], true))
+    parts.push(
+      capGeometryAt(wall, plainFrames(piece, z.length - z.inset, z.length - z.inset)[0], false),
+    )
+  }
+
+  const geom = mergeGeometries(parts.filter((g) => (g.getIndex()?.count ?? 0) > 0))
+  ensureOutwardWinding(geom)
+  geom.computeVertexNormals()
+  geom.computeBoundingBox()
+  geom.computeBoundingSphere()
+  for (const p of parts) p.dispose()
+  return geom
+}
+
+/**
+ * The volume a plain piece comes out to: each zone's section area times its own
+ * run along the centreline.
+ *
+ * Exact for a straight. For a curve it is the true revolve — the section is
+ * symmetric about the centreline, so by Pappus the centroid travels exactly the
+ * centreline distance — and the built mesh chords that revolve, so it comes out
+ * a little under. A straight's must be exact.
+ */
+export function plainVolume(d: Dimensions, piece: Piece): number {
+  return plainZones(d, piece).zones.reduce(
+    (sum, zone) => sum + Math.abs(signedArea(zone.section)) * (zone.s1 - zone.s0),
+    0,
+  )
 }
 
 /**
@@ -42,80 +180,6 @@ export function buildTrackGeometry(piece: Piece, d: Dimensions): THREE.BufferGeo
 export function lanesAt(piece: Pick<Piece, 'kind' | 'lanes' | 'lanesB'>, port: PortId): number {
   const second = piece.kind === 'transition' && port === 'b'
   return Math.max(1, Math.round(second ? piece.lanesB : piece.lanes))
-}
-
-/**
- * Geometry for the connector clip, lofted so the countersinks are true cones
- * (drawing 14) rather than stepped bores. Local origin is the clip's `a` end,
- * length along +X, width across +Z, y = 0 at its underside.
- */
-export function buildConnectorGeometry(d: Dimensions, length = d.connector.length): THREE.BufferGeometry {
-  const c = d.connector
-  const L = Math.max(4, length)
-  const wingBaseY = Math.max(0.2, c.bodyHeight - c.wingThickness)
-  const holeR = c.holeDia / 2
-  const csR = Math.max(holeR + 0.2, c.counterSinkDia / 2)
-  // Keep the cone inside the wing plate and above the straight inner ring.
-  const csDepth = Math.min(c.counterSinkDepth, c.bodyHeight - wingBaseY - 0.01, c.bodyHeight - c.innerRingHeight)
-  const coneStartY = c.bodyHeight - Math.max(0.05, csDepth)
-
-  const body = chamferedPlan(L, c.bodyWidth, Math.min(c.endChamfer, c.bodyWidth / 2 - 0.01))
-  const wing = chamferedPlan(L, c.wingSpan, Math.min(c.endChamfer, c.wingSpan / 2 - 0.01))
-
-  // Chamfer on the wing's top outer edge (drawing 09, 135°), so the clip leads
-  // into the track's undercut instead of catching on a square corner.
-  const wingRise = Math.min(
-    c.wingChamfer * Math.tan(THREE.MathUtils.degToRad(180 - c.wingAngleDeg)),
-    c.wingThickness * 0.8,
-  )
-  const chamferTopWidth = Math.max(c.bodyWidth, c.wingSpan - 2 * c.wingChamfer)
-  const wingTop = chamferedPlan(L, chamferTopWidth, Math.min(c.endChamfer, chamferTopWidth / 2 - 0.01))
-
-  const coneY = Math.max(wingBaseY, Math.min(coneStartY, c.bodyHeight - wingRise))
-  const chamferY = Math.max(coneY, c.bodyHeight - wingRise)
-  // The bore is already opening out where the wing chamfer starts, so interpolate.
-  const span = c.bodyHeight - coneY
-  const rAtChamfer = span > 1e-6 ? holeR + (csR - holeR) * ((chamferY - coneY) / span) : csR
-
-  const levels: LoftLevel[] = [
-    { y: 0, outline: body, holeRadius: holeR },
-    { y: wingBaseY, outline: body, holeRadius: holeR },
-    { y: wingBaseY, outline: wing, holeRadius: holeR },
-    { y: coneY, outline: wing, holeRadius: holeR },
-    { y: chamferY, outline: wing, holeRadius: rAtChamfer },
-    { y: c.bodyHeight, outline: wingTop, holeRadius: csR },
-  ]
-
-  return loftPrism(levels, holeCentres(d, L, csR))
-}
-
-/**
- * Countersink centres along the clip.
- *
- * The span is clamped so a countersink can never reach the clip's end edge —
- * tangency there makes the cap triangulation produce overlapping triangles and
- * a non-manifold mesh. `connectorHoleSpan` reports what was actually used.
- */
-export function holeCentres(d: Dimensions, length: number, csRadius: number): number[] {
-  const count = Math.max(0, Math.round(d.connector.holeCount))
-  if (count === 0) return []
-  if (count === 1) return [length / 2]
-  const span = connectorHoleSpan(d, length, csRadius)
-  const start = (length - span) / 2
-  return Array.from({ length: count }, (_, i) => start + (span * i) / (count - 1))
-}
-
-/** Hole span after clamping, so callers can warn when the drawing value doesn't fit. */
-export function connectorHoleSpan(d: Dimensions, length: number, csRadius: number): number {
-  return Math.max(0, Math.min(d.connector.holeSpan, length - 2 * (csRadius + CS_EDGE_MARGIN)))
-}
-
-/** Material left between a countersink and the end of the clip. */
-export const CS_EDGE_MARGIN = 1.0
-
-/** Radius the countersink opens out to, after guarding against a too-small hole. */
-export function counterSinkRadius(d: Dimensions): number {
-  return Math.max(d.connector.holeDia / 2 + 0.2, d.connector.counterSinkDia / 2)
 }
 
 /** Lateral offsets of each lane's T-slot centre at one end, in the piece's local frame. */

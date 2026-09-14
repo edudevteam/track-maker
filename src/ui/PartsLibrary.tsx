@@ -341,7 +341,7 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
 /**
  * How much of each end of a transition stays full width. The shorter the ends,
  * the more of the piece the taper gets, and the more slowly it opens. It cannot
- * go below half a clip — the clip would run out of slot to sit in.
+ * go below the minimum in Settings ▸ Dimensions, which leaves a clip slot to sit in.
  */
 export function TaperField({
   length,

@@ -5,8 +5,10 @@ import { useProject } from '../store/useProject'
 import { Field, Section, Segmented, Toggle } from './controls'
 import { downloadBlob, exportParts, type ExportFormat, type ExportPart } from '../export/exporters'
 import { safeBaseName } from '../export/project'
-import { getConnectorGeometry, getTrackGeometry } from '../geometry/cache'
+import { getSnapClipGeometry, getTrackGeometry } from '../geometry/cache'
+import { clipSeatY, snapClipShape } from '../geometry/snapClip'
 import { connectorOffsets } from '../geometry/parts'
+import { DEFAULT_CONNECTOR_COLOR } from '../geometry/dimensions'
 import { localPortFrame, pieceMatrix, portLabel, portsOf } from '../lib/ports'
 import { clipLength, ownsConnector } from '../lib/connectors'
 
@@ -20,12 +22,26 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const projectName = useProject((s) => s.projectName)
 
   const [format, setFormat] = useState<ExportFormat>('3mf')
+  const [what, setWhat] = useState<'track' | 'clip'>('track')
   const [scope, setScope] = useState<'all' | 'selected'>(selection.pieceIds.length ? 'selected' : 'all')
   const [includeConnectors, setIncludeConnectors] = useState(true)
   const [zUp, setZUp] = useState(true)
   const [busy, setBusy] = useState(false)
 
+  const clipLen = snapClipShape(dims).L
+
   const parts = useMemo(() => {
+    if (what === 'clip') {
+      // One clip on its own, centred on the origin with its underside on the bed.
+      return [
+        {
+          name: `Clip ${clipLen.toFixed(0)}mm`,
+          geometry: getSnapClipGeometry(dims),
+          matrix: new THREE.Matrix4().makeTranslation(-clipLen / 2, 0, 0),
+          color: DEFAULT_CONNECTOR_COLOR,
+        },
+      ] satisfies ExportPart[]
+    }
     const chosen = scope === 'selected' ? pieces.filter((p) => selection.pieceIds.includes(p.id)) : pieces
     const out: ExportPart[] = []
     for (const piece of chosen) {
@@ -42,12 +58,12 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         const link = piece.links[port]
         const neighbour = link ? pieces.find((p) => p.id === link.pieceId) : undefined
         const length = clipLength(piece, neighbour, dims)
-        const connGeom = getConnectorGeometry(dims, length)
+        const connGeom = getSnapClipGeometry(dims, length)
         const frame = localPortFrame(piece, port, dims)
         const outward = X_AXIS.clone().applyQuaternion(frame.quaternion)
         const lateral = Z_AXIS.clone().applyQuaternion(frame.quaternion)
         const origin = frame.position.clone().addScaledVector(outward, -length / 2)
-        origin.y = dims.assembly.fitClearance
+        origin.y = clipSeatY(dims)
         const offsets = connectorOffsets(piece, dims, port)
         offsets.forEach((v, index) => {
           const local = new THREE.Matrix4().compose(
@@ -68,7 +84,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
       }
     }
     return out
-  }, [pieces, dims, selection.pieceIds, scope, includeConnectors])
+  }, [pieces, dims, selection.pieceIds, scope, includeConnectors, what, clipLen])
 
   const triangles = useMemo(
     () =>
@@ -86,7 +102,8 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
     setTimeout(() => {
       try {
         const blob = exportParts(parts, format, zUp)
-        downloadBlob(blob, `${safeBaseName(projectName)}.${format}`)
+        const base = safeBaseName(projectName)
+        downloadBlob(blob, what === 'clip' ? `${base}-clip-${clipLen.toFixed(0)}mm.${format}` : `${base}.${format}`)
         onClose()
       } finally {
         setBusy(false)
@@ -129,17 +146,36 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         </Section>
 
         <Section title="Contents">
-          <Field label="Scope">
+          <Field label="Export">
             <Segmented
-              value={scope}
-              onChange={setScope}
+              value={what}
+              onChange={setWhat}
               options={[
-                { value: 'all' as const, label: `All (${pieces.length})` },
-                { value: 'selected' as const, label: `Selected (${selection.pieceIds.length})` },
+                { value: 'track' as const, label: 'Track', title: 'The pieces on the workplane' },
+                { value: 'clip' as const, label: 'Clip only', title: 'One connector clip on its own' },
               ]}
             />
           </Field>
-          <Toggle checked={includeConnectors} onChange={setIncludeConnectors} label="Include connector clips" />
+          {what === 'track' ? (
+            <>
+              <Field label="Scope">
+                <Segmented
+                  value={scope}
+                  onChange={setScope}
+                  options={[
+                    { value: 'all' as const, label: `All (${pieces.length})` },
+                    { value: 'selected' as const, label: `Selected (${selection.pieceIds.length})` },
+                  ]}
+                />
+              </Field>
+              <Toggle checked={includeConnectors} onChange={setIncludeConnectors} label="Include connector clips" />
+            </>
+          ) : (
+            <p className="mb-1.5 text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
+              A single {clipLen.toFixed(0)}mm connector clip — the snap clip every joint takes — lying flat
+              with its underside on the bed. Its size comes from Settings ▸ Dimensions ▸ Connector clip.
+            </p>
+          )}
           <Toggle
             checked={zUp}
             onChange={setZUp}

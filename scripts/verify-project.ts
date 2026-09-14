@@ -55,7 +55,7 @@ const back = parseProject(text)
 check('filename from project title', projectFileName(snapshot.projectName) === 'My-Big-Track.track.json', projectFileName(snapshot.projectName))
 check('name round-trips', back.name === snapshot.projectName)
 check('edited dimension round-trips', back.dims.track.totalHeight === 15.5)
-check('untouched dimension kept', back.dims.connector.holeSpan === DEFAULT_DIMENSIONS.connector.holeSpan)
+check('untouched dimension kept', back.dims.snapClip.holeInset === DEFAULT_DIMENSIONS.snapClip.holeInset)
 check('piece count', back.pieces.length === 2)
 check('pieces identical', JSON.stringify(back.pieces) === JSON.stringify(snapshot.pieces))
 check('printer round-trips', back.printerId === 'prusa-mk4')
@@ -66,11 +66,16 @@ check('vehicle round-trips', back.vehicle === 'diecast')
 
 // A file written before a dimension existed picks up today's default.
 const missingDim = JSON.parse(text)
-delete missingDim.dims.connector.holeSpan
+delete missingDim.dims.snapClip.holeInset
 delete missingDim.gravity
 delete missingDim.carTopSpeed
 const patched = parseProject(JSON.stringify(missingDim))
-check('missing dimension falls back to default', patched.dims.connector.holeSpan === DEFAULT_DIMENSIONS.connector.holeSpan)
+check('missing dimension falls back to default', patched.dims.snapClip.holeInset === DEFAULT_DIMENSIONS.snapClip.holeInset)
+// A file saved with the old clip's `connector` dimensions opens with the snap clip.
+const oldClip = JSON.parse(text)
+oldClip.dims.connector = { length: 70, wingSpan: 26.232, holeCount: 3 }
+delete oldClip.dims.snapClip
+check('old clip dimensions do not reach the snap clip', JSON.stringify(parseProject(JSON.stringify(oldClip)).dims.snapClip) === JSON.stringify(DEFAULT_DIMENSIONS.snapClip))
 check('missing gravity falls back to default', patched.gravity === 9810)
 check('missing top speed falls back to default', patched.carTopSpeed === DEFAULT_TOP_SPEED)
 const oldMeaning = JSON.parse(text)

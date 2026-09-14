@@ -75,6 +75,8 @@ export function Viewport() {
         dampingFactor={0.12}
         maxDistance={6000}
         minDistance={20}
+        // Left and middle drag pan, right drag orbits; the wheel still zooms.
+        mouseButtons={{ LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE }}
       />
       {/* Nothing to aim at while driving, and the cube would take the pointer. */}
       {!simulating && (
@@ -292,17 +294,24 @@ export interface ViewApi {
   frameSelected: () => void
 }
 
-/** Where the camera starts, and where Home puts it back. */
-export const HOME_CAMERA = new THREE.Vector3(240, 190, 260)
+/**
+ * Where the camera starts, and where Home puts it back.
+ *
+ * A low three-quarter view over the front-right corner: 45° round from the front
+ * and 15° above the ground, 400mm out from the origin. The shallow angle is what
+ * puts the far corner of the workplane near the top of the frame and runs the
+ * near edge off the bottom, so the grid reads as a floor rather than a plan.
+ */
+export const HOME_CAMERA = new THREE.Vector3(273, 104, 273)
 
 /** Set by the live Canvas; the toolbar calls into it. */
 export let viewApi: ViewApi | null = null
 
 /**
  * Shared with the navigation hint in the corner of the workplane. Dragging the
- * move/rotate handle is a left-button drag on the same canvas as an orbit, so
+ * move/rotate handle is a left-button drag on the same canvas as a pan, so
  * the hint needs to know the handle has the pointer or it reports a camera
- * rotation that never happened.
+ * move that never happened.
  */
 export const navState = { gizmoDragging: false }
 

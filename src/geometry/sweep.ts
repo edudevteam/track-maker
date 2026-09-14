@@ -14,6 +14,19 @@ export interface Frame {
 
 const UP = new THREE.Vector3(0, 1, 0)
 
+/**
+ * Where a profile-space point lands in the world at one station.
+ *
+ * The single definition of that mapping: profile +x runs along `up × tangent`
+ * and profile +y runs up. Anything that has to meet a swept surface exactly — a
+ * hand-built end face, the wall closing off a pocket — has to land on the same
+ * coordinates, so it goes through here rather than repeating the arithmetic.
+ */
+export function framePoint(f: Frame, p: Pt2): THREE.Vector3 {
+  const lateral = new THREE.Vector3().copy(UP).cross(f.tangent).normalize()
+  return new THREE.Vector3().copy(f.position).addScaledVector(lateral, p.x).addScaledVector(UP, p.y)
+}
+
 /** Signed area of a closed polygon. Positive when counter-clockwise. */
 export function signedArea(pts: Pt2[]): number {
   let a = 0
@@ -80,18 +93,8 @@ export function sweepSections(
   const positions: number[] = []
   const indices: number[] = []
 
-  const lateral = new THREE.Vector3()
-
   // Precompute the world position of every profile vertex at every station.
-  const rings: THREE.Vector3[][] = frames.map((f, i) => {
-    lateral.copy(UP).cross(f.tangent).normalize()
-    return polys[i].map((p) =>
-      new THREE.Vector3()
-        .copy(f.position)
-        .addScaledVector(lateral, p.x)
-        .addScaledVector(UP, p.y),
-    )
-  })
+  const rings: THREE.Vector3[][] = frames.map((f, i) => polys[i].map((p) => framePoint(f, p)))
 
   // Side strips: one per profile edge, vertices duplicated between strips.
   for (let e = 0; e < n; e++) {
@@ -204,10 +207,15 @@ export function mergeGeometries(geoms: THREE.BufferGeometry[]): THREE.BufferGeom
 
 /** Stations along a straight run of `length` starting at the origin, heading +X. */
 export function straightFrames(length: number): Frame[] {
-  return [
-    { position: new THREE.Vector3(0, 0, 0), tangent: new THREE.Vector3(1, 0, 0) },
-    { position: new THREE.Vector3(length, 0, 0), tangent: new THREE.Vector3(1, 0, 0) },
-  ]
+  return straightFramesBetween(0, length)
+}
+
+/** The same, over the part of the run between two distances along it. */
+export function straightFramesBetween(s0: number, s1: number): Frame[] {
+  return [s0, s1].map((s) => ({
+    position: new THREE.Vector3(s, 0, 0),
+    tangent: new THREE.Vector3(1, 0, 0),
+  }))
 }
 
 /**
@@ -215,18 +223,37 @@ export function straightFrames(length: number): Frame[] {
  * Positive `angleDeg` turns left (towards -Z); the centre sits at (0, 0, ∓radius).
  */
 export function arcFrames(radius: number, angleDeg: number, segments?: number): Frame[] {
-  const total = THREE.MathUtils.degToRad(Math.abs(angleDeg))
-  const sign = Math.sign(angleDeg) || 1
   const segs = segments ?? Math.max(6, Math.ceil(Math.abs(angleDeg) / 2.5))
+  return arcFramesBetween(radius, angleDeg, 0, arcLength(radius, angleDeg), segs)
+}
+
+/** How far it is along an arc from one end to the other. */
+export function arcLength(radius: number, angleDeg: number): number {
+  return radius * THREE.MathUtils.degToRad(Math.abs(angleDeg))
+}
+
+/**
+ * Stations over the part of an arc between two distances along it, `s` measured
+ * from the start. Splitting an arc this way is what lets a connector pocket stop
+ * part-way round a curve rather than only at a whole piece's end.
+ */
+export function arcFramesBetween(
+  radius: number,
+  angleDeg: number,
+  s0: number,
+  s1: number,
+  segments?: number,
+): Frame[] {
+  const sign = Math.sign(angleDeg) || 1
   // Left turn (+) curves toward -Z, so the centre is at z = -radius.
   const cz = -sign * radius
+  const span = Math.abs(s1 - s0)
+  const segs = segments ?? Math.max(1, Math.ceil(((span / Math.max(1e-9, radius)) * 180) / Math.PI / 2.5))
   const frames: Frame[] = []
   for (let i = 0; i <= segs; i++) {
-    const t = (i / segs) * total
-    const x = radius * Math.sin(t)
-    const z = cz + sign * radius * Math.cos(t)
+    const t = (s0 + ((s1 - s0) * i) / segs) / radius
     frames.push({
-      position: new THREE.Vector3(x, 0, z),
+      position: new THREE.Vector3(radius * Math.sin(t), 0, cz + sign * radius * Math.cos(t)),
       tangent: new THREE.Vector3(Math.cos(t), 0, -sign * Math.sin(t)).normalize(),
     })
   }

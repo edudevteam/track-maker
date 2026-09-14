@@ -3,8 +3,9 @@ import * as THREE from 'three'
 import type { ThreeEvent } from '@react-three/fiber'
 import type { Piece, PortId } from '../types'
 import { useProject } from '../store/useProject'
-import { getConnectorGeometry, getTrackGeometry } from '../geometry/cache'
+import { getSnapClipGeometry, getTrackGeometry } from '../geometry/cache'
 import { connectorOffsets, lanesAt } from '../geometry/parts'
+import { clipSeatY } from '../geometry/snapClip'
 import { laneWidth } from '../geometry/dimensions'
 import { localPortFrame, portsOf } from '../lib/ports'
 import { clipLength, ownsConnector } from '../lib/connectors'
@@ -64,7 +65,7 @@ function ConnectorAt({ piece, port }: { piece: Piece; port: PortId }) {
   const link = piece.links[port]
   const neighbour = useProject((s) => s.pieces.find((p) => p.id === link?.pieceId))
   const length = clipLength(piece, neighbour, dims)
-  const geometry = getConnectorGeometry(dims, length)
+  const geometry = getSnapClipGeometry(dims, length)
   const lanes = useMemo(() => connectorOffsets(piece, dims, port), [piece.kind, piece.lanes, piece.lanesB, port, dims])
 
   const placement = useMemo(() => {
@@ -73,7 +74,7 @@ function ConnectorAt({ piece, port }: { piece: Piece; port: PortId }) {
     const lateral = Z_AXIS.clone().applyQuaternion(frame.quaternion)
     const origin = frame.position.clone().addScaledVector(outward, -length / 2)
     // Push the wings up against the undercut ceiling; the body fills the mouth.
-    origin.y = dims.assembly.fitClearance
+    origin.y = clipSeatY(dims)
     return { origin, quaternion: frame.quaternion, lateral }
   }, [piece.kind, piece.lanes, piece.length, piece.radius, piece.angleDeg, port, length, dims])
 

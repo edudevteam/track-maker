@@ -70,11 +70,13 @@ interface Zone {
  * The shortest full-width run each end can keep.
  *
  * The clip is centred on the joint, so it reaches half its length into the
- * piece. The slot has to stay at full width for at least that far or the clip
- * runs out of slot and cannot seat.
+ * piece, and the slot has to stay full width for at least that far. The minimum
+ * is its own dimension rather than half the clip: it was set by the 70mm clip the
+ * track was designed round, and holding it there kept every transition the shape
+ * it was when the 40mm clip replaced that one.
  */
 export function minFlatEnd(d: Dimensions): number {
-  return Math.max(6, d.connector.length / 2)
+  return Math.max(6, d.assembly.transitionMinFlatEnd)
 }
 
 /** The longest full-width run, so a taper is always left in the middle. */

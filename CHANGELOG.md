@@ -20,6 +20,321 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.3.18] — 2026-09-14
+
+The 40mm snap clip printed and fits, so it is now the only clip. The geometry
+audit confirms every track piece is identical to 1.3.17.
+
+### Changed
+
+- **Every joint takes the snap clip.** Clips on the workplane, clips in a track
+  export and Export ▸ Clip only are all the 40mm relief-slotted snap clip, seated
+  against the slot ceiling with 0.464 left under it. Junctions take the same
+  40mm clip; one would only be shortened if the clip were made longer than a
+  junction has room for.
+- **Settings ▸ Dimensions ▸ Connector clip** now holds the snap clip's
+  measurements, the only clip settings there are.
+- Export ▸ Clip only has no clip picker any more. It writes the one clip, named
+  for example `project-clip-40mm.3mf`.
+
+### Added
+
+- **Transition min flat end** under Settings ▸ Dimensions ▸ Assembly, 35 by
+  default. It used to be half the 70mm clip. It is now its own setting, held at
+  35 so no transition changed shape. The 40mm clip only needs 20, so it can be
+  lowered to allow shorter flat ends, and a warning shows if it goes below half
+  the clip.
+
+### Removed
+
+- **The standard 70mm clip, the junction clip and the boxed clip**, with their
+  settings: the old Connector clip fields, **Junction clip** and **Boxed clip
+  length**.
+
+### Notes
+
+- A project saved before this version opens with the snap clip. Its old clip
+  measurements are ignored rather than read into the snap clip, and a test now
+  checks that.
+
+---
+
+## [1.3.17] — 2026-09-14
+
+Clip only. The geometry audit confirms every track piece, the standard clip and
+the boxed clip are identical to 1.3.16.
+
+### Added
+
+- **A 40mm snap clip.** Export ▸ Contents ▸ Clip only ▸ **Snap** writes the
+  relief-slotted clip measured off `SR2_Single_230116.stl`, a clip that has been
+  printed and holds, as a 40mm version. It grips across its width rather than its
+  height: the wings are 26.611 across, 0.379 wider than the track's undercut, and
+  two 3.099 relief slots cut through its full height let the outer arms flex in
+  as it goes home and press back out against the slot.
+  - 4.647 tall. The wings step out square from a 19.593 body onto a flat ledge at
+    3.211, run straight up 0.636 at the tips, then chamfer in 0.8 to the top.
+  - The lead-in chamfer (3.407) is on the wings only; the body is square-ended.
+  - The slots run the length of the clip bar a solid 3mm at each end, leaving a
+    10.193 centre strip for the screws.
+  - Two holes, one in each piece, 10.845 in from each end: Ø4 bore for 1.646, a
+    1.0 countersink cone, then an Ø8.5 counterbore to the top.
+- **Settings ▸ Dimensions ▸ Snap clip** holds every one of those measurements,
+  with a readout of how much wider the wings are than the undercut. It warns if
+  the wings stop being wider than the undercut, the slots leave no arm, a
+  countersink would break into a slot, or the clip is taller than the slot.
+- The Export dialog's clip buttons are now short names (Standard, Junction,
+  Boxed, Snap), and the note underneath gives the chosen clip's length.
+
+### Notes
+
+- The audit builds the same design at 70mm with three holes and checks it
+  against `SR2_Single_230116.stl`: every measurement matches, holes land at
+  10.845, 35.000 and 59.155 against the part's 10.845, 35.001 and 59.157, and the
+  volume is 4665.9mm³ against the part's 4662.5. The difference is the part's
+  finer hole circles.
+- The snap clip is export-only for now. Pieces on the workplane still show the
+  standard clip.
+
+---
+
+## [1.3.16] — 2026-09-14
+
+Clip only. The geometry audit confirms every track piece and the standard clip
+are identical to 1.3.15.
+
+### Added
+
+- **A 40mm boxed clip.** Export ▸ Contents ▸ Clip only ▸ **Boxed (40mm)** writes
+  a clip whose wings are square boxes: straight up to the top at the full 26.232
+  wing span, with no chamfer on their top outer edge, so more of each wing bears
+  in the undercut. Everything else matches the standard clip: the 2.00 wings on
+  3.211 of body, the sloped underside of each wing, the lead-in chamfers at each
+  end and the countersunk holes. The file is named, for example,
+  `project-clip-40mm-boxed.3mf`.
+- **Boxed clip length** under Settings ▸ Dimensions ▸ Assembly, 40 by default.
+
+### Notes
+
+- The underside of every clip's wings slopes out from the body rather than
+  stepping out square, which is the angle visible under the wings. The code had
+  described it as a square step; the description is corrected, and the shape is
+  unchanged since every clip printed so far has had it. The boxed clip keeps it,
+  and the audit now checks that both clips do.
+- The boxed clip is export-only for now. Pieces on the workplane still show the
+  standard clip.
+
+---
+
+## [1.3.15] — 2026-09-13
+
+Camera controls only. No geometry changed.
+
+### Changed
+
+- **New mouse controls in the workplane.** Right drag now rotates the view,
+  left drag and middle-button drag both pan, and the scroll wheel zooms as
+  before. A left click without dragging still selects a part, and dragging the
+  move/rotate handle still moves the part, not the camera.
+- The mouse hint in the bottom-right corner lights the button you are using and
+  names the move for the new controls.
+
+---
+
+## [1.3.14] — 2026-09-13
+
+Clip only. The geometry audit confirms every track piece is still identical to
+1.3.12.
+
+### Changed
+
+- **The clip's wings are 2.00, up from 1.75.** Clips printed from 1.3.13 were
+  better but still slid out. As before, the height is added upward from the
+  wings: the body under them stays 3.211, and the clip is now 5.211 tall.
+- **The clip is now a press fit.** At 5.211 it is 0.100 taller than the 5.111
+  slot, and its wings are 0.100 thicker than the 1.9 undercut. That is
+  deliberate: a printed clip comes out slightly under size, and whatever
+  interference is left becomes the grip. On screen the clip sits flush with the
+  track's underside.
+- Settings ▸ Dimensions now describes a clip bigger than its slot as a press fit
+  and gives the amount, rather than warning that it will not fit. The readout
+  under Connector clip does the same.
+
+### Notes
+
+- A project saved on 1.3.13 opens with the 1.75 clip. Set **Body height** to
+  5.211 and **Wing thickness** to 2.00, or press Reset to defaults.
+
+---
+
+## [1.3.13] — 2026-09-13
+
+The track parts from 1.3.12 printed correctly and are locked. This version
+changes only the clip, and the geometry audit confirms every track piece comes
+out identical to 1.3.12: same volumes, same bounding boxes, same slot.
+
+### Added
+
+- **Export a clip on its own.** Export ▸ Contents ▸ **Clip only** writes a single
+  clip, standard or junction length, lying flat and centred with its underside on
+  the bed. The file is named after the clip, for example
+  `project-clip-70mm.3mf`. It is a starting point for custom clips.
+
+### Changed
+
+- **The clip's wings are taller: 1.75 instead of 1.439.** Clips printed from
+  1.3.12 fitted but slid in and out and would not hold two pieces together. The
+  extra height is added upward from the wings, so the body under the wings stays
+  3.211 and the clip is now 4.961 tall. Seated against the slot ceiling, it leaves
+  0.150 under the clip instead of 0.461.
+- **The track's slot no longer depends on the clip.** Its depth used to be worked
+  out from the clip's height plus a fit clearance, so tuning the clip would have
+  reshaped every piece of track. The slot is now set by the track alone: the slab
+  less **Material above slot** for its depth, and a new **T-slot mouth depth**
+  (3.211) under Settings ▸ Dimensions ▸ Track profile.
+- Settings ▸ Dimensions ▸ Connector clip now shows how much room the clip leaves
+  in the slot, under the clip and under the wings, and warns if the clip is too
+  tall for the slot or its wings too thick for the undercut.
+
+### Removed
+
+- **Fit clearance** is gone from Settings ▸ Dimensions ▸ Assembly. It only ever
+  set the slot size, which now belongs to the track. Tune the fit by changing the
+  clip itself.
+
+### Notes
+
+- A project file saved before this version keeps the clip dimensions it was saved
+  with, so it opens with the old loose clip. Set **Body height** to 4.961 and
+  **Wing thickness** to 1.75 in Settings ▸ Dimensions, or press Reset to defaults.
+  The track defaults are the locked 1.3.12 values, so resetting does not change
+  the track.
+
+---
+
+## [1.3.12] — 2026-09-11
+
+Every dimension below was measured off the Fusion exports `Single-Track-V2.stl`
+and `Clip.stl` rather than read off the 2D drawings. The audit now checks the
+built geometry back against those measurements, so a drift shows up as a failure
+rather than as a bad print.
+
+### Fixed
+
+- **The T-slot is back.** Version 1.3.10 replaced it with a plain 1.5mm-deep
+  recess and a flat tab, on the reading that a Hot Wheels connector is a flat
+  tab. The real part is not: the slot is 21.09 wide for the first 3.21mm and
+  then opens out to a 26.23 undercut, and the clip is a T with wings that catch
+  in it. That change is entirely undone.
+- **Every piece was one ramp-run too narrow.** `Channel width (top)` was set to
+  32.561, which is the width of the **channel floor**, not the width between the
+  inner wall faces. Adding the wall thickness to it made a single lane 37.47
+  across instead of 40.01. Every piece on the workplane is 2.5mm wider now, and
+  a car has the room it should.
+- **The track is its real height and thickness.** Overall height 16.389 rather
+  than 14.378, and the slab under the channel 6.400 rather than the 6.05 that had
+  been guessed at to make a clip fit. The channel floor — what a car rides on —
+  sits 6.400 above the underside.
+
+### Changed
+
+- **The clip is the one that was printed.** 4.650 tall with 1.439 wings on a
+  26.23 span, its three holes centred at 11, 35 and 59 along the 70mm — a 48mm
+  span, not the 64 read off the drawing — and a 3.41 lead-in chamfer at each end.
+- **The screw hole is a bore, a cone and a counterbore**, in that order up the
+  clip: 1.65 of straight hole, 1.00 of cone, then 2.00 at the countersink
+  diameter so the head drops into a pocket instead of wedging on the cone. It
+  used to be a cone running all the way to the top. Settings ▸ Dimensions has
+  **Bore below cone**, **Countersink cone** and **Counterbore above cone** in
+  place of the old two fields, and says so when the three ask for more than the
+  clip is thick.
+- **Fit clearance is 0.461**, which is what makes the slot come out at the
+  measured 5.111 over a 4.650 clip, with the 3.211 mouth the clip's body needs.
+- **A new straight starts at 135mm**, the length of the sample piece.
+
+### Kept from 1.3.10
+
+- **The connector slot is still a pocket 40mm in from each end, not a channel.**
+  The sample confirms it: its underside is solid between 40 and 95 along a 135mm
+  piece. A piece with no middle left — 80mm or less — keeps the slot running
+  through.
+- A transition's full-width ends stay at 40mm, so its pocket stops where every
+  other part's does.
+
+### Notes
+
+- The generated clip is solid across its width. The printed one has two 3mm
+  relief slots running its length, which let the outer arms flex, and its wings
+  are 26.606 — 0.37 wider than the undercut, so it snaps in rather than slides.
+  The generated clip is set to the undercut width and slides; adding the relief
+  slots and the interference is still to do.
+
+---
+
+## [1.3.10] — 2026-09-11
+
+### Fixed
+
+- **The connector slot stops 40mm in from each end instead of running the whole
+  way through.** It was cut into the cross-section, and the cross-section is
+  swept from one end of a piece to the other, so every straight and every curve
+  came out with an open channel along its entire underside. The clip only ever
+  reaches 40mm in, so the rest of that channel held nothing — it just took
+  material out of the piece and left a slot on show along the bottom of the
+  track. There is now a pocket at each end and solid slab between them. A piece
+  too short to have a middle — 80mm or less at the standard inset — keeps the
+  slot running through, which is all the room it has.
+
+### Changed
+
+- **The connector is a flat 1.5mm tab, and the slot is a plain 1.5mm-deep
+  recess.** It was a 4.7mm T-section whose thin wings caught in an undercut: too
+  tall to fit real Hot Wheels track, and the wings were about a millimetre thick,
+  which neither prints reliably nor grips. Both are now the thickness a Hot
+  Wheels connector is. The opening on the underside is the same 21.09mm wide it
+  always was, and the tab is the same 19.6mm, so nothing about the width of the
+  joint has moved.
+- **Settings ▸ Dimensions has lost the wing fields** — wing span, thickness,
+  chamfer and angle, and the T-slot's separate undercut and mouth widths. A flat
+  tab in a flat slot has one width and one thickness, so what is left is
+  **Connector slot width**, **Tab width** and **Tab thickness**.
+- **A transition's full-width ends are 40mm by default rather than 35mm**, so its
+  pocket stops where every other part's does.
+- **The countersinks are shallower** — 1.1mm over a 0.4mm bore, because 2.2mm of
+  cone does not fit inside a 1.5mm tab. Wind them past what the tab will take and
+  the Dimensions panel says so and shortens the cone. A screw head now sits
+  part-way into the tab rather than flush with it.
+- **The Dimensions panel warns when the pocket is too short for the clip** — a
+  70mm clip reaches 35mm into each piece, so an inset below that means the clip
+  cannot seat.
+
+### Notes
+
+- The slab under the channel is still 6.05mm thick. It was raised above the
+  4.39mm the drawings imply to make room for the old 4.7mm clip; a 1.5mm tab no
+  longer needs that, so the track could come down to something nearer real Hot
+  Wheels thickness. It has been left alone because lowering it lowers the ride
+  height, and that is a separate decision.
+- The flat tab has no undercut, so nothing holds a joint together vertically
+  except the fit of the tab in the slot — which is how Hot Wheels track works,
+  but it is a change from what the T-section was doing.
+
+---
+
+## [1.3.11] — 2026-09-11
+
+### Changed
+
+- **Home drops to a low, ground-level view of the workplane.** It used to set the
+  camera down at a steepish three-quarter angle, looking at the grid from well
+  above it. It now sits 15° above the ground rather than 28°, still 45° round
+  from the front and the same distance out, so the far corner of the workplane
+  sits near the top of the frame and the near edge runs off the bottom — the grid
+  reads as a floor you are standing on rather than a plan you are looking down
+  at. The view the app opens in is the same one, since it starts at Home.
+
+---
+
 ## [1.3.9] — 2026-09-11
 
 ### Fixed
