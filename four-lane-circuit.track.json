@@ -1,0 +1,1166 @@
+{
+  "format": "track-maker",
+  "formatVersion": 1,
+  "app": "1.3.19",
+  "savedAt": "2026-09-21T23:09:37.158Z",
+  "name": "Four Lane Circuit",
+  "trackType": "car",
+  "vehicle": "diecast",
+  "vehicleSizes": {},
+  "vehicleFacing": {},
+  "dims": {
+    "track": {
+      "totalHeight": 16.389,
+      "wallThickness": 2.453,
+      "channelTopWidth": 35.107,
+      "slabThickness": 6.4,
+      "rampHeight": 3.5,
+      "wallAngleDeg": 110,
+      "slotOuterWidth": 26.232,
+      "slotMouthWidth": 21.094,
+      "slotMouthDepth": 3.211,
+      "slotCeiling": 1.289
+    },
+    "assembly": {
+      "connectorInset": 40,
+      "defaultStraightLength": 135,
+      "transitionCornerRadius": 0,
+      "transitionFlatEnd": 40,
+      "transitionMinFlatEnd": 35
+    },
+    "snapClip": {
+      "length": 40,
+      "height": 4.647,
+      "bodyWidth": 19.593,
+      "wingStep": 3.211,
+      "wingTip": 0.636,
+      "wingChamfer": 0.8,
+      "wingSpan": 26.611,
+      "endChamfer": 3.407,
+      "slotWidth": 3.099,
+      "centreStripWidth": 10.193,
+      "endBridge": 3,
+      "holeCount": 2,
+      "holeInset": 10.845,
+      "holeDia": 4,
+      "counterSinkDia": 8.5,
+      "boreHeight": 1.646,
+      "coneHeight": 1
+    }
+  },
+  "pieces": [
+    {
+      "id": "p01",
+      "name": "Start straight 1",
+      "kind": "straight",
+      "lanes": 4,
+      "lanesB": 4,
+      "length": 150,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 120,
+      "angleDeg": 0,
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p24",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p02",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p02",
+      "name": "Start straight 2",
+      "kind": "straight",
+      "lanes": 4,
+      "lanesB": 4,
+      "length": 150,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 120,
+      "angleDeg": 0,
+      "position": [
+        150,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p01",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p03",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p03",
+      "name": "Start straight 3",
+      "kind": "straight",
+      "lanes": 4,
+      "lanesB": 4,
+      "length": 150,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 120,
+      "angleDeg": 0,
+      "position": [
+        300,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p02",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p04",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p04",
+      "name": "Start straight 4",
+      "kind": "straight",
+      "lanes": 4,
+      "lanesB": 4,
+      "length": 150,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 120,
+      "angleDeg": 0,
+      "position": [
+        450,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p03",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p05",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p05",
+      "name": "Turn 1 1",
+      "kind": "curve",
+      "lanes": 4,
+      "lanesB": 4,
+      "length": 0,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 250,
+      "angleDeg": 45,
+      "position": [
+        600,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p04",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p06",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p06",
+      "name": "Turn 1 2",
+      "kind": "curve",
+      "lanes": 4,
+      "lanesB": 4,
+      "length": 0,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 250,
+      "angleDeg": 45,
+      "position": [
+        776.7766952966368,
+        0,
+        -73.22330470336311
+      ],
+      "rotation": [
+        0,
+        0.7853981633974484,
+        0
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p05",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p07",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p07",
+      "name": "Back straight 1",
+      "kind": "straight",
+      "lanes": 4,
+      "lanesB": 4,
+      "length": 177.929,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 120,
+      "angleDeg": 0,
+      "position": [
+        850,
+        0,
+        -250
+      ],
+      "rotation": [
+        0,
+        1.5707963267948966,
+        0
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p06",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p08",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p08",
+      "name": "Back straight 2",
+      "kind": "straight",
+      "lanes": 4,
+      "lanesB": 4,
+      "length": 177.929,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 120,
+      "angleDeg": 0,
+      "position": [
+        850,
+        0,
+        -427.929
+      ],
+      "rotation": [
+        0,
+        1.5707963267948966,
+        0
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p07",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p09",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p09",
+      "name": "Narrow to 3",
+      "kind": "transition",
+      "lanes": 4,
+      "lanesB": 3,
+      "length": 150,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 120,
+      "angleDeg": 0,
+      "position": [
+        850,
+        0,
+        -605.858
+      ],
+      "rotation": [
+        0,
+        1.5707963267948966,
+        0
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p08",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p10",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p10",
+      "name": "Turn 2",
+      "kind": "curve",
+      "lanes": 3,
+      "lanesB": 3,
+      "length": 0,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 200,
+      "angleDeg": 45,
+      "position": [
+        850,
+        0,
+        -755.858
+      ],
+      "rotation": [
+        0,
+        1.5707963267948966,
+        0
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p09",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p11",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p11",
+      "name": "Chicane link",
+      "kind": "straight",
+      "lanes": 3,
+      "lanesB": 3,
+      "length": 160,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 120,
+      "angleDeg": 0,
+      "position": [
+        791.4213562373095,
+        0,
+        -897.2793562373095
+      ],
+      "rotation": [
+        -3.141592653589793,
+        0.7853981633974485,
+        -3.141592653589793
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p10",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p12",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p12",
+      "name": "Turn 3",
+      "kind": "curve",
+      "lanes": 3,
+      "lanesB": 3,
+      "length": 0,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 200,
+      "angleDeg": 45,
+      "position": [
+        678.2842712474619,
+        3.344964568612554e-14,
+        -1010.4164412271571
+      ],
+      "rotation": [
+        -3.141592653589793,
+        0.7853981633974485,
+        -3.141592653589793
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p11",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p13",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p13",
+      "name": "Back to 4",
+      "kind": "transition",
+      "lanes": 3,
+      "lanesB": 4,
+      "length": 150,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 120,
+      "angleDeg": 0,
+      "position": [
+        536.8629150101524,
+        5.79425816690726e-14,
+        -1068.9950849898476
+      ],
+      "rotation": [
+        -3.141592653589793,
+        1.1102230246251568e-16,
+        -3.141592653589793
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p12",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p14",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p14",
+      "name": "Far straight 1",
+      "kind": "straight",
+      "lanes": 4,
+      "lanesB": 4,
+      "length": 151.95266666666666,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 120,
+      "angleDeg": 0,
+      "position": [
+        386.8629150101524,
+        7.63122836562829e-14,
+        -1068.9950849898476
+      ],
+      "rotation": [
+        -3.141592653589793,
+        1.1102230246251568e-16,
+        -3.141592653589793
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p13",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p15",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p15",
+      "name": "Far straight 2",
+      "kind": "straight",
+      "lanes": 4,
+      "lanesB": 4,
+      "length": 151.95266666666666,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 120,
+      "angleDeg": 0,
+      "position": [
+        234.91024834348573,
+        9.49211183418067e-14,
+        -1068.9950849898476
+      ],
+      "rotation": [
+        -3.141592653589793,
+        1.1102230246251568e-16,
+        -3.141592653589793
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p14",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p16",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p16",
+      "name": "Far straight 3",
+      "kind": "straight",
+      "lanes": 4,
+      "lanesB": 4,
+      "length": 151.95266666666666,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 120,
+      "angleDeg": 0,
+      "position": [
+        82.95758167681907,
+        1.1352995302733051e-13,
+        -1068.9950849898476
+      ],
+      "rotation": [
+        -3.141592653589793,
+        1.1102230246251568e-16,
+        -3.141592653589793
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p15",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p17",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p17",
+      "name": "Turn 4 1",
+      "kind": "curve",
+      "lanes": 4,
+      "lanesB": 4,
+      "length": 0,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 250,
+      "angleDeg": 45,
+      "position": [
+        -68.99508498984758,
+        1.321387877128543e-13,
+        -1068.9950849898476
+      ],
+      "rotation": [
+        -3.141592653589793,
+        1.1102230246251568e-16,
+        -3.141592653589793
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p16",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p18",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p18",
+      "name": "Turn 4 2",
+      "kind": "curve",
+      "lanes": 4,
+      "lanesB": 4,
+      "length": 0,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 250,
+      "angleDeg": 45,
+      "position": [
+        -245.77178028648444,
+        1.4482042054594514e-13,
+        -995.7717802864845
+      ],
+      "rotation": [
+        -3.141592653589793,
+        -0.7853981633974482,
+        -3.141592653589793
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p17",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p19",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p19",
+      "name": "Narrow to 3",
+      "kind": "transition",
+      "lanes": 4,
+      "lanesB": 3,
+      "length": 150,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 120,
+      "angleDeg": 0,
+      "position": [
+        -318.99508498984756,
+        1.4482042054594514e-13,
+        -818.9950849898477
+      ],
+      "rotation": [
+        3.586907429118598e-17,
+        -1.5707963057214724,
+        0
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p18",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p20",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p20",
+      "name": "Narrow straight",
+      "kind": "straight",
+      "lanes": 3,
+      "lanesB": 3,
+      "length": 200,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 120,
+      "angleDeg": 0,
+      "position": [
+        -318.9950818288339,
+        1.3944005940226724e-13,
+        -668.9950849898477
+      ],
+      "rotation": [
+        3.586907429118598e-17,
+        -1.5707963118937354,
+        0
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p19",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p21",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p21",
+      "name": "Back to 4",
+      "kind": "transition",
+      "lanes": 3,
+      "lanesB": 4,
+      "length": 150,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 120,
+      "angleDeg": 0,
+      "position": [
+        -318.9950788486016,
+        1.3226624454403006e-13,
+        -468.99508498984767
+      ],
+      "rotation": [
+        3.586907429118598e-17,
+        -1.5707963118937354,
+        0
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p20",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p22",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p22",
+      "name": "Turn 5",
+      "kind": "curve",
+      "lanes": 4,
+      "lanesB": 4,
+      "length": 0,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 220,
+      "angleDeg": 45,
+      "position": [
+        -318.9950766134274,
+        1.2688588340035215e-13,
+        -318.99508498984767
+      ],
+      "rotation": [
+        3.586907429118598e-17,
+        -1.5707963118937354,
+        0
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p21",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p23",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p23",
+      "name": "Sweep link",
+      "kind": "straight",
+      "lanes": 4,
+      "lanesB": 4,
+      "length": 140,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 120,
+      "angleDeg": 0,
+      "position": [
+        -254.55856615639115,
+        1.2130596498823292e-13,
+        -163.43159408898606
+      ],
+      "rotation": [
+        3.5869074291185974e-17,
+        -0.7853981484962868,
+        4.357881931115122e-33
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p22",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p24",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "p24",
+      "name": "Turn 6",
+      "kind": "curve",
+      "lanes": 4,
+      "lanesB": 4,
+      "length": 0,
+      "openLeft": false,
+      "openRight": false,
+      "cornerRadius": 0,
+      "flatEnd": 40,
+      "radius": 220,
+      "angleDeg": 45,
+      "position": [
+        -155.56361531513477,
+        1.177551078478794e-13,
+        -64.43664619800914
+      ],
+      "rotation": [
+        3.5869074291185974e-17,
+        -0.7853981484962868,
+        6.536822896672682e-33
+      ],
+      "color": "#e2622a",
+      "connectors": {
+        "a": true,
+        "b": true,
+        "l": false,
+        "r": false
+      },
+      "connectorColor": "#2f7fd1",
+      "links": {
+        "a": {
+          "pieceId": "p23",
+          "port": "b"
+        },
+        "b": {
+          "pieceId": "p01",
+          "port": "a"
+        },
+        "l": null,
+        "r": null
+      },
+      "visible": true,
+      "locked": false
+    }
+  ],
+  "printerId": "bambu-256",
+  "customPrinterSize": [
+    256,
+    256,
+    256
+  ],
+  "gravity": 9810,
+  "friction": 0.35,
+  "carTopSpeed": 1500
+}

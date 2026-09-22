@@ -7,8 +7,9 @@
  *   npx vite build --ssr scripts/verify-closure.ts --outDir node_modules/.vc --config /dev/null
  *   node node_modules/.vc/verify-closure.js
  */
-import { transformToMate, worldPortFrame } from '../src/lib/ports'
-import { fitOf, measureGap, suggestPart } from '../src/lib/closure'
+import { readFileSync } from 'node:fs'
+import { reflowFrom, transformToMate, worldPortFrame } from '../src/lib/ports'
+import { fitOf, measureGap, planAdjustment, suggestPart } from '../src/lib/closure'
 import { DEFAULT_DIMENSIONS } from '../src/geometry/dimensions'
 import type { PartSpec, Piece, PieceKind, PortId } from '../src/types'
 
@@ -122,6 +123,82 @@ roundTrip('transition 1x->2x', 'transition', {
   check('a transition takes both widths', spec.lanes === 3 && spec.lanesB === 2)
   const straight = suggestPart('straight', gap, DEFAULT_DIMENSIONS)
   check('a straight takes the near width at both ends', straight.lanes === 3 && straight.lanesB === 3)
+}
+
+// Closing a loop by resizing what is on it. The example circuit is opened at one
+// joint and knocked out of true, then the solver has to find sizes that close it.
+{
+  const D = DEFAULT_DIMENSIONS
+  const loop: Piece[] = JSON.parse(readFileSync('four-lane-circuit.track.json', 'utf8')).pieces
+  const first = loop[0]
+  const joint = first.links.a!
+  const open = loop.map((p) =>
+    p.id === first.id
+      ? { ...p, links: { ...p.links, a: null } }
+      : p.id === joint.pieceId
+        ? { ...p, links: { ...p.links, [joint.port]: null } }
+        : p,
+  )
+  const ends = { a: { pieceId: joint.pieceId, port: joint.port }, b: { pieceId: first.id, port: 'a' as PortId } }
+
+  const knock = (label: string, patches: Record<string, Partial<Piece>>, expectSweep: boolean) => {
+    const bent = reflowFrom(
+      open.map((p) => ({ ...p, ...patches[p.id] })),
+      first.id,
+      D,
+    )
+    const before = measureGap(bent, ends.a, ends.b, D)!
+    const t0 = performance.now()
+    const plan = planAdjustment(bent, ends.a, ends.b, D)
+    const ms = performance.now() - t0
+    if (!plan.ok) return check(label, false, plan.reason)
+    const fixed = reflowFrom(
+      bent.map((p) => {
+        const c = plan.changes.find((x) => x.pieceId === p.id)
+        return c ? { ...p, ...c.after } : p
+      }),
+      first.id,
+      D,
+    )
+    const after = measureGap(fixed, ends.a, ends.b, D)!
+    const fit = fitOf({ ...suggestPart('straight', after, D), length: 0 }, after, D)
+    const sweeps = plan.changes.some((c) => c.after.angleDeg !== c.before.angleDeg)
+    check(
+      label,
+      fit.exact && plan.changes.length <= 3 && sweeps === expectSweep,
+      `was ${before.distance.toFixed(2)}mm / ${before.turnDeg.toFixed(2)}° apart → ${fit.gap.toFixed(4)}mm / ` +
+        `${fit.angleDeg.toFixed(4)}° · ${plan.changes.length} piece(s) in ${ms.toFixed(0)}ms: ` +
+        plan.changes
+          .map((c) => {
+            const n = loop.find((p) => p.id === c.pieceId)!.name
+            return (['length', 'radius', 'angleDeg'] as const)
+              .filter((k) => c.after[k] !== c.before[k])
+              .map((k) => `${n} ${k} ${c.before[k]} → ${c.after[k]}`)
+              .join(', ')
+          })
+          .join('; '),
+    )
+  }
+
+  check('an intact loop needs nothing', (() => {
+    const plan = planAdjustment(open, ends.a, ends.b, D)
+    return plan.ok && plan.changes.length === 0
+  })())
+  knock('a straight 7mm too long is taken up by lengths', { [loop[1].id]: { length: 157 } }, false)
+  knock('a curve on a wider radius is taken up by lengths', { [loop[4].id]: { radius: 262 } }, false)
+  knock('a curve swept 3° too far needs a sweep', { [loop[5].id]: { angleDeg: 48 } }, true)
+  knock('a curve swept 2° short needs a sweep', { [loop[9].id]: { angleDeg: 43 } }, true)
+  knock(
+    'a sweep and a length off together',
+    { [loop[5].id]: { angleDeg: 51 }, [loop[13].id]: { length: 190 }, [loop[20].id]: { length: 120 } },
+    true,
+  )
+
+  // Two ends of different widths cannot be joined without a step.
+  const a3 = { pieceId: loop.find((p) => p.lanes === 3 && p.kind === 'straight')!.id, port: 'b' as PortId }
+  const cut = open.map((p) => (p.id === a3.pieceId ? { ...p, links: { ...p.links, b: null } } : p))
+  const plan = planAdjustment(cut, a3, ends.b, D)
+  check('ends of different widths are refused', !plan.ok, plan.ok ? '' : plan.reason)
 }
 
 console.log(failures ? `\n${failures} failure(s)` : '\nall checks passed')

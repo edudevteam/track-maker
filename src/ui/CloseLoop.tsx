@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Link2, TriangleAlert, X } from 'lucide-react'
+import { Check, Link2, MoveHorizontal, TriangleAlert, X } from 'lucide-react'
 import { transitionName, useProject } from '../store/useProject'
 import { Field, NumberInput, Segmented } from './controls'
 import { CornerRoundingField, MAX_LANES, PartIcon, TaperField } from './PartsLibrary'
@@ -15,6 +15,7 @@ import {
 import {
   fitOf,
   measureGap,
+  planAdjustment,
   score,
   suggestPart,
   widthNote,
@@ -23,11 +24,13 @@ import {
   RADIUS_LIMITS,
   SPAN_LIMITS,
   SWEEP_LIMITS,
+  type Adjustment,
+  type AdjustPlan,
   type Fit,
   type Gap,
   type PortRef,
 } from '../lib/closure'
-import type { PartSpec, PieceKind } from '../types'
+import type { PartSpec, Piece, PieceKind } from '../types'
 
 const KINDS: { kind: PieceKind; name: string; blurb: string }[] = [
   { kind: 'straight', name: 'Straight', blurb: 'Runs the ends together.' },
@@ -43,32 +46,51 @@ const KINDS: { kind: PieceKind; name: string; blurb: string }[] = [
  * with whether it really closes it. A part that does not is still worth having —
  * it lands on the first end with its far end free, so the run can be worked out
  * from there — so nothing here is hidden, only labelled.
+ *
+ * Two ends of one run can also be closed with no new part at all: the pieces
+ * already on the loop are resized until the ends meet, and they clip straight
+ * together. That is offered first whenever no part fits the hole as it is.
  */
 export function CloseLoop({ ends, onClose }: { ends: { a: PortRef; b: PortRef }; onClose: () => void }) {
   const pieces = useProject((s) => s.pieces)
   const dims = useProject((s) => s.dims)
   const closeGap = useProject((s) => s.closeGap)
+  const closeByAdjusting = useProject((s) => s.closeByAdjusting)
   const select = useProject((s) => s.select)
   const { fmt, val } = useUnits()
 
   const gap = useMemo(() => measureGap(pieces, ends.a, ends.b, dims), [pieces, ends, dims])
+  const plan = useMemo(
+    () => (gap?.sameRun ? planAdjustment(pieces, ends.a, ends.b, dims) : null),
+    [gap, pieces, ends, dims],
+  )
 
-  // Whichever part comes closest to closing it is the one already picked.
-  const [kind, setKind] = useState<PieceKind>(() => (gap ? bestKind(gap, dims) : 'straight'))
+  // A part that already spans the hole is the one to take — the gap was left for
+  // it. Failing that, resizing the loop is, and failing both the nearest part.
+  const [kind, setKind] = useState<Choice>(() =>
+    !gap ? 'straight' : spansExactly(gap, dims) ? bestKind(gap, dims) : plan?.ok ? 'adjust' : bestKind(gap, dims),
+  )
   const [edits, setEdits] = useState<Partial<PartSpec>>({})
 
-  const pick = (next: PieceKind) => {
+  const pick = (next: Choice) => {
     setKind(next)
     setEdits({})
   }
 
-  const spec = gap ? shaped({ ...suggestPart(kind, gap, dims), ...edits }, dims) : null
+  const adjusting = kind === 'adjust'
+  const spec = gap ? shaped({ ...suggestPart(adjusting ? 'straight' : kind, gap, dims), ...edits }, dims) : null
   const fit = gap && spec ? fitOf(spec, gap, dims) : null
   const step = gap && spec ? widthNote(spec, gap) : null
   const closes = !!gap && (!gap.sameRun || !!fit?.exact)
 
   const add = () => {
     if (!gap || !spec) return
+    if (adjusting) {
+      if (!plan?.ok) return
+      closeByAdjusting(ends.a, ends.b, plan.changes, renames(plan.changes, pieces, fmt))
+      onClose()
+      return
+    }
     const id = closeGap(ends.a, ends.b, { ...spec, name: partName(spec, fmt) })
     if (id) select([id])
     onClose()
@@ -126,7 +148,7 @@ export function CloseLoop({ ends, onClose }: { ends: { a: PortRef; b: PortRef };
               </p>
               <p className="mt-0.5">
                 {gap.sameRun
-                  ? 'Both ends are on one run, so nothing can move to meet the part — it has to span the gap as it is.'
+                  ? 'Both ends are on one run, so nothing can swing round to meet a new part — it has to span the gap as it is. Adjusting to fit resizes the loop instead.'
                   : 'Two separate runs, so the far one swings round to meet whatever part you pick.'}
               </p>
               {gap.sameRun && Math.abs(gap.rise) > 0.05 && (
@@ -140,6 +162,7 @@ export function CloseLoop({ ends, onClose }: { ends: { a: PortRef; b: PortRef };
               <div className="w-[186px] shrink-0 border-r p-2" style={{ borderColor: 'var(--color-line)' }}>
                 <span className="tm-label mb-1.5 block px-1">Fill it with</span>
                 <div className="space-y-1">
+                  {plan && <AdjustButton plan={plan} active={adjusting} onClick={() => pick('adjust')} />}
                   {KINDS.map((part) => (
                     <KindButton
                       key={part.kind}
@@ -153,123 +176,127 @@ export function CloseLoop({ ends, onClose }: { ends: { a: PortRef; b: PortRef };
                 </div>
               </div>
 
-              <div className="min-w-0 flex-1 p-3">
-                <FitBadge closes={closes} exact={!!fit?.exact} fit={fit} sameRun={gap.sameRun} />
-                {step && (
-                  <p className="mb-2 text-[11px]" style={{ color: 'var(--color-ink-2)' }}>
-                    {step}
-                  </p>
-                )}
+              {adjusting && plan ? (
+                <AdjustDetails plan={plan} pieces={pieces} />
+              ) : (
+                <div className="min-w-0 flex-1 p-3">
+                  <FitBadge closes={closes} exact={!!fit?.exact} fit={fit} sameRun={gap.sameRun} />
+                  {step && (
+                    <p className="mb-2 text-[11px]" style={{ color: 'var(--color-ink-2)' }}>
+                      {step}
+                    </p>
+                  )}
 
-                {kind === 'transition' ? (
-                  <>
-                    <div className="grid grid-cols-2 gap-2">
+                  {kind === 'transition' ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <LaneField
+                          label="Width at A"
+                          lanes={spec.lanes}
+                          onChange={(lanes) => setEdits((e) => ({ ...e, lanes }))}
+                        />
+                        <LaneField
+                          label="Width at B"
+                          lanes={spec.lanesB}
+                          onChange={(lanesB) => setEdits((e) => ({ ...e, lanesB }))}
+                        />
+                      </div>
+                      <Field label="Length">
+                        <LengthInput
+                          value={spec.length}
+                          onChange={(length) => setEdits((e) => ({ ...e, length }))}
+                          step={5}
+                          min={minTransitionLength(dims)}
+                          max={SPAN_LIMITS.max}
+                        />
+                      </Field>
+                      <TaperField
+                        length={spec.length}
+                        value={spec.flatEnd}
+                        onChange={(flatEnd) => setEdits((e) => ({ ...e, flatEnd }))}
+                      />
+                      <CornerRoundingField
+                        value={spec.cornerRadius}
+                        limit={transitionCornerLimit(dims, {
+                          lanesA: spec.lanes,
+                          lanesB: spec.lanesB,
+                          length: spec.length,
+                          flatEnd: spec.flatEnd,
+                        })}
+                        onChange={(cornerRadius) => setEdits((e) => ({ ...e, cornerRadius }))}
+                      />
+                    </>
+                  ) : kind === 'straight' ? (
+                    <>
                       <LaneField
-                        label="Width at A"
+                        label="Width · lanes"
                         lanes={spec.lanes}
                         onChange={(lanes) => setEdits((e) => ({ ...e, lanes }))}
                       />
+                      <Field label="Length" hint={`Fit is ${val(suggestPart('straight', gap, dims).length, 1)}.`}>
+                        <LengthInput
+                          value={spec.length}
+                          onChange={(length) => setEdits((e) => ({ ...e, length }))}
+                          step={5}
+                          min={SPAN_LIMITS.min}
+                          max={SPAN_LIMITS.max}
+                        />
+                      </Field>
+                    </>
+                  ) : (
+                    <>
                       <LaneField
-                        label="Width at B"
-                        lanes={spec.lanesB}
-                        onChange={(lanesB) => setEdits((e) => ({ ...e, lanesB }))}
+                        label="Width · lanes"
+                        lanes={spec.lanes}
+                        onChange={(lanes) => setEdits((e) => ({ ...e, lanes }))}
                       />
-                    </div>
-                    <Field label="Length">
-                      <LengthInput
-                        value={spec.length}
-                        onChange={(length) => setEdits((e) => ({ ...e, length }))}
-                        step={5}
-                        min={minTransitionLength(dims)}
-                        max={SPAN_LIMITS.max}
-                      />
-                    </Field>
-                    <TaperField
-                      length={spec.length}
-                      value={spec.flatEnd}
-                      onChange={(flatEnd) => setEdits((e) => ({ ...e, flatEnd }))}
-                    />
-                    <CornerRoundingField
-                      value={spec.cornerRadius}
-                      limit={transitionCornerLimit(dims, {
-                        lanesA: spec.lanes,
-                        lanesB: spec.lanesB,
-                        length: spec.length,
-                        flatEnd: spec.flatEnd,
-                      })}
-                      onChange={(cornerRadius) => setEdits((e) => ({ ...e, cornerRadius }))}
-                    />
-                  </>
-                ) : kind === 'straight' ? (
-                  <>
-                    <LaneField
-                      label="Width · lanes"
-                      lanes={spec.lanes}
-                      onChange={(lanes) => setEdits((e) => ({ ...e, lanes }))}
-                    />
-                    <Field label="Length" hint={`Fit is ${val(suggestPart('straight', gap, dims).length, 1)}.`}>
-                      <LengthInput
-                        value={spec.length}
-                        onChange={(length) => setEdits((e) => ({ ...e, length }))}
-                        step={5}
-                        min={SPAN_LIMITS.min}
-                        max={SPAN_LIMITS.max}
-                      />
-                    </Field>
-                  </>
-                ) : (
-                  <>
-                    <LaneField
-                      label="Width · lanes"
-                      lanes={spec.lanes}
-                      onChange={(lanes) => setEdits((e) => ({ ...e, lanes }))}
-                    />
-                    <Field label="Radius">
-                      <LengthInput
-                        value={spec.radius}
-                        onChange={(radius) => setEdits((e) => ({ ...e, radius }))}
-                        step={5}
-                        min={RADIUS_LIMITS.min}
-                        max={RADIUS_LIMITS.max}
-                      />
-                    </Field>
-                    <Field label="Sweep">
-                      <NumberInput
-                        value={Math.abs(spec.angleDeg)}
-                        onChange={(v) =>
-                          setEdits((e) => ({
-                            ...e,
-                            angleDeg: Math.sign(spec.angleDeg || 1) * Math.min(SWEEP_LIMITS.max, Math.max(SWEEP_LIMITS.min, v)),
-                          }))
-                        }
-                        step={1}
-                        min={SWEEP_LIMITS.min}
-                        max={SWEEP_LIMITS.max}
-                        suffix="°"
-                      />
-                    </Field>
-                    <Field label="Direction">
-                      <Segmented<'left' | 'right'>
-                        value={spec.angleDeg < 0 ? 'right' : 'left'}
-                        onChange={(t) =>
-                          setEdits((e) => ({
-                            ...e,
-                            angleDeg: (t === 'right' ? -1 : 1) * Math.abs(spec.angleDeg),
-                          }))
-                        }
-                        options={[
-                          { value: 'left', label: 'Left' },
-                          { value: 'right', label: 'Right' },
-                        ]}
-                      />
-                    </Field>
-                  </>
-                )}
+                      <Field label="Radius">
+                        <LengthInput
+                          value={spec.radius}
+                          onChange={(radius) => setEdits((e) => ({ ...e, radius }))}
+                          step={5}
+                          min={RADIUS_LIMITS.min}
+                          max={RADIUS_LIMITS.max}
+                        />
+                      </Field>
+                      <Field label="Sweep">
+                        <NumberInput
+                          value={Math.abs(spec.angleDeg)}
+                          onChange={(v) =>
+                            setEdits((e) => ({
+                              ...e,
+                              angleDeg: Math.sign(spec.angleDeg || 1) * Math.min(SWEEP_LIMITS.max, Math.max(SWEEP_LIMITS.min, v)),
+                            }))
+                          }
+                          step={1}
+                          min={SWEEP_LIMITS.min}
+                          max={SWEEP_LIMITS.max}
+                          suffix="°"
+                        />
+                      </Field>
+                      <Field label="Direction">
+                        <Segmented<'left' | 'right'>
+                          value={spec.angleDeg < 0 ? 'right' : 'left'}
+                          onChange={(t) =>
+                            setEdits((e) => ({
+                              ...e,
+                              angleDeg: (t === 'right' ? -1 : 1) * Math.abs(spec.angleDeg),
+                            }))
+                          }
+                          options={[
+                            { value: 'left', label: 'Left' },
+                            { value: 'right', label: 'Right' },
+                          ]}
+                        />
+                      </Field>
+                    </>
+                  )}
 
-                <button className="tm-btn w-full" onClick={() => setEdits({})}>
-                  Back to the fitted size
-                </button>
-              </div>
+                  <button className="tm-btn w-full" onClick={() => setEdits({})}>
+                    Back to the fitted size
+                  </button>
+                </div>
+              )}
             </div>
 
             <div
@@ -277,19 +304,150 @@ export function CloseLoop({ ends, onClose }: { ends: { a: PortRef; b: PortRef };
               style={{ borderColor: 'var(--color-line)' }}
             >
               <span className="text-[11px]" style={{ color: 'var(--color-ink-2)' }}>
-                {closes
-                  ? 'Both ends are joined and clipped.'
-                  : 'Lands on the first end with its far end left open.'}
+                {adjusting
+                  ? plan?.ok
+                    ? 'The two ends clip straight together.'
+                    : 'Pick a part to fill the gap instead.'
+                  : closes
+                    ? 'Both ends are joined and clipped.'
+                    : 'Lands on the first end with its far end left open.'}
               </span>
-              <button className="tm-btn tm-btn-primary" onClick={add}>
-                <Link2 size={13} /> {closes ? 'Close with' : 'Add'} {partName(spec, fmt)}
-              </button>
+              {adjusting ? (
+                <button className="tm-btn tm-btn-primary" onClick={add} disabled={!plan?.ok}>
+                  <Link2 size={13} /> {adjustLabel(plan)}
+                </button>
+              ) : (
+                <button className="tm-btn tm-btn-primary" onClick={add}>
+                  <Link2 size={13} /> {closes ? 'Close with' : 'Add'} {partName(spec, fmt)}
+                </button>
+              )}
             </div>
           </>
         )}
       </div>
     </div>
   )
+}
+
+/** What the list can offer: a part to add, or resizing the loop that is there. */
+type Choice = PieceKind | 'adjust'
+
+/** Whether any part, at its fitted size, spans the gap as it stands. */
+function spansExactly(gap: Gap, dims: Dimensions): boolean {
+  return KINDS.some(({ kind }) => fitOf(shaped(suggestPart(kind, gap, dims), dims), gap, dims).exact)
+}
+
+const pieceCount = (n: number) => `${n} piece${n === 1 ? '' : 's'}`
+
+function adjustLabel(plan: AdjustPlan | null): string {
+  if (!plan?.ok) return 'Cannot adjust'
+  return plan.changes.length ? `Adjust ${pieceCount(plan.changes.length)} to close` : 'Join the ends'
+}
+
+/** The first entry in the list — closing the loop with the track already on it. */
+function AdjustButton({ plan, active, onClick }: { plan: AdjustPlan; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      className="flex w-full items-center gap-2 rounded border p-1.5 text-left transition"
+      style={{
+        background: active ? 'color-mix(in srgb, var(--color-accent) 14%, transparent)' : 'var(--color-surface-2)',
+        borderColor: active ? 'var(--color-accent)' : 'var(--color-line)',
+      }}
+    >
+      <span className="grid h-7 w-7 shrink-0 place-items-center">
+        <MoveHorizontal size={16} />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[12px] font-medium">Adjust to fit</span>
+        <span className="block text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
+          {!plan.ok
+            ? 'Cannot reach'
+            : plan.changes.length
+              ? `Resizes ${pieceCount(plan.changes.length)}, no new part.`
+              : 'The ends already meet.'}
+        </span>
+      </span>
+    </button>
+  )
+}
+
+/** Which pieces the loop is closed by resizing, and each size before and after. */
+function AdjustDetails({ plan, pieces }: { plan: AdjustPlan; pieces: Piece[] }) {
+  const { fmt } = useUnits()
+  return (
+    <div className="min-w-0 flex-1 p-3">
+      <div
+        className="mb-2.5 flex items-start gap-1.5 rounded border px-2 py-1.5 text-[11.5px] leading-snug"
+        style={{
+          borderColor: plan.ok ? 'var(--color-accent)' : 'var(--color-line)',
+          background: plan.ok ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'var(--color-surface-2)',
+        }}
+      >
+        {plan.ok ? <Check size={13} className="mt-[1px] shrink-0" /> : <TriangleAlert size={13} className="mt-[1px] shrink-0" />}
+        <span>
+          {!plan.ok
+            ? plan.reason
+            : plan.changes.length
+              ? `Closes the gap exactly by resizing ${pieceCount(plan.changes.length)} already on the loop. Nothing is added.`
+              : 'The two ends already meet, so they only need clipping together.'}
+        </span>
+      </div>
+      {plan.ok && plan.changes.length > 0 && (
+        <>
+          <ul className="space-y-1.5">
+            {plan.changes.map((c) => {
+              const piece = pieces.find((p) => p.id === c.pieceId)
+              return (
+                <li
+                  key={c.pieceId}
+                  className="rounded border px-2 py-1.5 text-[11.5px]"
+                  style={{ borderColor: 'var(--color-line)', background: 'var(--color-surface-2)' }}
+                >
+                  <span className="block font-medium">{piece?.name ?? 'A piece'}</span>
+                  {sizeLines(c, fmt).map((line) => (
+                    <span key={line} className="block tabular-nums" style={{ color: 'var(--color-ink-2)' }}>
+                      {line}
+                    </span>
+                  ))}
+                </li>
+              )
+            })}
+          </ul>
+          <p className="mt-2 text-[11px]" style={{ color: 'var(--color-ink-2)' }}>
+            Lengths are changed before radii, and a curve's sweep only when the two ends point different
+            ways. Locked pieces are left as they are.
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
+/** Each size a change moves, as "Length 150mm → 143.2mm". */
+function sizeLines(c: Adjustment, fmt: Fmt): string[] {
+  const out: string[] = []
+  if (c.after.length !== c.before.length) out.push(`Length ${fmt(c.before.length, 1)} → ${fmt(c.after.length, 2)}`)
+  if (c.after.radius !== c.before.radius) out.push(`Radius ${fmt(c.before.radius, 1)} → ${fmt(c.after.radius, 2)}`)
+  if (c.after.angleDeg !== c.before.angleDeg)
+    out.push(`Sweep ${Math.abs(c.before.angleDeg).toFixed(1)}° → ${Math.abs(c.after.angleDeg).toFixed(2)}°`)
+  return out
+}
+
+/**
+ * New names for resized pieces that were only ever called by their size, so a
+ * "Straight 150mm" that is now 143mm does not keep saying 150. A piece the user
+ * named keeps its name.
+ */
+function renames(changes: Adjustment[], pieces: Piece[], fmt: Fmt): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const c of changes) {
+    const p = pieces.find((x) => x.id === c.pieceId)
+    if (!p || p.kind === 'transition') continue
+    if (p.name === partName({ ...p, ...c.before }, fmt)) out[p.id] = partName({ ...p, ...c.after }, fmt)
+  }
+  return out
 }
 
 /** One part in the list, with how near its fitted size comes to closing the gap. */

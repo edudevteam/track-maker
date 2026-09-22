@@ -20,6 +20,73 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.3.20] — 2026-09-22
+
+Close Loop can now close a loop by resizing the track already on it, not only by
+adding a part. No track cross-section, clip or dimension changed.
+
+### Added
+
+- **Adjust to fit**, first on Close Loop's list whenever both ends are on one
+  run. It resizes pieces already on the loop until the two ends meet exactly,
+  then clips them straight together, with no new part. It lists each piece it
+  changes with the size before and after, e.g. *Length 150mm → 143mm*.
+  - **Lengths first.** It changes as few pieces as it can, at most three. It
+    uses straight lengths where they will do, transition lengths next, then
+    curve radii.
+  - **A sweep only when it has to.** If the two ends point different ways, only
+    a change of sweep can turn them. It changes one curve's sweep where that is
+    enough and lets lengths do the rest.
+  - **Locked pieces and junctions stay as they are.** Every new size stays
+    inside what the parts library can make: straights 20–2000mm, curve radii
+    that keep the inside wall a curve, and transitions no shorter than their
+    own flat ends.
+  - **A resized piece named for its size is renamed**, so *Straight 150mm*
+    becomes *Straight 143mm*. A piece you named yourself keeps its name.
+  - The first end's piece stays put and the rest of the loop follows the new
+    sizes round to it. The resized pieces are left selected, and one undo puts
+    everything back.
+  - When it cannot close the loop, it says why: the two ends are different
+    widths (a transition has to go between), one end sits higher, or no three
+    pieces can stretch far enough. The parts below it still work as before.
+
+### Changed
+
+- **Close Loop opens on Adjust to fit** whenever no single part spans the gap
+  exactly. When one does, that part is still picked first, since the gap was
+  probably left for it.
+
+### Notes
+
+- The closure audit (`scripts/verify-closure.ts`) now opens the example circuit
+  at one joint and puts it out of true five ways: a straight too long, a curve
+  on a wider radius, curves swept too far and too short, and three errors at
+  once. Each time, it checks that adjusting closes the loop to within 0.0003mm
+  and 0.0001° by changing at most three pieces. It also checks that ends of
+  different widths are refused.
+
+---
+
+## [1.3.19] — 2026-09-21
+
+An example circuit to open and drive. No part, dimension or tool changed.
+
+### Added
+
+- **`four-lane-circuit.track.json`**, a closed four-lane loop to open with
+  File ▸ Open. A 600mm start straight, six left-hand turns and a lap of 3,957mm,
+  in 24 pieces over a 1,169 × 1,069mm footprint.
+  - Four lanes for most of the lap, dropping to three twice — once through a
+    pair of 200R sweepers, once along a back straight — with a transition at each
+    end of both so no joint steps in width.
+  - Every 90° corner is two 45° pieces and no straight is over 200mm, so each
+    piece fits a 256mm plate.
+  - Every joint is clipped and joined, and the loop closes on itself to within
+    two ten-thousandths of a millimetre. The track runs no closer than 200mm to
+    itself anywhere else on the lap.
+
+---
+
 ## [1.3.18] — 2026-09-14
 
 The 40mm snap clip printed and fits, so it is now the only clip. The geometry

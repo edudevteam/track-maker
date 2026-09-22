@@ -49,7 +49,12 @@ import {
   worldPortFrame,
 } from '../lib/ports'
 import { DEFAULT_TOP_SPEED, TOP_SPEED_RANGE } from '../lib/driving'
-import { fitOf, measureGap, type PortRef } from '../lib/closure'
+import {
+  fitOf,
+  measureGap,
+  FIT_ANGLE_TOLERANCE,
+  FIT_GAP_TOLERANCE,
+  type Adjustment, type PortRef } from '../lib/closure'
 import { pieceBounds } from '../lib/printVolume'
 import { loadUnits, saveUnits } from '../lib/units'
 import type { ProjectDocument } from '../export/project'
@@ -245,6 +250,13 @@ export interface ProjectActions {
    * far end left free, so the run can be worked out from there.
    */
   closeGap: (a: PortRef, b: PortRef, spec: PartSpec) => string | null
+  /**
+   * Close the gap between two ends of one run by resizing pieces already on it,
+   * then clip the two ends straight together. `names` renames any piece whose
+   * name was only ever its old size. False, with nothing changed, when the
+   * resized run would not meet.
+   */
+  closeByAdjusting: (a: PortRef, b: PortRef, changes: Adjustment[], names: Record<string, string>) => boolean
 
   toggleGrid: () => void
   togglePrintVolume: () => void
@@ -943,6 +955,52 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       closure: null,
     })
     return piece.id
+  },
+
+  closeByAdjusting: (a, b, changes, names) => {
+    const { pieces, dims, commit } = get()
+    const hostA = pieces.find((p) => p.id === a.pieceId)
+    const hostB = pieces.find((p) => p.id === b.pieceId)
+    if (!hostA || !hostB || hostA.links[a.port] || hostB.links[b.port]) return false
+
+    // First end's piece stays put and the rest of the run follows the new sizes
+    // round to it, so the far end arrives on the first.
+    const resized = reflowFrom(
+      pieces.map((p) => {
+        const c = changes.find((x) => x.pieceId === p.id)
+        if (!c) return p
+        // A transition is never shortened past its own flat ends, so they stand.
+        return { ...p, ...c.after, name: names[p.id] ?? p.name }
+      }),
+      hostA.id,
+      dims,
+    )
+    const gap = measureGap(resized, a, b, dims)
+    if (!gap || gap.distance > FIT_GAP_TOLERANCE || Math.abs(gap.turnDeg) > FIT_ANGLE_TOLERANCE) return false
+
+    commit()
+    set({
+      pieces: resized.map((p) => {
+        let next = p
+        if (p.id === hostA.id)
+          next = {
+            ...next,
+            links: { ...next.links, [a.port]: { pieceId: hostB.id, port: b.port } },
+            connectors: { ...next.connectors, [a.port]: true },
+          }
+        if (p.id === hostB.id)
+          next = {
+            ...next,
+            links: { ...next.links, [b.port]: { pieceId: hostA.id, port: a.port } },
+            connectors: { ...next.connectors, [b.port]: true },
+          }
+        return next
+      }),
+      selection: { pieceIds: changes.map((c) => c.pieceId), anchor: 'middle' },
+      activePort: null,
+      closure: null,
+    })
+    return true
   },
 
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
