@@ -1,7 +1,9 @@
-import type { Piece, PortId } from '../types'
+import type { ClipSize, Piece, PortId } from '../types'
 import { junctionClipLength } from '../geometry/junction'
-import type { Dimensions } from '../geometry/dimensions'
+import { connectorInset, longClipLength, type Dimensions } from '../geometry/dimensions'
+import { plainLength } from '../geometry/parts'
 import { snapClipShape } from '../geometry/snapClip'
+import { transitionLayout } from '../geometry/transition'
 
 /**
  * Whether this piece should draw the clip at `port`.
@@ -23,15 +25,54 @@ export function ownsConnector(piece: Piece, port: PortId): boolean {
 }
 
 /**
+ * How far the slot runs in from an end of a piece, mm: the pocket on a straight
+ * or a curve — the whole of half the piece when it is too short for a solid
+ * middle — and the full-width flat end on a transition. A junction's slots are
+ * sized to the short clip, so it has no room to offer beyond that.
+ */
+function pocketDepth(piece: Piece, d: Dimensions): number {
+  if (piece.kind === 'junction') return 0
+  if (piece.kind === 'transition') {
+    return transitionLayout(d, {
+      lanesA: piece.lanes,
+      lanesB: piece.lanesB,
+      length: Math.max(1, piece.length),
+      cornerRadius: piece.cornerRadius,
+      flatEnd: piece.flatEnd,
+    }).flatEnd
+  }
+  return connectorInset(d, plainLength(piece))
+}
+
+/** Whether the long clip can reach into this piece and still leave the end gap clear. */
+function roomForLong(piece: Piece, d: Dimensions): boolean {
+  return pocketDepth(piece, d) + 1e-6 >= longClipLength(d) / 2 + Math.max(0, d.snapClip.longEndGap)
+}
+
+/**
  * How long the clip at this joint is, mm.
  *
- * Every joint takes the one clip. A junction only shortens it if the clip has
- * been made longer than the tile has room for before two of its slots meet, and
- * the piece on the other side of that joint uses the same one, since there is
- * only the one clip between them. `neighbour` is whatever is joined there, or
- * nothing when the end is still open.
+ * `size` is the Settings ▸ Connector choice. The long clip goes in only where
+ * both pieces have the pocket for it with the end gap left clear — a short
+ * straight whose two pockets meet, or a transition with short flat ends, takes
+ * the short clip instead. An open end is judged on its own piece.
+ *
+ * A junction only shortens the clip if it has been made longer than the tile has
+ * room for before two of its slots meet, and the piece on the other side of that
+ * joint uses the same one, since there is only the one clip between them.
+ * `neighbour` is whatever is joined there, or nothing when the end is still open.
  */
-export function clipLength(piece: Piece, neighbour: Piece | undefined, d: Dimensions): number {
+export function clipLength(
+  piece: Piece,
+  neighbour: Piece | undefined,
+  d: Dimensions,
+  size: ClipSize = 'short',
+): number {
   const junction = piece.kind === 'junction' || neighbour?.kind === 'junction'
-  return junction ? junctionClipLength(d) : snapClipShape(d).L
+  if (junction) return junctionClipLength(d)
+  const long = longClipLength(d)
+  if (size === 'long' && long > snapClipShape(d).L && roomForLong(piece, d) && (!neighbour || roomForLong(neighbour, d))) {
+    return long
+  }
+  return snapClipShape(d).L
 }

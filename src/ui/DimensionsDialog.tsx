@@ -158,10 +158,9 @@ export function DimensionsDialog({ onClose }: { onClose: () => void }) {
           <Section title="Connector clip">
             <p className="mb-1.5 text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
               The relief-slotted snap design measured off SR2_Single_230116.stl, printed and confirmed to
-              fit. It grips by its arms flexing across the slot rather than by its height. Every joint takes
-              the short clip; the long clip is the same design, as long as the pockets allow with the end gap
-              left clear in each piece, and is exported from Export ▸ Clip only. Changing a clip never
-              changes the track.
+              fit. It grips by its arms flexing across the slot rather than by its height. The long clip is
+              the same design, as long as the pockets allow with the end gap left clear in each piece.
+              Settings ▸ Connector picks which one the joints take. Changing a clip never changes the track.
             </p>
             <div className="grid grid-cols-2 gap-x-3">
               {SNAP_FIELDS.map((f) => (

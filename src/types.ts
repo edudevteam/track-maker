@@ -24,6 +24,13 @@ export interface VehicleSize {
 export type Unit = 'mm' | 'in'
 
 /**
+ * Which clip the joints take — picked in Settings ▸ Connector. `long` puts the
+ * long clip wherever both pieces have the pocket for it and the short one
+ * everywhere else.
+ */
+export type ClipSize = 'short' | 'long'
+
+/**
  * Every way onto a piece. `a` is the local origin end and `b` the far end; a
  * junction adds `l` and `r`, the openings in its left and right walls, which are
  * left and right as the driver sees them with port `b` ahead.

@@ -1,5 +1,6 @@
 import { PORT_IDS } from '../types'
 import type {
+  ClipSize,
   Piece,
   PieceKind,
   PortId,
@@ -39,6 +40,8 @@ export interface ProjectDocument {
   /** Which way each car was told it faces, keyed by car id. */
   vehicleFacing: Record<string, VehicleFacing>
   dims: Dimensions
+  /** Which clip the joints take. Files from before 1.4.1 open with the short one. */
+  clipSize: ClipSize
   pieces: Piece[]
   printerId: string
   customPrinterSize: Vec3
@@ -62,6 +65,7 @@ export interface ProjectSnapshot {
   vehicleSizes: Record<string, VehicleSize>
   vehicleFacing: Record<string, VehicleFacing>
   dims: Dimensions
+  clipSize: ClipSize
   pieces: Piece[]
   printer: { id: string }
   customPrinterSize: Vec3
@@ -82,6 +86,7 @@ export function serializeProject(s: ProjectSnapshot): ProjectDocument {
     vehicleSizes: s.vehicleSizes,
     vehicleFacing: s.vehicleFacing,
     dims: s.dims,
+    clipSize: s.clipSize,
     pieces: s.pieces,
     printerId: s.printer.id,
     customPrinterSize: s.customPrinterSize,
@@ -292,6 +297,7 @@ export function parseProject(text: string): ProjectDocument {
     vehicleSizes: readVehicleSizes(raw.vehicleSizes),
     vehicleFacing: readVehicleFacing(raw.vehicleFacing),
     dims: mergeDims(raw.dims),
+    clipSize: raw.clipSize === 'long' ? 'long' : 'short',
     pieces,
     printerId: str(raw.printerId, 'bambu-256'),
     customPrinterSize: vec3(raw.customPrinterSize, [256, 256, 256]),

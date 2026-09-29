@@ -64,7 +64,8 @@ function ConnectorAt({ piece, port }: { piece: Piece; port: PortId }) {
   const dims = useProject((s) => s.dims)
   const link = piece.links[port]
   const neighbour = useProject((s) => s.pieces.find((p) => p.id === link?.pieceId))
-  const length = clipLength(piece, neighbour, dims)
+  const clipSize = useProject((s) => s.clipSize)
+  const length = clipLength(piece, neighbour, dims, clipSize)
   const geometry = getSnapClipGeometry(dims, length)
   const lanes = useMemo(() => connectorOffsets(piece, dims, port), [piece.kind, piece.lanes, piece.lanesB, port, dims])
 

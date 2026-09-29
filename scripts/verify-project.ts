@@ -3,6 +3,8 @@ import { DEFAULT_DIMENSIONS } from '../src/geometry/dimensions'
 import type { Piece } from '../src/types'
 import { reflowFrom, worldPortFrame } from '../src/lib/ports'
 import { DEFAULT_TOP_SPEED } from '../src/lib/driving'
+import { clipLength } from '../src/lib/connectors'
+import { junctionClipLength } from '../src/geometry/junction'
 
 let fails = 0
 const check = (label: string, ok: boolean, extra = '') => {
@@ -41,6 +43,7 @@ const snapshot = {
   trackType: 'car' as const,
   vehicle: 'diecast' as const,
   dims: { ...DEFAULT_DIMENSIONS, track: { ...DEFAULT_DIMENSIONS.track, totalHeight: 15.5 } },
+  clipSize: 'long' as const,
   pieces: [p1, p2],
   printer: { id: 'prusa-mk4' },
   customPrinterSize: [200, 210, 220] as [number, number, number],
@@ -54,6 +57,12 @@ const back = parseProject(text)
 
 check('filename from project title', projectFileName(snapshot.projectName) === 'My-Big-Track.track.json', projectFileName(snapshot.projectName))
 check('name round-trips', back.name === snapshot.projectName)
+check('connector choice round-trips', back.clipSize === 'long')
+{
+  const old = JSON.parse(text)
+  delete old.clipSize
+  check('a file without a connector choice opens with the short clip', parseProject(JSON.stringify(old)).clipSize === 'short')
+}
 check('edited dimension round-trips', back.dims.track.totalHeight === 15.5)
 check('untouched dimension kept', back.dims.snapClip.holeInset === DEFAULT_DIMENSIONS.snapClip.holeInset)
 check('piece count', back.pieces.length === 2)
@@ -153,6 +162,24 @@ for (const [label, bad] of [
   check('the far side moved by the growth', Math.abs(shift('b') - 60) < 1e-9, `moved ${shift('b').toFixed(4)}`)
   check('so did the piece past it', Math.abs(shift('c') - 60) < 1e-9)
   check('the edited piece stayed put', shift('a') === 0)
+}
+
+// Settings ▸ Connector: the long clip goes in only where both pieces have the
+// pocket for it with the end gap left clear.
+{
+  const d = DEFAULT_DIMENSIONS
+  const at = (a: Partial<Piece>, b: Partial<Piece> | undefined, size: 'short' | 'long') =>
+    clipLength(piece('x', a), b ? piece('y', b) : undefined, d, size)
+  check('short setting keeps the 40mm clip', at({ length: 135 }, { length: 135 }, 'short') === 40)
+  check('long setting fits 70mm between two full pockets', at({ length: 135 }, { length: 135 }, 'long') === 70)
+  check('long clip on an open end', at({ length: 135 }, undefined, 'long') === 70)
+  check('an 80mm straight still has the room', at({ length: 80 }, { length: 135 }, 'long') === 70)
+  check('a 75mm straight takes the short clip', at({ length: 75 }, { length: 135 }, 'long') === 40)
+  check('so does its neighbour', at({ length: 135 }, { length: 75 }, 'long') === 40)
+  check('a long curve takes the long clip', at({ kind: 'curve', radius: 300, angleDeg: 45 }, { length: 135 }, 'long') === 70)
+  check('a transition with 40mm flat ends takes it', at({ kind: 'transition', length: 200, flatEnd: 40 }, { length: 135 }, 'long') === 70)
+  check('one with 35mm flat ends does not', at({ kind: 'transition', length: 200, flatEnd: 35 }, { length: 135 }, 'long') === 40)
+  check('a junction keeps its own clip', at({ kind: 'junction' }, { length: 135 }, 'long') === junctionClipLength(d))
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nall passed')

@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { PORT_IDS } from '../types'
 import type {
   CarState,
+  ClipSize,
   GizmoAnchor,
   PartSpec,
   Piece,
@@ -141,6 +142,8 @@ export interface ProjectState {
    */
   units: Unit
   dims: Dimensions
+  /** Which clip the joints take — picked in Settings ▸ Connector, saved with the project. */
+  clipSize: ClipSize
 
   pieces: Piece[]
   selection: Selection
@@ -213,6 +216,7 @@ export interface ProjectActions {
   setVehicleFacing: (id: string, facing: VehicleFacing | null) => Promise<void>
   setKeepVehicleProportions: (v: boolean) => void
   setUnits: (u: Unit) => void
+  setClipSize: (size: ClipSize) => void
   setDims: (patch: Partial<Dimensions>) => void
   setDimValue: (group: keyof Dimensions, field: string, value: number) => void
   resetDims: () => void
@@ -436,6 +440,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
   keepVehicleProportions: true,
   units: loadUnits(),
   dims: DEFAULT_DIMENSIONS,
+  clipSize: 'short',
 
   pieces: [],
   selection: { pieceIds: [], anchor: 'middle' },
@@ -517,6 +522,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
     if (spec?.source === 'stored') await saveStoredCarFacing(id, facing)
   },
   setKeepVehicleProportions: (keepVehicleProportions) => set({ keepVehicleProportions }),
+  setClipSize: (clipSize) => set({ clipSize }),
   setUnits: (units) => {
     saveUnits(units)
     set({ units })
@@ -1110,6 +1116,7 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
       vehicleSizes: doc.vehicleSizes,
       vehicleFacing: doc.vehicleFacing,
       dims: doc.dims,
+      clipSize: doc.clipSize,
       pieces: syncJunctions(doc.pieces, doc.dims),
       printer: preset.id === 'custom' ? { ...preset, size: doc.customPrinterSize } : preset,
       customPrinterSize: doc.customPrinterSize,

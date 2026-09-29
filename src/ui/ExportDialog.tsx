@@ -20,10 +20,11 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const dims = useProject((s) => s.dims)
   const selection = useProject((s) => s.selection)
   const projectName = useProject((s) => s.projectName)
+  const jointClip = useProject((s) => s.clipSize)
 
   const [format, setFormat] = useState<ExportFormat>('3mf')
   const [what, setWhat] = useState<'track' | 'clip'>('track')
-  const [clipSize, setClipSize] = useState<'short' | 'long'>('short')
+  const [clipSize, setClipSize] = useState<'short' | 'long'>(jointClip)
   const [scope, setScope] = useState<'all' | 'selected'>(selection.pieceIds.length ? 'selected' : 'all')
   const [includeConnectors, setIncludeConnectors] = useState(true)
   const [zUp, setZUp] = useState(true)
@@ -60,7 +61,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         if (!ownsConnector(piece, port)) continue
         const link = piece.links[port]
         const neighbour = link ? pieces.find((p) => p.id === link.pieceId) : undefined
-        const length = clipLength(piece, neighbour, dims)
+        const length = clipLength(piece, neighbour, dims, jointClip)
         const connGeom = getSnapClipGeometry(dims, length)
         const frame = localPortFrame(piece, port, dims)
         const outward = X_AXIS.clone().applyQuaternion(frame.quaternion)
@@ -87,7 +88,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
       }
     }
     return out
-  }, [pieces, dims, selection.pieceIds, scope, includeConnectors, what, clipLen])
+  }, [pieces, dims, selection.pieceIds, scope, includeConnectors, what, clipLen, jointClip])
 
   const triangles = useMemo(
     () =>
@@ -171,7 +172,16 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                   ]}
                 />
               </Field>
-              <Toggle checked={includeConnectors} onChange={setIncludeConnectors} label="Include connector clips" />
+              <Toggle
+                checked={includeConnectors}
+                onChange={setIncludeConnectors}
+                label="Include connector clips"
+                hint={
+                  jointClip === 'long'
+                    ? `Long (${longLen.toFixed(0)}mm) wherever both pieces have room, short elsewhere — Settings ▸ Connector.`
+                    : `Short (${shortLen.toFixed(0)}mm) — Settings ▸ Connector.`
+                }
+              />
             </>
           ) : (
             <>
@@ -180,14 +190,14 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                   value={clipSize}
                   onChange={setClipSize}
                   options={[
-                    { value: 'short' as const, label: `Short (${shortLen.toFixed(0)}mm)`, title: 'The clip every joint takes' },
+                    { value: 'short' as const, label: `Short (${shortLen.toFixed(0)}mm)`, title: 'The 40mm snap clip' },
                     { value: 'long' as const, label: `Long (${longLen.toFixed(0)}mm)`, title: 'Reaches further into each piece' },
                   ]}
                 />
               </Field>
               <p className="mb-1.5 text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
                 {clipSize === 'short'
-                  ? `A single ${clipLen.toFixed(0)}mm connector clip — the snap clip every joint takes — lying flat with its underside on the bed.`
+                  ? `A single ${clipLen.toFixed(0)}mm short clip lying flat with its underside on the bed.`
                   : `A single ${clipLen.toFixed(0)}mm long clip lying flat with its underside on the bed. It reaches ${(
                       clipLen / 2
                     ).toFixed(0)}mm into each piece, leaving ${(dims.assembly.connectorInset - clipLen / 2).toFixed(

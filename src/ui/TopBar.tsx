@@ -20,7 +20,10 @@ import {
   SlidersHorizontal,
   Sun,
   Undo2,
+  Link2,
 } from 'lucide-react'
+import { longClipLength } from '../geometry/dimensions'
+import { snapClipShape } from '../geometry/snapClip'
 import {
   PANEL_ITEMS,
   PRINTER_PRESETS,
@@ -71,6 +74,13 @@ export function TopBar({
   const carModels = useProject((s) => s.carLibrary.models)
   const units = useProject((s) => s.units)
   const setUnits = useProject((s) => s.setUnits)
+  const dims = useProject((s) => s.dims)
+  const clipSize = useProject((s) => s.clipSize)
+  const setClipSize = useProject((s) => s.setClipSize)
+  const clipOptions = [
+    { value: 'short' as const, label: `Short (${snapClipShape(dims).L.toFixed(0)}mm)` },
+    { value: 'long' as const, label: `Long (${longClipLength(dims).toFixed(0)}mm)` },
+  ]
   const printer = useProject((s) => s.printer)
   const setPrinter = useProject((s) => s.setPrinter)
   const background = useProject((s) => s.background)
@@ -273,6 +283,20 @@ export function TopBar({
               label={u.label}
               checked={units === u.value}
               onClick={() => setUnits(u.value)}
+            />
+          ))}
+        </Submenu>
+        <Submenu
+          icon={<Link2 size={13} />}
+          label="Connector"
+          hint={clipOptions.find((o) => o.value === clipSize)!.label}
+        >
+          {clipOptions.map((o) => (
+            <ChoiceItem
+              key={o.value}
+              label={o.label}
+              checked={clipSize === o.value}
+              onClick={() => setClipSize(o.value)}
             />
           ))}
         </Submenu>

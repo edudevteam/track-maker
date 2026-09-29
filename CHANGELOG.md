@@ -20,6 +20,33 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.4.1] — 2026-09-29
+
+The joints on the workplane can now take the 70mm long clip. No track piece or
+clip shape changed.
+
+### Added
+
+- **Settings ▸ Connector**, **Short (40mm)** or **Long (70mm)**. It picks which
+  clip the joints on the workplane show, and the same clips go into a track
+  export with **Include connector clips** on. Short is the default.
+  - **The long clip only goes where it fits.** Both pieces at a joint need the
+    pocket for it, with the long clip end gap left clear. A straight or curve
+    shorter than 80mm, where the two pockets meet, takes the short clip. So does a
+    transition whose flat ends are under 40mm, and whatever is joined to either.
+    An open end is judged on its own piece.
+  - **Junctions keep their own clip.** Their slots are sized to the short clip.
+  - **The choice is saved with the project.** A file saved before this version
+    opens with the short clip.
+
+### Changed
+
+- Export ▸ Clip only starts on whichever clip Settings ▸ Connector is set to.
+- The export's **Include connector clips** toggle now says which clip it will
+  write.
+
+---
+
 ## [1.4.0] — 2026-09-29
 
 A long connector clip alongside the short one. The 40mm clip is unchanged and
