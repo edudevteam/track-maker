@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { DEFAULT_DIMENSIONS, floorTopY, laneWidth, validateDimensions, type Dimensions } from '../src/geometry/dimensions.ts'
+import { DEFAULT_DIMENSIONS, floorTopY, laneWidth, longClipLength, validateDimensions, type Dimensions } from '../src/geometry/dimensions.ts'
 import { buildSnapClipGeometry, clipSeatY, snapClipShape, snapClipVolume } from '../src/geometry/snapClip.ts'
 import { buildTrackGeometry, plainVolume, plainZones } from '../src/geometry/parts.ts'
 import { slotMetrics, trackProfile, wallMetrics } from '../src/geometry/trackProfile.ts'
@@ -371,16 +371,17 @@ bar('connector clip (snap)')
   // The 40mm clip as built, and the same design at the printed part's 70mm with
   // three holes, which can be held against the part itself.
   const replica: Dimensions = { ...d, snapClip: { ...d.snapClip, length: 70, holeCount: 3 } }
-  for (const [label, dims] of [
-    ['40mm', d],
-    ['70mm replica', replica],
-  ] as [string, Dimensions][]) {
-    const g = buildSnapClipGeometry(dims)
-    const s = snapClipShape(dims)
+  for (const [label, dims, length] of [
+    ['40mm', d, d.snapClip.length],
+    ['long', d, longClipLength(d)],
+    ['70mm replica', replica, replica.snapClip.length],
+  ] as [string, Dimensions, number][]) {
+    const g = buildSnapClipGeometry(dims, length)
+    const s = snapClipShape(dims, length)
     const bb = g.boundingBox!
     const audit = edgeAudit(g)
     const got = volume(g)
-    const want = snapClipVolume(dims)
+    const want = snapClipVolume(dims, length)
     const off = Math.abs(got - want) / want
     console.log(
       `${label} tris=${g.getIndex()!.count / 3} vol=${got.toFixed(1)}mm³ (expect ${want.toFixed(1)},` +
@@ -389,6 +390,16 @@ bar('connector clip (snap)')
         ` nonManifoldEdges=${audit.nonManifold}/${audit.edges} ${audit.nonManifold === 0 ? 'ok' : 'BAD'}`,
     )
     for (const smp of audit.samples) console.log('  bad edge', smp)
+  }
+  // The long clip has to leave at least 5mm clear at the far end of each pocket.
+  {
+    const L = longClipLength(d)
+    const gap = d.assembly.connectorInset - L / 2
+    const bb = buildSnapClipGeometry(d, L).boundingBox!
+    console.log(
+      `${Math.abs(L - 70) < 1e-9 && gap >= 5 - 1e-9 && Math.abs(bb.max.x - bb.min.x - L) < 1e-6 ? 'ok  ' : 'BAD '}` +
+        ` long clip ${L.toFixed(3)}mm, ${gap.toFixed(3)}mm clear at the far end of each ${d.assembly.connectorInset}mm pocket`,
+    )
   }
   // Against _models/SR2_Single_230116.stl. Its volume is 4662.5mm³; its holes are
   // finer circles than the 32-sided ones here, which accounts for a few mm³.

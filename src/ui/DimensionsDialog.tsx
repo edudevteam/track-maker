@@ -9,6 +9,7 @@ import {
   floorTopY,
   slotDepth,
   laneWidth,
+  longClipLength,
   validateDimensions,
   wallStraightHeight,
   type Dimensions,
@@ -36,7 +37,8 @@ const TRACK_FIELDS: DimField[] = [
 ]
 
 const SNAP_FIELDS: DimField[] = [
-  { key: 'length', label: 'Clip length', step: 1 },
+  { key: 'length', label: 'Short clip length', step: 1 },
+  { key: 'longEndGap', label: 'Long clip end gap', step: 1 },
   { key: 'height', label: 'Height' },
   { key: 'bodyWidth', label: 'Body width' },
   { key: 'wingSpan', label: 'Wing span' },
@@ -155,9 +157,11 @@ export function DimensionsDialog({ onClose }: { onClose: () => void }) {
 
           <Section title="Connector clip">
             <p className="mb-1.5 text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
-              The one clip every joint takes: the relief-slotted snap design measured off
-              SR2_Single_230116.stl, printed and confirmed to fit. It grips by its arms flexing across the
-              slot rather than by its height. Changing the clip never changes the track.
+              The relief-slotted snap design measured off SR2_Single_230116.stl, printed and confirmed to
+              fit. It grips by its arms flexing across the slot rather than by its height. Every joint takes
+              the short clip; the long clip is the same design, as long as the pockets allow with the end gap
+              left clear in each piece, and is exported from Export ▸ Clip only. Changing a clip never
+              changes the track.
             </p>
             <div className="grid grid-cols-2 gap-x-3">
               {SNAP_FIELDS.map((f) => (
@@ -172,7 +176,9 @@ export function DimensionsDialog({ onClose }: { onClose: () => void }) {
             <p className="text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
               Wings {fmt(draft.snapClip.wingSpan - draft.track.slotOuterWidth, 3)} wider than the undercut ·{' '}
               {fmt(slotDepth(draft) - draft.snapClip.height, 3)} gap under the clip in the{' '}
-              {fmt(slotDepth(draft), 3)} slot.
+              {fmt(slotDepth(draft), 3)} slot. Long clip {fmt(longClipLength(draft), 1)}, leaving{' '}
+              {fmt(draft.assembly.connectorInset - longClipLength(draft) / 2, 1)} clear at the far end of each
+              pocket.
             </p>
           </Section>
 

@@ -8,7 +8,7 @@ import { safeBaseName } from '../export/project'
 import { getSnapClipGeometry, getTrackGeometry } from '../geometry/cache'
 import { clipSeatY, snapClipShape } from '../geometry/snapClip'
 import { connectorOffsets } from '../geometry/parts'
-import { DEFAULT_CONNECTOR_COLOR } from '../geometry/dimensions'
+import { DEFAULT_CONNECTOR_COLOR, longClipLength } from '../geometry/dimensions'
 import { localPortFrame, pieceMatrix, portLabel, portsOf } from '../lib/ports'
 import { clipLength, ownsConnector } from '../lib/connectors'
 
@@ -23,12 +23,15 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
 
   const [format, setFormat] = useState<ExportFormat>('3mf')
   const [what, setWhat] = useState<'track' | 'clip'>('track')
+  const [clipSize, setClipSize] = useState<'short' | 'long'>('short')
   const [scope, setScope] = useState<'all' | 'selected'>(selection.pieceIds.length ? 'selected' : 'all')
   const [includeConnectors, setIncludeConnectors] = useState(true)
   const [zUp, setZUp] = useState(true)
   const [busy, setBusy] = useState(false)
 
-  const clipLen = snapClipShape(dims).L
+  const shortLen = snapClipShape(dims).L
+  const longLen = snapClipShape(dims, longClipLength(dims)).L
+  const clipLen = clipSize === 'long' ? longLen : shortLen
 
   const parts = useMemo(() => {
     if (what === 'clip') {
@@ -36,7 +39,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
       return [
         {
           name: `Clip ${clipLen.toFixed(0)}mm`,
-          geometry: getSnapClipGeometry(dims),
+          geometry: getSnapClipGeometry(dims, clipLen),
           matrix: new THREE.Matrix4().makeTranslation(-clipLen / 2, 0, 0),
           color: DEFAULT_CONNECTOR_COLOR,
         },
@@ -171,10 +174,28 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
               <Toggle checked={includeConnectors} onChange={setIncludeConnectors} label="Include connector clips" />
             </>
           ) : (
-            <p className="mb-1.5 text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
-              A single {clipLen.toFixed(0)}mm connector clip — the snap clip every joint takes — lying flat
-              with its underside on the bed. Its size comes from Settings ▸ Dimensions ▸ Connector clip.
-            </p>
+            <>
+              <Field label="Clip">
+                <Segmented
+                  value={clipSize}
+                  onChange={setClipSize}
+                  options={[
+                    { value: 'short' as const, label: `Short (${shortLen.toFixed(0)}mm)`, title: 'The clip every joint takes' },
+                    { value: 'long' as const, label: `Long (${longLen.toFixed(0)}mm)`, title: 'Reaches further into each piece' },
+                  ]}
+                />
+              </Field>
+              <p className="mb-1.5 text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
+                {clipSize === 'short'
+                  ? `A single ${clipLen.toFixed(0)}mm connector clip — the snap clip every joint takes — lying flat with its underside on the bed.`
+                  : `A single ${clipLen.toFixed(0)}mm long clip lying flat with its underside on the bed. It reaches ${(
+                      clipLen / 2
+                    ).toFixed(0)}mm into each piece, leaving ${(dims.assembly.connectorInset - clipLen / 2).toFixed(
+                      1,
+                    )}mm clear at the far end of each pocket.`}{' '}
+                Its size comes from Settings ▸ Dimensions ▸ Connector clip.
+              </p>
+            </>
           )}
           <Toggle
             checked={zUp}

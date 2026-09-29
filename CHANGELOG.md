@@ -20,6 +20,40 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.4.0] — 2026-09-29
+
+A long connector clip alongside the short one. The 40mm clip is unchanged and
+every joint on the workplane still takes it. The geometry audit confirms every
+track piece is identical to 1.3.20.
+
+### Added
+
+- **A 70mm long clip.** Export ▸ Contents ▸ Clip only now has a **Clip** choice,
+  **Short (40mm)** or **Long (70mm)**. The long clip is the same snap design. It
+  reaches 35mm into each piece, so it leaves 5mm clear at the far end of each
+  40mm pocket. It keeps two screw holes, 10.845 in from each end, so each one
+  lands inside a piece and neither sits on the joint. The file is named for
+  example `project-clip-70mm.3mf`.
+- **Long clip end gap** under Settings ▸ Dimensions ▸ Connector clip, 5 by
+  default. It is the room left at the far end of each pocket. The long clip's
+  length follows it: 2 × (connector inset − end gap). The panel shows the long
+  clip's length and the room it leaves, and warns if the long clip comes out no
+  longer than the short one.
+
+### Changed
+
+- **Clip length** in Settings ▸ Dimensions is now called **Short clip length**.
+
+### Notes
+
+- The long clip is export-only. Pieces on the workplane and clips in a track
+  export are still the 40mm clip.
+- The geometry audit now builds the long clip as well. It checks that the clip is
+  watertight, that its volume matches the one worked out from its dimensions,
+  and that it is 70mm with at least 5mm clear in each pocket.
+
+---
+
 ## [1.3.20] — 2026-09-22
 
 Close Loop can now close a loop by resizing the track already on it, not only by

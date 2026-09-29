@@ -72,8 +72,14 @@ export interface TrackProfileDims {
  * `connector` dimensions cannot read them into this one.
  */
 export interface SnapClipDims {
-  /** Overall length. The printed part is 70; the snap clip starts at 40. */
+  /** Overall length of the short clip every joint takes. The printed part is 70; the snap clip starts at 40. */
   length: number
+  /**
+   * The long clip's clearance at the far end of each pocket. The long clip is
+   * otherwise the same clip, made as long as the two pockets it bridges allow
+   * with this much left clear inside each piece: 2 × (connector inset − gap).
+   */
+  longEndGap: number
   /** Overall height. (SR2: 4.647) */
   height: number
   /** Width of the body under the wings, the part that passes the slot mouth. (SR2: 19.593) */
@@ -186,6 +192,8 @@ export const DEFAULT_DIMENSIONS: Dimensions = {
   // to fit, except the length and hole count, which make the 40mm version of it.
   snapClip: {
     length: 40,
+    // 2 × (40 − 5) makes a 70mm long clip.
+    longEndGap: 5,
     height: 4.647,
     bodyWidth: 19.593,
     wingStep: 3.211,
@@ -243,6 +251,14 @@ export function slotMouthDepth(d: Dimensions): number {
  */
 export function connectorInset(d: Dimensions, length: number): number {
   return Math.min(Math.max(d.assembly.connectorInset, 0.5), Math.max(0.5, length / 2))
+}
+
+/**
+ * Length of the long clip, mm: as long as two full pockets allow with
+ * `longEndGap` left clear at the far end of each.
+ */
+export function longClipLength(d: Dimensions): number {
+  return Math.max(8, 2 * (d.assembly.connectorInset - Math.max(0, d.snapClip.longEndGap)))
 }
 
 export interface DimensionWarning {
@@ -303,6 +319,14 @@ export function validateDimensions(d: Dimensions, fmt: LengthFormatter = asMilli
       )} into each piece, but the pocket is only ${fmt(
         d.assembly.connectorInset,
       )} long. The clip will not seat.`,
+    })
+  }
+  if (longClipLength(d) <= sc.length) {
+    w.push({
+      field: 'snap.longEndGap',
+      message: `A ${fmt(sc.longEndGap)} end gap in a ${fmt(d.assembly.connectorInset)} pocket makes the long clip ${fmt(
+        longClipLength(d),
+      )}, no longer than the ${fmt(sc.length)} short clip.`,
     })
   }
   if (d.assembly.transitionMinFlatEnd < sc.length / 2) {
