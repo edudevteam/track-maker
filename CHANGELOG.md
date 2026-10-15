@@ -20,6 +20,20 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.4.2] — 2026-10-15
+
+README only. No part, dimension or tool changed.
+
+### Changed
+
+- **The README now opens with the public link**,
+  [track-maker.pages.dev](https://track-maker.pages.dev/), and explains what the
+  tool does and how to use it, step by step, instead of how to run it locally.
+  It covers the parts library, Close Loop, the simulator, the long clip, saving
+  projects, the example circuit, and the mouse and keyboard controls.
+
+---
+
 ## [1.4.1] — 2026-09-29
 
 The joints on the workplane can now take the 70mm long clip. No track piece or
