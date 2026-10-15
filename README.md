@@ -12,7 +12,7 @@ OBJ.
 Everything runs in the browser. There is nothing to install, no server and no
 account.
 
-![Track Maker with Muscle Car](./readme-track-example.png)
+![Track Maker with Muscle Car](./track-maker-cover.png)
 
 ## What it does
 
@@ -65,21 +65,21 @@ connector clip, in millimetres. Change a value and every piece rebuilds. **Setti
 
 ### Mouse and keyboard
 
-| Input               | Action                                                |
-| ------------------- | ----------------------------------------------------- |
-| Left click          | Select a piece                                        |
-| Right drag          | Rotate the view                                       |
-| Left or middle drag | Pan                                                   |
-| Scroll              | Zoom                                                  |
-| `V` `G` `R`         | Select, Move, Rotate                                  |
-| `C` `X` `L`         | Connect, Disconnect, Close Loop                       |
-| `A`                 | Parts library                                         |
-| `D`                 | Drop to workplane                                     |
-| `H` / `F`           | Home view / frame the selection                       |
-| `#`                 | Toggle the grid                                       |
-| `⌘Z` / `⇧⌘Z`        | Undo / redo                                           |
-| `⌘D`                | Duplicate                                             |
-| `Delete`            | Delete the selection                                  |
+| Input               | Action                          |
+| ------------------- | ------------------------------- |
+| Left click          | Select a piece                  |
+| Right drag          | Rotate the view                 |
+| Left or middle drag | Pan                             |
+| Scroll              | Zoom                            |
+| `V` `G` `R`         | Select, Move, Rotate            |
+| `C` `X` `L`         | Connect, Disconnect, Close Loop |
+| `A`                 | Parts library                   |
+| `D`                 | Drop to workplane               |
+| `H` / `F`           | Home view / frame the selection |
+| `#`                 | Toggle the grid                 |
+| `⌘Z` / `⇧⌘Z`        | Undo / redo                     |
+| `⌘D`                | Duplicate                       |
+| `Delete`            | Delete the selection            |
 
 ## How it works
 
