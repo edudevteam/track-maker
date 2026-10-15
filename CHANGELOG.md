@@ -20,6 +20,19 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.4.4] — 2026-10-15
+
+Top bar only. No part, dimension or tool changed.
+
+### Added
+
+- **A help button** (question mark) at the far right of the top bar. Hovering
+  shows **Help & FAQ**. Clicking opens the
+  [Track Maker GitHub page](https://github.com/edudevteam/track-maker) in a new
+  tab, so the build you're working on stays open.
+
+---
+
 ## [1.4.3] — 2026-10-15
 
 GitHub community files only. No part, dimension or tool changed.

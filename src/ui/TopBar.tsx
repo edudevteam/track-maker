@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  CircleHelp,
   Download,
   Eye,
   EyeOff,
@@ -42,6 +43,9 @@ import {
   projectFileName,
   projectToBlob,
 } from '../export/project'
+import { Tooltip } from './controls'
+
+const HELP_URL = 'https://github.com/edudevteam/track-maker'
 
 interface Notice {
   kind: 'ok' | 'error'
@@ -340,6 +344,19 @@ export function TopBar({
         <Download size={14} />
         Export
       </button>
+
+      {/* A new tab, so following the link never throws away an unsaved build. */}
+      <Tooltip title="Help & FAQ" body="Guides and questions on GitHub">
+        <a
+          className="tm-btn"
+          href={HELP_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Help and FAQ"
+        >
+          <CircleHelp size={14} />
+        </a>
+      </Tooltip>
 
       {notice && (
         <div
