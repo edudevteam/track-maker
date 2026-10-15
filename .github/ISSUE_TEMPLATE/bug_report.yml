@@ -1,0 +1,78 @@
+name: 🐛 Bug Report
+description: Report something in Track Maker that isn't working.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! The more detail you give, the faster it can be
+        reproduced. All dimensions in Track Maker are millimetres.
+  - type: dropdown
+    id: area
+    attributes:
+      label: "Area"
+      description: "Which part of Track Maker is affected?"
+      options:
+        - Track pieces (straights, curves, transitions, junctions)
+        - Connector clips
+        - Export (3MF / STL)
+        - Simulator / vehicles
+        - Editor and controls
+        - Settings ▸ Dimensions
+        - Saving and loading projects
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: "What happened?"
+      description: "Describe the bug, and what you expected to happen instead."
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Steps to reproduce"
+      placeholder: |
+        1. Add a straight and a 90° curve
+        2. Click Close Loop
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: printed
+    attributes:
+      label: "Did this show up in a print?"
+      options:
+        - No, only on screen
+        - Yes, the printed part is wrong
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: "Browser and OS"
+      placeholder: "e.g. Chrome 130 on macOS 14"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: "Version"
+      description: "The `app` value in a saved `.track.json` project file, or leave blank if you used the live site today."
+      placeholder: "e.g. 1.4.2"
+  - type: textarea
+    id: project-file
+    attributes:
+      label: "Project file, screenshots or slicer images"
+      description: "Attach your `.track.json` project file (rename it to `.txt` if GitHub refuses it), plus any screenshots."
+  - type: checkboxes
+    id: code-of-conduct
+    attributes:
+      label: "Code of Conduct"
+      description: "By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/edudevteam/track-maker/blob/main/CODE_OF_CONDUCT.md)."
+      options:
+        - label: "I agree to follow this project's Code of Conduct"
+          required: true

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🏁 Try Track Maker
+    url: https://track-maker.pages.dev/
+    about: Open the live app in your browser.
+  - name: 📖 How to use Track Maker
+    url: https://github.com/edudevteam/track-maker#readme
+    about: Step-by-step guide to the parts, Close Loop, the simulator and exporting.

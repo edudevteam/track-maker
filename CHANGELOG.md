@@ -20,6 +20,24 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.4.3] — 2026-10-15
+
+GitHub community files only. No part, dimension or tool changed.
+
+### Added
+
+- **Issue forms on GitHub.** A new issue now offers a **Feature Request** or a
+  **Bug Report** form. Both ask which area of Track Maker it touches (track
+  pieces, clips, export, simulator, editor, dimensions, saving) and whether the
+  track has been printed. The bug form asks for steps, browser and the
+  `.track.json` project file. Blank issues are off. The chooser links to the live
+  site and the README guide.
+- **A Code of Conduct**, based on the Contributor Covenant 2.1. Both forms link to
+  it.
+- **A `triage` label** that both forms add to new issues.
+
+---
+
 ## [1.4.2] — 2026-10-15
 
 README only. No part, dimension or tool changed.
