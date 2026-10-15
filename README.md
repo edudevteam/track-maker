@@ -6,6 +6,8 @@ as OBJ, STL or 3MF.
 
 Everything runs in the browser. There is no server and no account.
 
+![Track Maker with Muscle Car](./readme-track-example.png)
+
 ## Getting started
 
 ```bash
@@ -15,17 +17,17 @@ pnpm dev
 
 Then open the URL Vite prints.
 
-| Script | What it does |
-| --- | --- |
-| `pnpm dev` | Development server |
-| `pnpm build` | Type-check and build to `dist/` |
-| `pnpm preview` | Serve the production build |
-| `pnpm typecheck` | Type-check only |
+| Script           | What it does                    |
+| ---------------- | ------------------------------- |
+| `pnpm dev`       | Development server              |
+| `pnpm build`     | Type-check and build to `dist/` |
+| `pnpm preview`   | Serve the production build      |
+| `pnpm typecheck` | Type-check only                 |
 
 ## Using it
 
-**Build a run.** Pick a width and a length in the left panel and click *Add
-straight*, or click a corner angle. With *Snap to selected end* on, each new
+**Build a run.** Pick a width and a length in the left panel and click _Add
+straight_, or click a corner angle. With _Snap to selected end_ on, each new
 piece mates to the highlighted end; turn it off to drop pieces loose.
 
 **Adjust pieces.** Select a piece and edit its width, length, radius, sweep and
@@ -53,12 +55,12 @@ than read straight off the drawings.
 
 ### Keyboard
 
-| Key | Action |
-| --- | --- |
+| Key                 | Action                                    |
+| ------------------- | ----------------------------------------- |
 | `V` `G` `R` `C` `X` | Select, Move, Rotate, Connect, Disconnect |
-| `⌘Z` / `⇧⌘Z` | Undo / redo |
-| `⌘D` | Duplicate |
-| `Delete` | Delete selection |
+| `⌘Z` / `⇧⌘Z`        | Undo / redo                               |
+| `⌘D`                | Duplicate                                 |
+| `Delete`            | Delete selection                          |
 
 ## How it works
 
