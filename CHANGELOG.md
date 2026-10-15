@@ -20,6 +20,17 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.4.5] — 2026-10-15
+
+README only. No part, dimension or tool changed.
+
+### Added
+
+- **A video walkthrough link** at the top of the README, under the public link:
+  [How to use Track Maker on YouTube](https://www.youtube.com/watch?v=5xtdn3H29Y4).
+
+---
+
 ## [1.4.4] — 2026-10-15
 
 Top bar only. No part, dimension or tool changed.

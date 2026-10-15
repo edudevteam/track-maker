@@ -2,6 +2,8 @@
 
 **Open it: [track-maker.pages.dev](https://track-maker.pages.dev/)**
 
+**Watch the walkthrough: [How to use Track Maker on YouTube](https://www.youtube.com/watch?v=5xtdn3H29Y4)**
+
 Design 3D-printable car track in your browser. Lay out a run from straights,
 curves, transitions and junctions, check how many printer plates it needs, drive
 a car round it, then export the pieces and their connector clips as 3MF, STL or
