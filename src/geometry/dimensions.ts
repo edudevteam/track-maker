@@ -142,10 +142,39 @@ export interface AssemblyDims {
   transitionMinFlatEnd: number
 }
 
+/**
+ * Ramps and the support clips that hold raised track up. None of these were
+ * read off a drawing — they are first guesses, to be checked on a printed part.
+ */
+export interface ElevationDims {
+  /**
+   * Width of the opening cut up under a based bend's angled pocket, so a clip
+   * can be pushed up into the slot from below through the solid fill. Wider than the
+   * clip's wings, so they do not have to stay flexed all the way up.
+   */
+  rampAccessWidth: number
+  /**
+   * The short neck joining a support clip's leg to the clip. It meets only the
+   * clip's centre strip, so the arms either side still flex.
+   */
+  supportNeckHeight: number
+  /** Width across the track of a support clip's leg below the neck. */
+  supportColumnWidth: number
+  /** Width across the track of the foot a support stands on. */
+  supportFootWidth: number
+  /** How far the foot reaches past the clip's ends, along the track. */
+  supportFootOverhang: number
+  /** Thickness of the foot. */
+  supportFootThickness: number
+  /** A joint lower than this sits on an ordinary clip; above it, the clip grows a leg. */
+  supportMinHeight: number
+}
+
 export interface Dimensions {
   track: TrackProfileDims
   assembly: AssemblyDims
   snapClip: SnapClipDims
+  elevation: ElevationDims
 }
 
 /**
@@ -210,6 +239,16 @@ export const DEFAULT_DIMENSIONS: Dimensions = {
     counterSinkDia: 8.5,
     boreHeight: 1.646,
     coneHeight: 1,
+  },
+  elevation: {
+    // The 26.611 wing span with 1mm either side.
+    rampAccessWidth: 28.6,
+    supportNeckHeight: 1.5,
+    supportColumnWidth: 16,
+    supportFootWidth: 60,
+    supportFootOverhang: 5,
+    supportFootThickness: 3,
+    supportMinHeight: 6,
   },
 }
 
@@ -393,6 +432,23 @@ export function validateDimensions(d: Dimensions, fmt: LengthFormatter = asMilli
   }
   if (sc.counterSinkDia <= sc.holeDia) {
     w.push({ field: 'snap.holeDia', message: 'Countersink must be wider than the through-hole.' })
+  }
+  const el = d.elevation
+  if (el.rampAccessWidth < sc.wingSpan) {
+    w.push({
+      field: 'elevation.rampAccessWidth',
+      message: `The opening in a bend's base (${fmt(el.rampAccessWidth)}) is narrower than the clip's wings (${fmt(
+        sc.wingSpan,
+      )}), so a clip has to be squeezed all the way up it.`,
+    })
+  }
+  if (el.supportColumnWidth > t.slotMouthWidth) {
+    w.push({
+      field: 'elevation.supportColumnWidth',
+      message: `A ${fmt(el.supportColumnWidth)} support leg is wider than the ${fmt(
+        t.slotMouthWidth,
+      )} slot mouth, so it will rub the underside of the track next to the clip.`,
+    })
   }
   return w
 }

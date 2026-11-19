@@ -5,15 +5,14 @@ import { useProject } from '../store/useProject'
 import { Field, Section, Segmented, Toggle } from './controls'
 import { downloadBlob, exportParts, type ExportFormat, type ExportPart } from '../export/exporters'
 import { safeBaseName } from '../export/project'
-import { getSnapClipGeometry, getTrackGeometry } from '../geometry/cache'
-import { clipSeatY, snapClipShape } from '../geometry/snapClip'
+import { getSnapClipGeometry, getSupportClipGeometry, getTrackGeometry } from '../geometry/cache'
+import { clipPlacement, supportLeg } from '../lib/supports'
+import { snapClipShape } from '../geometry/snapClip'
 import { connectorOffsets } from '../geometry/parts'
 import { DEFAULT_CONNECTOR_COLOR, longClipLength } from '../geometry/dimensions'
-import { localPortFrame, pieceMatrix, portLabel, portsOf } from '../lib/ports'
+import { pieceMatrix, portLabel, portsOf } from '../lib/ports'
 import { clipLength, ownsConnector } from '../lib/connectors'
 
-const X_AXIS = new THREE.Vector3(1, 0, 0)
-const Z_AXIS = new THREE.Vector3(0, 0, 1)
 
 export function ExportDialog({ onClose }: { onClose: () => void }) {
   const pieces = useProject((s) => s.pieces)
@@ -62,24 +61,24 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         const link = piece.links[port]
         const neighbour = link ? pieces.find((p) => p.id === link.pieceId) : undefined
         const length = clipLength(piece, neighbour, dims, jointClip)
-        const connGeom = getSnapClipGeometry(dims, length)
-        const frame = localPortFrame(piece, port, dims)
-        const outward = X_AXIS.clone().applyQuaternion(frame.quaternion)
-        const lateral = Z_AXIS.clone().applyQuaternion(frame.quaternion)
-        const origin = frame.position.clone().addScaledVector(outward, -length / 2)
-        origin.y = clipSeatY(dims)
+        // A raised joint is held by a support clip, which is the clip with a leg.
+        const leg = supportLeg(piece, port, neighbour, length, dims)
+        const connGeom =
+          leg === null ? getSnapClipGeometry(dims, length) : getSupportClipGeometry(dims, length, leg.floor, leg.pitchDeg)
+        const clipKind = leg === null ? 'clip' : 'support clip'
+        const { origin, quaternion, lateral } = clipPlacement(piece, port, length, dims)
         const offsets = connectorOffsets(piece, dims, port)
         offsets.forEach((v, index) => {
           const local = new THREE.Matrix4().compose(
             origin.clone().addScaledVector(lateral, v),
-            frame.quaternion,
+            quaternion,
             new THREE.Vector3(1, 1, 1),
           )
           out.push({
             name:
               offsets.length > 1
-                ? `${piece.name} clip on ${portLabel(port)} ${index === 0 ? 'left' : 'right'}`
-                : `${piece.name} clip on ${portLabel(port)}`,
+                ? `${piece.name} ${clipKind} on ${portLabel(port)} ${index === 0 ? 'left' : 'right'}`
+                : `${piece.name} ${clipKind} on ${portLabel(port)}`,
             geometry: connGeom,
             matrix: matrix.clone().multiply(local),
             color: piece.connectorColor,

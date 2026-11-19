@@ -32,6 +32,8 @@ export function ownsConnector(piece: Piece, port: PortId): boolean {
  */
 function pocketDepth(piece: Piece, d: Dimensions): number {
   if (piece.kind === 'junction') return 0
+  // A bend's two end sections are each a full pocket, whatever its arc.
+  if (piece.kind === 'bend') return Math.max(d.assembly.connectorInset, 0.5)
   if (piece.kind === 'transition') {
     return transitionLayout(d, {
       lanesA: piece.lanes,

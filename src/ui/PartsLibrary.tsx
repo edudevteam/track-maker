@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Plus, X } from 'lucide-react'
-import { junctionName, transitionName, useProject } from '../store/useProject'
+import { bendName, junctionName, transitionName, useProject } from '../store/useProject'
 import { Field, NumberInput, Segmented } from './controls'
 import { LengthInput, useUnits } from './units'
 import { laneWidth } from '../geometry/dimensions'
@@ -12,7 +12,8 @@ import {
   transitionCornerLimit,
 } from '../geometry/transition'
 import { junctionSide } from '../geometry/junction'
-import type { PartSpec, PieceKind } from '../types'
+import { bendFrameAt, bendLayout, canHaveBase, effectiveBase, MAX_BEND_ANGLE, minBendRadius } from '../geometry/bend'
+import type { BendBase, PartSpec, PieceKind } from '../types'
 
 /** Lanes are free-typed, so they need sane bounds. Widths are whole lanes. */
 export const MAX_LANES = 8
@@ -22,6 +23,12 @@ const MAX_STRAIGHT_LENGTH = 1000
 /** The common straight lengths, offered here and in Part Details. Millimetres. */
 export const LENGTH_PRESETS = [50, 100, 150, 200]
 const CURVE_ANGLES = [15, 30, 45, 90]
+/** The common bend angles, degrees. Twice one of these turns a climb into a drop. */
+const BEND_ANGLES = [10, 15, 20, 30]
+const DEFAULT_BEND_ANGLE = 15
+const DEFAULT_BEND_RADIUS = 150
+const MAX_BEND_RADIUS = 800
+const MAX_SLOPE = 600
 
 type Turn = 'left' | 'right'
 
@@ -30,6 +37,7 @@ const CATALOGUE: { kind: PieceKind; name: string; blurb: string }[] = [
   { kind: 'curve', name: 'Curve', blurb: 'A turn on a fixed radius.' },
   { kind: 'transition', name: 'Transition', blurb: 'Opens one width into the next.' },
   { kind: 'junction', name: 'Junction', blurb: 'Opens one or both sides.' },
+  { kind: 'bend', name: 'Bend', blurb: 'Tips the track up or down. Add a base for a ramp.' },
 ]
 
 /**
@@ -52,6 +60,11 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
   const [radius, setRadius] = useState(120)
   const [angleDeg, setAngleDeg] = useState(45)
   const [turn, setTurn] = useState<Turn>('left')
+  const [bendAngle, setBendAngle] = useState(DEFAULT_BEND_ANGLE)
+  const [bendRadius, setBendRadius] = useState(DEFAULT_BEND_RADIUS)
+  const [bendSlope, setBendSlope] = useState(0)
+  const [bendBase, setBendBase] = useState<BendBase>('none')
+  const bend = { radius: bendRadius, angleDeg: bendAngle, slope: bendSlope, base: bendBase }
   // A junction is a square whose side follows from its lanes, so the only thing
   // to pick is which of its walls are open.
   const [openLeft, setOpenLeft] = useState(true)
@@ -76,6 +89,8 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
     lanes,
     lanesB,
     length,
+    slope: 0,
+    base: 'none' as BendBase,
     cornerRadius: corner,
     flatEnd: flat,
     radius,
@@ -91,7 +106,18 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
         ? { ...base, kind, length: taperLen, name: transitionName(lanes, lanesB) }
         : kind === 'junction'
           ? { ...base, kind, length: junctionLen, openLeft, openRight, name: junctionName(openLeft, openRight) }
-          : { ...base, kind, name: `Straight ${fmt(length, 0)}` }
+          : kind === 'bend'
+              ? {
+                  ...base,
+                  kind,
+                  length: bendLayout(dims, bend).length,
+                  radius: Math.max(bendRadius, minBendRadius(dims)),
+                  angleDeg: bendAngle,
+                  slope: bendSlope,
+                  base: effectiveBase(bend),
+                  name: bendName(bendAngle, bendBase),
+                }
+            : { ...base, kind, name: `Straight ${fmt(length, 0)}` }
 
   const add = () => {
     addPiece({ ...spec })
@@ -113,12 +139,12 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={onClose}>
       <div
-        className="w-full max-w-[620px] overflow-hidden rounded-lg border shadow-2xl"
+        className="flex max-h-full w-full max-w-[620px] flex-col overflow-hidden rounded-lg border shadow-2xl"
         style={{ background: 'var(--color-surface)', borderColor: 'var(--color-line)' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div
-          className="flex items-center justify-between border-b px-3 py-2.5"
+          className="flex shrink-0 items-center justify-between border-b px-3 py-2.5"
           style={{ borderColor: 'var(--color-line)' }}
         >
           <h2 className="text-[13px] font-semibold">Parts library</h2>
@@ -127,8 +153,13 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        <div className="flex min-h-[286px]">
-          <div className="w-[186px] shrink-0 border-r p-2" style={{ borderColor: 'var(--color-line)' }}>
+        {/* Usual height on a roomy screen; on a short window the two columns
+            scroll on their own while the header and the Add button stay put. */}
+        <div className="flex min-h-[min(286px,calc(100dvh-9rem))] flex-1 overflow-hidden">
+          <div
+            className="w-[186px] shrink-0 overflow-y-auto border-r p-2"
+            style={{ borderColor: 'var(--color-line)' }}
+          >
             <span className="tm-label mb-1.5 block px-1">Parts</span>
             <div className="space-y-1">
               {CATALOGUE.map((part) => {
@@ -159,7 +190,7 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
-          <div className="min-w-0 flex-1 p-3">
+          <div className="min-w-0 flex-1 overflow-y-auto p-3">
             <Preview
               kind={kind}
               lanes={lanes}
@@ -171,6 +202,7 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
               openRight={openRight}
               angleDeg={angleDeg}
               turn={turn}
+              bend={bend}
             />
 
             {kind === 'transition' ? (
@@ -250,6 +282,17 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
                 />
                 <JunctionSizeNote lanes={lanes} />
               </>
+            ) : kind === 'bend' ? (
+              <BendFields
+                angleDeg={bendAngle}
+                radius={bendRadius}
+                slope={bendSlope}
+                base={bendBase}
+                onAngle={setBendAngle}
+                onRadius={setBendRadius}
+                onSlope={setBendSlope}
+                onBase={setBendBase}
+              />
             ) : kind === 'straight' ? (
               <Field label="Length">
                 <div className="mb-1.5 grid grid-cols-4 gap-1">
@@ -323,7 +366,7 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
         </div>
 
         <div
-          className="flex items-center justify-between gap-2 border-t px-3 py-2.5"
+          className="flex shrink-0 items-center justify-between gap-2 border-t px-3 py-2.5"
           style={{ borderColor: 'var(--color-line)' }}
         >
           <span className="text-[11px]" style={{ color: 'var(--color-ink-2)' }}>
@@ -501,6 +544,119 @@ export function OpenSidesField({
   )
 }
 
+/**
+ * A bend's shape: which way it tips the track, how far, and how sharply. Shared
+ * by the library and Part Details.
+ */
+export function BendFields({
+  angleDeg,
+  radius,
+  slope,
+  base,
+  onAngle,
+  onRadius,
+  onSlope,
+  onBase,
+}: {
+  angleDeg: number
+  radius: number
+  slope: number
+  base: BendBase
+  onAngle: (deg: number) => void
+  onRadius: (mm: number) => void
+  onSlope: (mm: number) => void
+  onBase: (base: BendBase) => void
+}) {
+  const dims = useProject((s) => s.dims)
+  const { fmt } = useUnits()
+  const turn = Math.abs(angleDeg)
+  const sign = angleDeg < 0 ? -1 : 1
+  const l = bendLayout(dims, { radius, angleDeg, slope, base })
+  const baseable = canHaveBase({ angleDeg })
+  return (
+    <>
+      <Field
+        label="Direction"
+        hint="Up tips the road upwards, as at the foot of a hill; down tips it back, as at the top."
+      >
+        <Segmented<'up' | 'down'>
+          value={sign < 0 ? 'down' : 'up'}
+          onChange={(v) => onAngle((v === 'down' ? -1 : 1) * turn)}
+          options={[
+            { value: 'up', label: 'Up' },
+            { value: 'down', label: 'Down' },
+          ]}
+        />
+      </Field>
+      <Field
+        label="Angle"
+        hint="Relative to the end it joins. Twice the slope turns a climb straight into a drop."
+      >
+        <div className="mb-1.5 grid grid-cols-4 gap-1">
+          {BEND_ANGLES.map((a) => (
+            <button
+              key={a}
+              className="tm-btn px-0"
+              style={Math.abs(turn - a) < 0.05 ? { borderColor: 'var(--color-accent)' } : undefined}
+              onClick={() => onAngle(sign * a)}
+            >
+              {a}°
+            </button>
+          ))}
+        </div>
+        <NumberInput
+          value={turn}
+          onChange={(v) => onAngle(sign * Math.min(MAX_BEND_ANGLE, Math.max(1, v)))}
+          step={5}
+          min={1}
+          max={MAX_BEND_ANGLE}
+          suffix="°"
+        />
+      </Field>
+      <Field
+        label="Radius"
+        hint={`${fmt(l.length, 0)} along the road, with a level ${fmt(l.inset, 0)} connector section at each end.`}
+      >
+        <LengthInput
+          value={radius}
+          onChange={onRadius}
+          step={10}
+          min={minBendRadius(dims)}
+          max={MAX_BEND_RADIUS}
+        />
+      </Field>
+      <Field label="Slope length" hint="A straight run at the angle, built into the part. 0 for none.">
+        <LengthInput value={slope} onChange={(v) => onSlope(Math.max(0, v))} step={10} min={0} max={MAX_SLOPE} />
+      </Field>
+      <Field
+        label="Solid base"
+        hint={
+          baseable
+            ? 'Filled underneath down to a flat base, so it prints flat and holds itself up.'
+            : 'Only a bend up has an underside to fill.'
+        }
+      >
+        <Segmented<BendBase>
+          value={baseable ? base : 'none'}
+          onChange={(v) => baseable && onBase(v)}
+          options={[
+            { value: 'none', label: 'None' },
+            { value: 'a', label: 'Under A' },
+            { value: 'b', label: 'Under B' },
+          ]}
+        />
+        {baseable && base !== 'none' && (
+          <p className="mt-1 text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
+            {base === 'a'
+              ? 'Side A sits level on the base and the track climbs away from it.'
+              : 'The track comes down to side B, which sits level on the base.'}
+          </p>
+        )}
+      </Field>
+    </>
+  )
+}
+
 /** One end's width, for the transition's pair of pickers. */
 function LaneField({
   label,
@@ -554,6 +710,9 @@ export function PartIcon({ kind }: { kind: PieceKind }) {
           <path d="M13 3v20" stroke="var(--color-track)" strokeWidth={7} strokeLinecap="round" fill="none" />
         </>
       )}
+      {kind === 'bend' && (
+        <path d="M3 20h7q5 0 9-5l4-5" stroke="var(--color-track)" strokeWidth={6} strokeLinecap="round" fill="none" />
+      )}
     </svg>
   )
 }
@@ -570,6 +729,7 @@ function Preview({
   openRight,
   angleDeg,
   turn,
+  bend,
 }: {
   kind: PieceKind
   lanes: number
@@ -584,7 +744,9 @@ function Preview({
   openRight: boolean
   angleDeg: number
   turn: Turn
+  bend: { radius: number; angleDeg: number; slope: number; base: BendBase }
 }) {
+  const dims = useProject((s) => s.dims)
   // A lane is 11px on screen, clamped so an 8-wide piece still fits the box.
   const bandFor = (n: number) => Math.min(46, 6 + n * 11)
   const band = bandFor(lanes)
@@ -622,6 +784,50 @@ function Preview({
           </text>
           <text x={13} y={49} fontSize={9} fill="var(--color-ink-2)">
             A
+          </text>
+        </svg>
+      </div>
+    )
+  }
+
+  if (kind === 'bend') {
+    // Seen from the side, to scale, side A on the left and turned the way it
+    // will sit: a base under B tips it so B is level.
+    const l = bendLayout(dims, bend)
+    const steps = 48
+    const q = l.base === 'b' ? -l.sign * l.turn : 0
+    const pts = Array.from({ length: steps + 1 }, (_, i) => {
+      const p = bendFrameAt(l, (l.length * i) / steps).position
+      return { x: p.x * Math.cos(q) - p.y * Math.sin(q), y: p.x * Math.sin(q) + p.y * Math.cos(q) }
+    })
+    const xs = pts.map((p) => p.x)
+    const ys = pts.map((p) => p.y)
+    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]
+    const scale = Math.min(140 / Math.max(1, x1 - x0), 64 / Math.max(1, y1 - y0))
+    const sx = (x: number) => 25 + (x - x0) * scale + (140 - (x1 - x0) * scale) / 2
+    const sy = (y: number) => 80 - (y - y0) * scale
+    const road = pts.map((p, i) => `${i ? 'L' : 'M'}${sx(p.x).toFixed(1)} ${sy(p.y).toFixed(1)}`).join('')
+    const first = pts[0]
+    const last = pts[pts.length - 1]
+    return (
+      <div
+        className="mb-3 grid h-[104px] place-items-center rounded border"
+        style={{ background: 'var(--color-surface-2)', borderColor: 'var(--color-line)' }}
+      >
+        <svg width={190} height={92} viewBox="0 0 190 92" aria-hidden>
+          {l.base !== 'none' && (
+            <path
+              d={`${road}L${sx(last.x).toFixed(1)} 84L${sx(first.x).toFixed(1)} 84Z`}
+              fill="var(--color-track)"
+              opacity={0.55}
+            />
+          )}
+          <path d={road} stroke="var(--color-track)" strokeWidth={6} fill="none" />
+          <text x={sx(first.x) - 12} y={sy(first.y) + 3} fontSize={9} fill="var(--color-ink-2)">
+            A
+          </text>
+          <text x={sx(last.x) + 5} y={sy(last.y) + 3} fontSize={9} fill="var(--color-ink-2)">
+            B
           </text>
         </svg>
       </div>

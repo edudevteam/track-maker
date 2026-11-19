@@ -10,6 +10,12 @@ export interface Frame {
   position: THREE.Vector3
   /** Unit tangent, i.e. the direction of travel. */
   tangent: THREE.Vector3
+  /**
+   * Which way the section's +y points. Left out, it is world up, which is what
+   * every flat part wants. A bend sets it square to the road, so the section
+   * pitches with the slope and the T-slot keeps its full depth at an angled joint.
+   */
+  up?: THREE.Vector3
 }
 
 const UP = new THREE.Vector3(0, 1, 0)
@@ -18,13 +24,14 @@ const UP = new THREE.Vector3(0, 1, 0)
  * Where a profile-space point lands in the world at one station.
  *
  * The single definition of that mapping: profile +x runs along `up × tangent`
- * and profile +y runs up. Anything that has to meet a swept surface exactly — a
+ * and profile +y runs along `up` — the frame's own, or world up by default. Anything that has to meet a swept surface exactly — a
  * hand-built end face, the wall closing off a pocket — has to land on the same
  * coordinates, so it goes through here rather than repeating the arithmetic.
  */
 export function framePoint(f: Frame, p: Pt2): THREE.Vector3 {
-  const lateral = new THREE.Vector3().copy(UP).cross(f.tangent).normalize()
-  return new THREE.Vector3().copy(f.position).addScaledVector(lateral, p.x).addScaledVector(UP, p.y)
+  const up = f.up ?? UP
+  const lateral = new THREE.Vector3().copy(up).cross(f.tangent).normalize()
+  return new THREE.Vector3().copy(f.position).addScaledVector(lateral, p.x).addScaledVector(up, p.y)
 }
 
 /** Signed area of a closed polygon. Positive when counter-clockwise. */

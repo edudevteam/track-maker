@@ -57,6 +57,16 @@ const SNAP_FIELDS: DimField[] = [
   { key: 'coneHeight', label: 'Countersink cone' },
 ]
 
+const ELEVATION_FIELDS: DimField[] = [
+  { key: 'rampAccessWidth', label: 'Opening in a base' },
+  { key: 'supportMinHeight', label: 'Support from height', step: 1 },
+  { key: 'supportNeckHeight', label: 'Support neck height' },
+  { key: 'supportColumnWidth', label: 'Support leg width', step: 1 },
+  { key: 'supportFootWidth', label: 'Support foot width', step: 1 },
+  { key: 'supportFootOverhang', label: 'Foot past clip ends', step: 1 },
+  { key: 'supportFootThickness', label: 'Foot thickness' },
+]
+
 /**
  * The parametric dimensions of every part, edited as a draft. Nothing reaches the
  * build until Save, so Cancel leaves the pieces exactly as they were and a
@@ -179,6 +189,26 @@ export function DimensionsDialog({ onClose }: { onClose: () => void }) {
               {fmt(draft.assembly.connectorInset - longClipLength(draft) / 2, 1)} clear at the far end of each
               pocket.
             </p>
+          </Section>
+
+          <Section title="Ramps and supports">
+            <p className="mb-1.5 text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
+              A bend with a solid base is filled underneath, with an opening cut up under its angled end so a
+              clip can be pushed into the slot from below. Any joint higher than the support height gets a support clip
+              instead of a plain one: the same clip, with a leg and foot down to the workplane. The leg
+              joins only the clip's centre strip, so its arms still flex. Print supports standing on
+              the foot. First guesses — check them on a printed part.
+            </p>
+            <div className="grid grid-cols-2 gap-x-3">
+              {ELEVATION_FIELDS.map((f) => (
+                <DimensionField
+                  key={f.key}
+                  field={f}
+                  value={(draft.elevation as unknown as Record<string, number>)[f.key]}
+                  onChange={(v) => setValue('elevation', f.key, v)}
+                />
+              ))}
+            </div>
           </Section>
 
           <Section title="Assembly">

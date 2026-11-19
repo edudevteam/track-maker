@@ -1,6 +1,16 @@
 import * as THREE from 'three'
 import { DEFAULT_DIMENSIONS, floorTopY, laneWidth, longClipLength, validateDimensions, type Dimensions } from '../src/geometry/dimensions.ts'
-import { buildSnapClipGeometry, clipSeatY, snapClipShape, snapClipVolume } from '../src/geometry/snapClip.ts'
+import {
+  buildSnapClipGeometry,
+  buildSupportClipGeometry,
+  clipSeatY,
+  minSupportFloor,
+  snapClipShape,
+  snapClipVolume,
+  supportClipVolume,
+  supportLegShape,
+} from '../src/geometry/snapClip.ts'
+import { baseAccessHalf, bendFrameAt, bendLayout, bendVolume, buildBendGeometry } from '../src/geometry/bend.ts'
 import { buildTrackGeometry, plainVolume, plainZones } from '../src/geometry/parts.ts'
 import { slotMetrics, trackProfile, wallMetrics } from '../src/geometry/trackProfile.ts'
 import { signedArea } from '../src/geometry/sweep.ts'
@@ -423,5 +433,157 @@ bar('connector clip (snap)')
   ]
   for (const [name, got, want, tol] of checks) {
     console.log(`${Math.abs(got - want) <= tol ? 'ok  ' : 'BAD '} ${name.padEnd(18)} ${got.toFixed(3)} (SR2 ${want.toFixed(3)})`)
+  }
+}
+
+bar('support clips')
+for (const [length, floor, pitch] of [
+  [d.snapClip.length, 50, 0],
+  [longClipLength(d), 120, 0],
+  [d.snapClip.length, minSupportFloor(d, d.snapClip.length), 0],
+  // Tipped to sit on a slope, up and down.
+  [d.snapClip.length, 60, 20],
+  [d.snapClip.length, 60, -30],
+  [longClipLength(d), 90, 45],
+] as [number, number, number][]) {
+  const g = buildSupportClipGeometry(d, length, floor, pitch)
+  const shape = supportLegShape(d, length, floor, pitch)
+  const audit = edgeAudit(g)
+  const got = volume(g)
+  const want = supportClipVolume(d, length, floor, pitch)
+  const off = Math.abs(got - want) / want
+  // Turned back to level, the foot must sit flat on the floor, `floor` below
+  // the clip's origin, its full width across and its full run along.
+  const level = g.clone().applyMatrix4(new THREE.Matrix4().makeRotationZ(THREE.MathUtils.degToRad(pitch)))
+  level.computeBoundingBox()
+  const bb = level.boundingBox!
+  const run = shape.L * shape.cos
+  const pos = level.getAttribute('position')
+  let onFloor = 0
+  for (let i = 0; i < pos.count; i++) if (Math.abs(pos.getY(i) + floor) < 1e-3) onFloor++
+  const footOk =
+    Math.abs(bb.min.y + floor) < 1e-3 &&
+    Math.abs(bb.max.z - bb.min.z - 2 * shape.footHalf) < 1e-3 &&
+    Math.abs(bb.min.x + shape.over) < 1e-3 &&
+    Math.abs(bb.max.x - Math.max(run + shape.over, shape.L * shape.cos)) < 1e-3 &&
+    onFloor >= 4
+  // The neck must sit inside the centre strip, clear of the relief slots, or it
+  // would tie the arms down and the clip would not snap.
+  const sc = snapClipShape(d, length)
+  const neckClear = shape.neckHalf < sc.stripHalf
+  console.log(
+    `${off < 1e-5 && audit.nonManifold === 0 && footOk && neckClear ? 'ok  ' : 'BAD '}` +
+      ` ${length}mm clip ${floor.toFixed(2)}mm up at ${pitch}° tris=${g.getIndex()!.count / 3}` +
+      ` vol=${got.toFixed(1)}mm³ (expect ${want.toFixed(1)}, off ${(off * 100).toFixed(5)}%)` +
+      ` level bbox=[${bb.min.toArray().map((n) => n.toFixed(2))}]→[${bb.max.toArray().map((n) => n.toFixed(2))}]` +
+      ` neck ±${shape.neckHalf.toFixed(2)} in a ±${sc.stripHalf.toFixed(2)} strip` +
+      ` nonManifoldEdges=${audit.nonManifold}/${audit.edges}`,
+  )
+  for (const smp of audit.samples) console.log('  bad edge', smp)
+}
+
+bar('bends')
+for (const spec of [
+  { lanes: 1, radius: 150, angleDeg: 15, slope: 0, base: 'none' as const },
+  { lanes: 1, radius: 150, angleDeg: -15, slope: 0, base: 'none' as const },
+  { lanes: 1, radius: 150, angleDeg: -30, slope: 80, base: 'none' as const },
+  { lanes: 2, radius: 200, angleDeg: 20, slope: 0, base: 'none' as const },
+  { lanes: 3, radius: 120, angleDeg: -90, slope: 0, base: 'none' as const },
+  // Tighter than a bend can go, and no angle at all: both clamped.
+  { lanes: 1, radius: 5, angleDeg: 0, slope: 0, base: 'none' as const },
+  // With a solid base: the ramp. Up from side A, down onto side B, wider, with
+  // a slope, and a bend down whose base cannot be built and is left off.
+  { lanes: 1, radius: 150, angleDeg: 20, slope: 0, base: 'a' as const },
+  { lanes: 1, radius: 150, angleDeg: 20, slope: 0, base: 'b' as const },
+  { lanes: 2, radius: 200, angleDeg: 15, slope: 100, base: 'a' as const },
+  { lanes: 3, radius: 120, angleDeg: 30, slope: 60, base: 'b' as const },
+  { lanes: 1, radius: 150, angleDeg: -20, slope: 0, base: 'a' as const },
+]) {
+  const g = buildBendGeometry(d, spec)
+  const l = bendLayout(d, spec)
+  const audit = edgeAudit(g)
+  const got = volume(g)
+  const want = bendVolume(d, spec)
+  const off = (want - got) / want
+  // The far end: every vertex on the end face lies in the plane square to the
+  // road at port b, and the face's underside centre is the port.
+  const end = bendFrameAt(l, l.length)
+  const pos = g.getAttribute('position')
+  const v = new THREE.Vector3()
+  let onEnd = 0
+  let lowest = Infinity
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i)
+    const along = v.clone().sub(end.position).dot(end.tangent)
+    // Positions are 32-bit, so a micron is as close as a vertex can be asked to sit.
+    if (Math.abs(along) < 1e-3) {
+      onEnd++
+      lowest = Math.min(lowest, v.clone().sub(end.position).dot(end.up))
+    }
+  }
+  const endOk = onEnd > 0 && Math.abs(lowest) < 1e-3
+  // Pappus is exact; the mesh chords the arc, so an open bend may only come out
+  // under, by no more than a curve's. A based bend's road is dished, so its
+  // chords sit above the curve and it comes out over by as much instead.
+  // Taken at the mesh's own stations instead, a based bend's volume is exact.
+  const chordOff = l.base === 'none' ? 0 : Math.abs(got - bendVolume(d, spec, true)) / want
+  const volOk = l.base === 'none' ? off >= -1e-6 && off < 2e-3 : Math.abs(off) < 2e-3 && chordOff < 1e-6
+  console.log(
+    `${volOk && audit.nonManifold === 0 && endOk ? 'ok  ' : 'BAD '}` +
+      ` lanes=${spec.lanes} base=${l.base} slope=${l.slope} r=${l.radius} angle=${(l.sign * THREE.MathUtils.radToDeg(l.turn)).toFixed(1)}° road=${l.length.toFixed(1)}` +
+      ` tris=${g.getIndex()!.count / 3} vol=${got.toFixed(1)}mm³ (expect ${want.toFixed(1)}, ${off >= 0 ? 'under' : 'over'} by ${(Math.abs(off) * 100).toFixed(4)}%${l.base === 'none' ? '' : `, at the mesh's stations off ${(chordOff * 100).toFixed(6)}%`})` +
+      ` far end at [${end.position.toArray().map((n) => n.toFixed(2))}] heading ${THREE.MathUtils.radToDeg(Math.atan2(end.tangent.y, end.tangent.x)).toFixed(2)}°` +
+      ` nonManifoldEdges=${audit.nonManifold}/${audit.edges}`,
+  )
+  for (const smp of audit.samples) console.log('  bad edge', smp)
+}
+{
+  // A clip seats square in a pitched pocket: on the 30° end face, the slot
+  // ceiling measured square to the road is the full depth it is on the flat.
+  const l = bendLayout(d, { radius: 150, angleDeg: 30, slope: 0, base: 'none' })
+  const f = bendFrameAt(l, l.length)
+  const g = buildBendGeometry(d, { lanes: 1, radius: 150, angleDeg: 30, slope: 0, base: 'none' })
+  const pos = g.getAttribute('position')
+  const { slotH, outerHalf } = slotMetrics(d)
+  const v = new THREE.Vector3()
+  let ceiling = -Infinity
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).sub(f.position)
+    if (Math.abs(v.dot(f.tangent)) > 1e-3 || Math.abs(v.z) > outerHalf + 1e-3) continue
+    const h = v.dot(f.up)
+    if (h < floorTopY(d.track) - 0.01) ceiling = Math.max(ceiling, h)
+  }
+  console.log(
+    `${Math.abs(ceiling - slotH) < 1e-3 ? 'ok  ' : 'BAD '}` +
+      ` slot ${ceiling.toFixed(3)}mm deep square to the road at a 30° end (want ${slotH.toFixed(3)};` +
+      ` an upright section would leave ${(slotH * Math.cos(Math.PI / 6)).toFixed(3)})`,
+  )
+}
+
+{
+  // A based bend stands flat: side A's underside, or side B's, is the lowest
+  // thing on it, and the whole base is one plane square to that end.
+  for (const base of ['a', 'b'] as const) {
+    const spec = { lanes: 2, radius: 150, angleDeg: 20, slope: 40, base }
+    const l = bendLayout(d, spec)
+    const g = buildBendGeometry(d, spec)
+    const end = base === 'a' ? bendFrameAt(l, 0) : bendFrameAt(l, l.length)
+    const pos = g.getAttribute('position')
+    const v = new THREE.Vector3()
+    let lowest = Infinity
+    let onBase = 0
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).sub(end.position)
+      const h = v.dot(end.up)
+      lowest = Math.min(lowest, h)
+      if (Math.abs(h) < 1e-3) onBase++
+    }
+    // The opening under the angled pocket is as wide as asked.
+    const acc = baseAccessHalf(d) * 2
+    console.log(
+      `${Math.abs(lowest) < 1e-3 && onBase > 8 && acc >= d.snapClip.wingSpan ? 'ok  ' : 'BAD '}` +
+        ` base under ${base.toUpperCase()}: nothing below it (lowest ${lowest.toFixed(4)}), ${onBase} vertices on it,` +
+        ` ${acc.toFixed(3)}mm opening for ${d.snapClip.wingSpan}mm wings`,
+    )
   }
 }

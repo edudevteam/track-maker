@@ -11,6 +11,7 @@ import {
   MAX_LANES,
   OpenSidesField,
   TaperField,
+  BendFields,
 } from './PartsLibrary'
 import { laneWidth } from '../geometry/dimensions'
 import {
@@ -214,7 +215,20 @@ function Properties() {
           </>
         )}
 
-        {piece.kind === 'transition' || piece.kind === 'junction' ? null : piece.kind === 'straight' ? (
+        {piece.kind === 'bend' && (
+          <BendFields
+            angleDeg={piece.angleDeg}
+            radius={piece.radius}
+            slope={piece.slope}
+            base={piece.base}
+            onAngle={(angleDeg) => set({ angleDeg })}
+            onRadius={(radius) => set({ radius })}
+            onSlope={(slope) => set({ slope })}
+            onBase={(base) => set({ base })}
+          />
+        )}
+
+        {piece.kind === 'transition' || piece.kind === 'junction' || piece.kind === 'bend' ? null : piece.kind === 'straight' ? (
           <>
             <Field label="Length" hint="Connector ends keep their width, so joins still fit.">
               <LengthInput

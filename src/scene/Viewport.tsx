@@ -131,7 +131,7 @@ function Gizmo() {
     }
     const q = pieceQuaternion(piece)
     let pos: THREE.Vector3
-    if (selection.anchor === 'middle') pos = pieceMidpoint(piece)
+    if (selection.anchor === 'middle') pos = pieceMidpoint(piece, dims)
     else {
       const local = localPortFrame(piece, selection.anchor, dims)
       pos = local.position.clone().applyQuaternion(q).add(new THREE.Vector3(...piece.position))

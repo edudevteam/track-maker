@@ -3,16 +3,15 @@ import * as THREE from 'three'
 import type { ThreeEvent } from '@react-three/fiber'
 import type { Piece, PortId } from '../types'
 import { useProject } from '../store/useProject'
-import { getSnapClipGeometry, getTrackGeometry } from '../geometry/cache'
+import { getSnapClipGeometry, getSupportClipGeometry, getTrackGeometry } from '../geometry/cache'
+import { clipPlacement, supportLeg } from '../lib/supports'
 import { connectorOffsets, lanesAt } from '../geometry/parts'
-import { clipSeatY } from '../geometry/snapClip'
 import { laneWidth } from '../geometry/dimensions'
 import { localPortFrame, portsOf } from '../lib/ports'
 import { clipLength, ownsConnector } from '../lib/connectors'
 
 const SELECT_EMISSIVE = new THREE.Color('#2f7fd1')
 const X_AXIS = new THREE.Vector3(1, 0, 0)
-const Z_AXIS = new THREE.Vector3(0, 0, 1)
 
 export function PieceMesh({ piece }: { piece: Piece }) {
   const dims = useProject((s) => s.dims)
@@ -66,18 +65,16 @@ function ConnectorAt({ piece, port }: { piece: Piece; port: PortId }) {
   const neighbour = useProject((s) => s.pieces.find((p) => p.id === link?.pieceId))
   const clipSize = useProject((s) => s.clipSize)
   const length = clipLength(piece, neighbour, dims, clipSize)
-  const geometry = getSnapClipGeometry(dims, length)
+  // Up off the workplane, the clip grows a leg down to it.
+  const leg = supportLeg(piece, port, neighbour, length, dims)
+  const geometry =
+    leg === null ? getSnapClipGeometry(dims, length) : getSupportClipGeometry(dims, length, leg.floor, leg.pitchDeg)
   const lanes = useMemo(() => connectorOffsets(piece, dims, port), [piece.kind, piece.lanes, piece.lanesB, port, dims])
 
-  const placement = useMemo(() => {
-    const frame = localPortFrame(piece, port, dims)
-    const outward = X_AXIS.clone().applyQuaternion(frame.quaternion)
-    const lateral = Z_AXIS.clone().applyQuaternion(frame.quaternion)
-    const origin = frame.position.clone().addScaledVector(outward, -length / 2)
-    // Push the wings up against the undercut ceiling; the body fills the mouth.
-    origin.y = clipSeatY(dims)
-    return { origin, quaternion: frame.quaternion, lateral }
-  }, [piece.kind, piece.lanes, piece.length, piece.radius, piece.angleDeg, port, length, dims])
+  const placement = useMemo(
+    () => clipPlacement(piece, port, length, dims),
+    [piece.kind, piece.lanes, piece.length, piece.slope, piece.base, piece.radius, piece.angleDeg, port, length, dims],
+  )
 
   return (
     <>
@@ -125,11 +122,15 @@ function PortHandle({ piece, port }: { piece: Piece; port: PortId }) {
     const depth =
       port === 'l' || port === 'r'
         ? 6
-        : Math.min(12, (piece.kind === 'curve' ? piece.radius : piece.length) * 0.2)
-    const pos = frame.position.clone().addScaledVector(inward, depth / 2)
-    pos.y = dims.track.totalHeight / 2
+        : Math.min(12, (piece.kind === 'curve' || piece.kind === 'bend' ? piece.radius : piece.length) * 0.2)
+    // Half the track's height up off the end — square to the road on a slope.
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(frame.quaternion)
+    const pos = frame.position
+      .clone()
+      .addScaledVector(inward, depth / 2)
+      .addScaledVector(up, dims.track.totalHeight / 2)
     return { pos, quaternion: frame.quaternion, depth }
-  }, [piece.kind, piece.lanes, piece.lanesB, piece.length, piece.radius, piece.angleDeg, piece.openLeft, piece.openRight, port, dims])
+  }, [piece.kind, piece.lanes, piece.lanesB, piece.length, piece.slope, piece.base, piece.radius, piece.angleDeg, piece.openLeft, piece.openRight, port, dims])
 
   if (!showPorts && !toolMode) return null
   // Outside the connect tools an already-joined end has nothing to offer, and

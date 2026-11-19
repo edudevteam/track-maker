@@ -108,6 +108,95 @@ function circle(cx: number, r: number): Pt2[] {
 }
 
 export function buildSnapClipGeometry(d: Dimensions, length = d.snapClip.length): THREE.BufferGeometry {
+  return buildClip(d, length, null)
+}
+
+/** The clip a support is made from: the same clip, without screw holes where the leg goes. */
+function withoutHoles(d: Dimensions): Dimensions {
+  return { ...d, snapClip: { ...d.snapClip, holeCount: 0 } }
+}
+
+/**
+ * The leg under a support clip, after clamping. `floor` is how far the
+ * workplane is below the clip's origin — the `a` end of its underside — and
+ * `pitchDeg` how far the clip is tipped nose-up along its length, for a joint
+ * on a slope.
+ *
+ * Three stacked blocks, each strictly wider than the one above so every step is
+ * a clean ledge: a short neck under the clip's centre strip only, so the arms
+ * either side still flex as the clip snaps home; the column; and a foot that
+ * reaches past the clip's ends and well out to either side. The neck's top
+ * follows the tipped clip; everything below it is plumb and level, so the foot
+ * stands flat however the clip is angled. It is printed standing on that foot.
+ *
+ * The leg is worked out in a frame that shares the clip's origin and its
+ * across-the-track axis but keeps y straight up — call it the level frame.
+ */
+export function supportLegShape(d: Dimensions, length: number, floor: number, pitchDeg = 0) {
+  const s = snapClipShape(withoutHoles(d), length)
+  const e = d.elevation
+  const pitch = THREE.MathUtils.degToRad(THREE.MathUtils.clamp(pitchDeg, -MAX_SUPPORT_PITCH, MAX_SUPPORT_PITCH))
+  const cos = Math.cos(pitch)
+  const sin = Math.sin(pitch)
+  const neckHalf = Math.max(0.4, s.stripHalf - 0.5)
+  const neckEnd = Math.min(1, s.L / 4)
+  const neckH = Math.max(0.3, e.supportNeckHeight)
+  const footT = Math.max(0.6, e.supportFootThickness)
+  const colHalf = Math.max(neckHalf + 0.5, e.supportColumnWidth / 2)
+  const footHalf = Math.max(colHalf + 0.5, e.supportFootWidth / 2)
+  const over = Math.max(0.5, e.supportFootOverhang)
+  // The column starts a neck's height below the lower end of the clip, so it
+  // clears the clip — and the track it sits in — all the way along.
+  const columnTop = Math.min(0, s.L * sin) - neckH
+  const depth = Math.max(floor, -columnTop + footT + 0.5)
+  return {
+    L: s.L, cos, sin, neckHalf, neckEnd, neckH, footT, colHalf, footHalf, over,
+    columnTop, footTop: -depth + footT, depth,
+  }
+}
+
+/** The steepest joint a support clip is made for, degrees. */
+export const MAX_SUPPORT_PITCH = 60
+
+/** The least height above the workplane a support clip's origin needs for its leg to fit. */
+export function minSupportFloor(d: Dimensions, length: number, pitchDeg = 0): number {
+  return supportLegShape(d, length, 0, pitchDeg).depth
+}
+
+/**
+ * A clip with a leg down to the floor, for a joint that sits up off the
+ * workplane. The local frame is the clip's: underside at y = 0, tipped by
+ * `pitchDeg` when it sits on a slope.
+ */
+export function buildSupportClipGeometry(
+  d: Dimensions,
+  length: number,
+  floor: number,
+  pitchDeg = 0,
+): THREE.BufferGeometry {
+  return buildClip(withoutHoles(d), length, supportLegShape(d, length, floor, pitchDeg))
+}
+
+/**
+ * The support clip's volume from its dimensions: the clip, plus three blocks.
+ * The neck's top is a tipped plane, so its volume is its level footprint times
+ * the height of that plane over the footprint's middle.
+ */
+export function supportClipVolume(d: Dimensions, length: number, floor: number, pitchDeg = 0): number {
+  const l = supportLegShape(d, length, floor, pitchDeg)
+  const run = l.L * l.cos
+  const neckTop = ((l.neckEnd + (l.L - l.neckEnd)) / 2) * l.sin
+  const neck = (l.L - 2 * l.neckEnd) * l.cos * 2 * l.neckHalf * (neckTop - l.columnTop)
+  const column = run * 2 * l.colHalf * (l.columnTop - l.footTop)
+  const foot = (run + 2 * l.over) * 2 * l.footHalf * l.footT
+  return snapClipVolume(withoutHoles(d), length) + neck + column + foot
+}
+
+function buildClip(
+  d: Dimensions,
+  length: number,
+  leg: ReturnType<typeof supportLegShape> | null,
+): THREE.BufferGeometry {
   const s = snapClipShape(d, length)
   const { L, H, hw, hb, stepY, tipY, endChamfer: c } = s
   const positions: number[] = []
@@ -172,8 +261,57 @@ export function buildSnapClipGeometry(d: Dimensions, length = d.snapClip.length)
       ])
     : []
 
-  // Underside and top, each less the slots and the holes at that height.
-  flat(body, [...slots, ...s.holes.map((cx) => circle(cx, s.holeR))], 0, false)
+  /** A rectangle in plan, counter-clockwise like the body. */
+  const rect = (x0: number, x1: number, half: number): Pt2[] => [
+    { x: x0, y: -half },
+    { x: x1, y: -half },
+    { x: x1, y: half },
+    { x: x0, y: half },
+  ]
+  const neck = leg && rect(leg.neckEnd, L - leg.neckEnd, leg.neckHalf)
+
+  // Underside and top, each less the slots and the holes at that height — and,
+  // on a support, less the neck the leg hangs from.
+  flat(body, [...slots, ...s.holes.map((cx) => circle(cx, s.holeR)), ...(neck ? [neck] : [])], 0, false)
+
+  if (leg && neck) {
+    // Built in the level frame, then turned into the clip's: a turn about the
+    // across-track axis by the clip's pitch.
+    const { cos, sin } = leg
+    const toClip = (v: V3): V3 => [v[0] * cos + v[1] * sin, -v[0] * sin + v[1] * cos, v[2]]
+    const emitLevel = (a: V3, b: V3, p: V3, out: V3) => emit(toClip(a), toClip(b), toClip(p), toClip(out))
+    /** A plan loop's walls, between two heights that may vary along it. */
+    const wallsLevel = (loop: Pt2[], top: (p: Pt2) => number, bottom: (p: Pt2) => number) => {
+      for (let j = 0; j < loop.length; j++) {
+        const p = loop[j]
+        const q = loop[(j + 1) % loop.length]
+        const out: V3 = [q.y - p.y, 0, -(q.x - p.x)]
+        emitLevel(at(p, bottom(p)), at(q, bottom(q)), at(q, top(q)), out)
+        emitLevel(at(p, bottom(p)), at(q, top(q)), at(p, top(p)), out)
+      }
+    }
+    const flatLevel = (contour: Pt2[], holes: Pt2[][], y: number, up: boolean) => {
+      const tris = THREE.ShapeUtils.triangulateShape(
+        contour.map((p) => new THREE.Vector2(p.x, p.y)),
+        holes.map((h) => h.map((p) => new THREE.Vector2(p.x, p.y))),
+      )
+      const all = [...contour, ...holes.flat()]
+      for (const t of tris) emitLevel(at(all[t[0]], y), at(all[t[1]], y), at(all[t[2]], y), [0, up ? 1 : -1, 0])
+    }
+
+    // The neck, seen from above: the clip's neck outline foreshortened by the pitch.
+    const neckPlan = rect(leg.neckEnd * cos, (L - leg.neckEnd) * cos, leg.neckHalf)
+    const run = L * cos
+    const column = rect(0, run, leg.colHalf)
+    const foot = rect(-leg.over, run + leg.over, leg.footHalf)
+    // Up its sides to the tipped underside, whose height over a level x is x·tan.
+    wallsLevel(neckPlan, (p) => (p.x / cos) * sin, () => leg.columnTop)
+    flatLevel(column, [neckPlan], leg.columnTop, true)
+    wallsLevel(column, () => leg.columnTop, () => leg.footTop)
+    flatLevel(foot, [column], leg.footTop, true)
+    wallsLevel(foot, () => leg.footTop, () => -leg.depth)
+    flatLevel(foot, [], -leg.depth, false)
+  }
   flat(top, [...slots, ...s.holes.map((cx) => circle(cx, s.csR))], H, true)
 
   // The body, underside up to the wing ledge.

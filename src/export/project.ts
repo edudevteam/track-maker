@@ -3,6 +3,7 @@ import type {
   ClipSize,
   Piece,
   PieceKind,
+  BendBase,
   PortId,
   PortLink,
   TrackType,
@@ -206,12 +207,31 @@ function readPorts<T>(v: unknown, read: (saved: unknown) => T): Record<PortId, T
   return Object.fromEntries(PORT_IDS.map((port) => [port, read(saved[port])])) as Record<PortId, T>
 }
 
+/**
+ * A based bend as near the old S-ramp's height as a 15° bend on a 150 radius
+ * gets, with the slope making up the rest. Up from side A as it was, or down
+ * onto side B for one that went down.
+ */
+function fromOldRamp(rise: number) {
+  const angle = 15
+  const radius = 150
+  const t = (angle * Math.PI) / 180
+  const inset = DEFAULT_DIMENSIONS.assembly.connectorInset
+  const slope = Math.max(0, (Math.abs(rise) - radius * (1 - Math.cos(t))) / Math.sin(t) - inset)
+  return { angleDeg: angle, radius, slope: Math.round(slope), base: (rise < 0 ? 'b' : 'a') as BendBase }
+}
+
 function readPiece(v: unknown, index: number, ids: Set<string>): Piece | null {
   if (!isObj(v)) return null
   const id = typeof v.id === 'string' && v.id.length ? v.id : null
   if (!id) return null
-  const kind: PieceKind =
-    v.kind === 'curve' || v.kind === 'transition' || v.kind === 'junction' ? v.kind : 'straight'
+  // 1.4.6's S-shaped ramp is gone; one opens as a based bend instead.
+  const oldRamp = v.kind === 'ramp' ? fromOldRamp(num(v.rise, 20)) : null
+  const kind: PieceKind = oldRamp
+    ? 'bend'
+    : v.kind === 'curve' || v.kind === 'transition' || v.kind === 'junction' || v.kind === 'bend'
+      ? v.kind
+      : 'straight'
   const lanes = Math.max(1, Math.round(num(v.lanes, 1)))
   return {
     id,
@@ -220,6 +240,9 @@ function readPiece(v: unknown, index: number, ids: Set<string>): Piece | null {
     lanes,
     lanesB: Math.max(1, Math.round(num(v.lanesB, lanes))),
     length: num(v.length, DEFAULT_DIMENSIONS.assembly.defaultStraightLength),
+    // Only a bend reads these; a file from before them has every piece unbased.
+    slope: oldRamp?.slope ?? Math.max(0, num(v.slope, 0)),
+    base: oldRamp?.base ?? (v.base === 'a' || v.base === 'b' ? v.base : 'none'),
     // A junction saved with neither wall open is a straight in all but name, so
     // a file written before junctions existed opens with both shut and nothing
     // about it changes.
@@ -227,8 +250,8 @@ function readPiece(v: unknown, index: number, ids: Set<string>): Piece | null {
     openRight: bool(v.openRight, false),
     cornerRadius: Math.max(0, num(v.cornerRadius, DEFAULT_DIMENSIONS.assembly.transitionCornerRadius)),
     flatEnd: Math.max(0, num(v.flatEnd, DEFAULT_DIMENSIONS.assembly.transitionFlatEnd)),
-    radius: num(v.radius, 120),
-    angleDeg: num(v.angleDeg, 45),
+    radius: oldRamp?.radius ?? num(v.radius, 120),
+    angleDeg: oldRamp?.angleDeg ?? num(v.angleDeg, 45),
     position: vec3(v.position, [0, 0, 0]),
     rotation: vec3(v.rotation, [0, 0, 0]),
     color: str(v.color, DEFAULT_TRACK_COLOR),

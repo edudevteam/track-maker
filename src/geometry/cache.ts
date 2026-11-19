@@ -3,7 +3,7 @@ import type { Dimensions } from './dimensions'
 import type { Piece } from '../types'
 import { buildBlockGeometry, buildCarGeometry, buildTrackGeometry } from './parts'
 import { REFERENCE_VEHICLE } from '../lib/carScales'
-import { buildSnapClipGeometry, snapClipShape } from './snapClip'
+import { buildSnapClipGeometry, buildSupportClipGeometry, snapClipShape } from './snapClip'
 
 /**
  * Geometry is rebuilt only when the inputs that actually shape it change, so
@@ -61,7 +61,9 @@ export function getTrackGeometry(piece: Piece, d: Dimensions): THREE.BufferGeome
         ? `t:${piece.length}:${piece.lanesB}:${piece.cornerRadius}:${piece.flatEnd}`
         : piece.kind === 'junction'
           ? `j:${piece.openLeft ? 'l' : ''}${piece.openRight ? 'r' : ''}`
-          : `s:${piece.length}`
+          : piece.kind === 'bend'
+            ? `b:${piece.radius}:${piece.angleDeg}:${piece.slope}:${piece.base}:${d.elevation.rampAccessWidth}`
+            : `s:${piece.length}`
   return take(`track|${shape}|${piece.lanes}|${trackKey(d)}`, () => buildTrackGeometry(piece, d))
 }
 
@@ -72,6 +74,25 @@ export function getCarGeometry(d: Dimensions): THREE.BufferGeometry {
 /** The connector clip, at its own length unless a joint asks for a shorter one. */
 export function getSnapClipGeometry(d: Dimensions, length = snapClipShape(d).L): THREE.BufferGeometry {
   return take(`snap|${length}|${Object.values(d.snapClip).join('|')}`, () => buildSnapClipGeometry(d, length))
+}
+
+/**
+ * A support clip: the clip with a leg down to the floor `floor` mm below it,
+ * tipped by `pitchDeg` on a slope. Both are rounded to a hundredth so dragging a
+ * raised piece does not rebuild it every frame for a difference nobody could print.
+ */
+export function getSupportClipGeometry(
+  d: Dimensions,
+  length: number,
+  floor: number,
+  pitchDeg = 0,
+): THREE.BufferGeometry {
+  const f = Math.round(floor * 100) / 100
+  const p = Math.round(pitchDeg * 100) / 100
+  return take(
+    `support|${length}|${f}|${p}|${Object.values(d.snapClip).join('|')}|${Object.values(d.elevation).join('|')}`,
+    () => buildSupportClipGeometry(d, length, f, p),
+  )
 }
 
 /** The placeholder block at its full reference size — a scale divides into it. */

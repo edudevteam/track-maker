@@ -1,5 +1,8 @@
 export type Vec3 = [number, number, number]
 
+/** Which end of a bend its solid base is level with, or none. */
+export type BendBase = 'none' | 'a' | 'b'
+
 /** Which family of parts the project is building. */
 export type TrackType = 'car' | 'train'
 
@@ -41,7 +44,7 @@ export type PortId = (typeof PORT_IDS)[number]
 /** The two side openings, in the order they are offered. */
 export const SIDE_PORTS = ['l', 'r'] as const satisfies readonly PortId[]
 
-export type PieceKind = 'straight' | 'curve' | 'transition' | 'junction'
+export type PieceKind = 'straight' | 'curve' | 'transition' | 'junction' | 'bend'
 
 export interface PortLink {
   pieceId: string
@@ -60,8 +63,16 @@ export interface Piece {
    * A straight or a curve is `lanes` wide throughout and ignores it.
    */
   lanesB: number
-  /** Straight, transition and junction pieces only — centreline length in mm. */
+  /** Straight, transition and junction pieces — centreline length in mm. */
   length: number
+  /** Bend pieces only — a straight run at the angle, between the arc and the angled end, mm. */
+  slope: number
+  /**
+   * Bend pieces only — which end a solid base is level with: side A for a ramp
+   * that climbs away from the floor, side B for one that comes down onto it.
+   * Only a bend up has an underside to fill.
+   */
+  base: BendBase
   /**
    * Junction pieces only — whether the wall is opened on that side, leaving a
    * port a branch can join. Left and right are the driver's, with port `b` ahead.
@@ -78,9 +89,15 @@ export interface Piece {
    * taper starts, mm. Shorter ends make a slower taper.
    */
   flatEnd: number
-  /** Curve pieces only — centreline radius in mm. */
+  /**
+   * Curve pieces — centreline radius in mm. Bend pieces — the radius of the arc
+   * at the underside.
+   */
   radius: number
-  /** Curve pieces only — sweep in degrees. Positive turns left. */
+  /**
+   * Curve pieces — sweep in degrees, positive turns left. Bend pieces — how far
+   * the track's angle changes, positive bends up.
+   */
   angleDeg: number
   /** World transform of the piece's `a` port. */
   position: Vec3
@@ -106,6 +123,8 @@ export interface PartSpec {
   lanes: number
   lanesB: number
   length: number
+  slope: number
+  base: BendBase
   cornerRadius: number
   flatEnd: number
   radius: number

@@ -146,6 +146,9 @@ export function suggestPart(kind: PieceKind, gap: Gap, d: Dimensions): PartSpec 
     length: tidy(
       clamp(gap.offset.x > SPAN_LIMITS.min ? gap.offset.x : gap.distance, SPAN_LIMITS.min, SPAN_LIMITS.max),
     ),
+    // Close Loop only joins ends at the same height, so it never offers a bend.
+    slope: 0,
+    base: 'none',
     cornerRadius: d.assembly.transitionCornerRadius,
     flatEnd: d.assembly.transitionFlatEnd,
     radius: 120,
@@ -378,7 +381,7 @@ export function planAdjustment(pieces: Piece[], a: PortRef, b: PortRef, d: Dimen
       reason: `The ends are ${gap.lanesA}× and ${gap.lanesB}× wide, so joining them straight would step — a transition has to go between.`,
     }
   if (Math.abs(gap.rise) > FIT_GAP_TOLERANCE)
-    return { ok: false, reason: 'One end sits higher than the other, and nothing on the loop can lift it.' }
+    return { ok: false, reason: 'One end sits higher than the other. Close Loop only joins ends at the same height for now — a bend or ramp can bring them level first.' }
 
   const steps = pathBetween(pieces, a, b)
   if (!steps) return { ok: false, reason: 'The track between those two ends could not be followed.' }

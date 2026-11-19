@@ -15,6 +15,7 @@ import { slotCentres, slotMetrics, trackProfile } from './trackProfile'
 import { at, capGeometryAt, ribbon, type Tri } from './section'
 import { buildTransitionGeometry } from './transition'
 import { buildJunctionGeometry, type JunctionSpec } from './junction'
+import { buildBendGeometry } from './bend'
 import { seatVehicleGeometry } from './vehicle'
 
 export { mergeGeometries }
@@ -36,6 +37,15 @@ export function buildTrackGeometry(piece: Piece, d: Dimensions): THREE.BufferGeo
     })
   }
   if (piece.kind === 'junction') return buildJunctionGeometry(d, junctionSpecOf(piece))
+  if (piece.kind === 'bend') {
+    return buildBendGeometry(d, {
+      lanes: piece.lanes,
+      radius: piece.radius,
+      angleDeg: piece.angleDeg,
+      slope: piece.slope,
+      base: piece.base,
+    })
+  }
   return buildPlainGeometry(d, piece)
 }
 
@@ -102,7 +112,7 @@ export function plainZones(
  * rather than one rectangle, and the ledge between them is an edge the swept
  * sides share.
  */
-function pocketWall(d: Dimensions, lanes: number): Tri[] {
+export function pocketWall(d: Dimensions, lanes: number): Tri[] {
   const { slotH, mouthH, outerHalf, mouthHalf } = slotMetrics(d)
   const tris: Tri[] = []
   for (const c of slotCentres(d, lanes)) {

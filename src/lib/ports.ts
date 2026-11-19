@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import type { Piece, PortId, Vec3 } from '../types'
 import type { Dimensions } from '../geometry/dimensions'
 import { junctionLayout } from '../geometry/junction'
+import { bendFrameAt, bendLayout } from '../geometry/bend'
 
 /**
  * Every piece is authored in a local frame whose origin is port `a`, with the
@@ -20,6 +21,7 @@ export interface PortFrame {
 }
 
 const Y_AXIS = new THREE.Vector3(0, 1, 0)
+const Z_AXIS = new THREE.Vector3(0, 0, 1)
 
 export function pieceMatrix(p: Piece): THREE.Matrix4 {
   return new THREE.Matrix4().compose(
@@ -40,7 +42,7 @@ export function pieceQuaternion(p: Piece): THREE.Quaternion {
  */
 export type PieceShape = Pick<
   Piece,
-  'kind' | 'lanes' | 'lanesB' | 'length' | 'radius' | 'angleDeg' | 'openLeft' | 'openRight'
+  'kind' | 'lanes' | 'lanesB' | 'length' | 'slope' | 'base' | 'radius' | 'angleDeg' | 'openLeft' | 'openRight'
 >
 
 /**
@@ -88,6 +90,15 @@ export function localPortFrame(p: PieceShape, port: PortId, d: Dimensions): Port
       quaternion: new THREE.Quaternion().setFromAxisAngle(Y_AXIS, (-side * Math.PI) / 2),
     }
   }
+  // A bend's far end is pitched by its angle, so whatever joins there carries on at it.
+  if (p.kind === 'bend') {
+    const l = bendLayout(d, p)
+    const end = bendFrameAt(l, l.length)
+    return {
+      position: end.position,
+      quaternion: new THREE.Quaternion().setFromAxisAngle(Z_AXIS, l.sign * l.turn),
+    }
+  }
   if (p.kind !== 'curve') {
     return { position: new THREE.Vector3(p.length, 0, 0), quaternion: new THREE.Quaternion() }
   }
@@ -117,9 +128,13 @@ export function portOutward(frame: PortFrame): THREE.Vector3 {
 }
 
 /** Centre of a piece's centreline, used to anchor the gizmo to the middle. */
-export function pieceMidpoint(p: Piece): THREE.Vector3 {
+export function pieceMidpoint(p: Piece, d: Dimensions): THREE.Vector3 {
   const q = pieceQuaternion(p)
   const origin = new THREE.Vector3(...p.position)
+  if (p.kind === 'bend') {
+    const l = bendLayout(d, p)
+    return bendFrameAt(l, l.length / 2).position.applyQuaternion(q).add(origin)
+  }
   if (p.kind !== 'curve') {
     return new THREE.Vector3(p.length / 2, 0, 0).applyQuaternion(q).add(origin)
   }
@@ -154,8 +169,9 @@ export function transformToMate(
   return { position: [pos.x, pos.y, pos.z], rotation: [e.x, e.y, e.z] }
 }
 
-/** Centreline length of a piece in mm. */
-export function centrelineLength(p: Piece): number {
+/** Centreline length of a piece in mm. A bend's is measured along the road. */
+export function centrelineLength(p: Piece, d: Dimensions): number {
+  if (p.kind === 'bend') return bendLayout(d, p).length
   return p.kind === 'curve' ? p.radius * Math.abs(THREE.MathUtils.degToRad(p.angleDeg)) : p.length
 }
 
@@ -167,8 +183,13 @@ export function centrelineLength(p: Piece): number {
  * arrives across the run rather than along it, so there is no way it was already
  * heading to carry over.
  */
-export function portEntry(p: Piece, port: PortId, overflow = 0): { s: number; dir: 1 | -1 } {
-  const len = centrelineLength(p)
+export function portEntry(
+  p: Piece,
+  port: PortId,
+  d: Dimensions,
+  overflow = 0,
+): { s: number; dir: 1 | -1 } {
+  const len = centrelineLength(p, d)
   if (port === 'a') return { s: overflow, dir: 1 }
   if (port === 'b') return { s: len - overflow, dir: -1 }
   return { s: len / 2, dir: 1 }
@@ -178,12 +199,20 @@ export function portEntry(p: Piece, port: PortId, overflow = 0): { s: number; di
  * Point and tangent at arc-length `s` along a piece's centreline, in world space.
  * `s` runs from 0 at port `a` to `centrelineLength` at port `b`.
  */
-export function sampleCentreline(p: Piece, s: number): { point: THREE.Vector3; tangent: THREE.Vector3 } {
+export function sampleCentreline(
+  p: Piece,
+  s: number,
+  d: Dimensions,
+): { point: THREE.Vector3; tangent: THREE.Vector3 } {
   const q = pieceQuaternion(p)
   const origin = new THREE.Vector3(...p.position)
   let local: THREE.Vector3
   let tan: THREE.Vector3
-  if (p.kind !== 'curve') {
+  if (p.kind === 'bend') {
+    const f = bendFrameAt(bendLayout(d, p), s)
+    local = f.position
+    tan = f.tangent
+  } else if (p.kind !== 'curve') {
     local = new THREE.Vector3(s, 0, 0)
     tan = new THREE.Vector3(1, 0, 0)
   } else {

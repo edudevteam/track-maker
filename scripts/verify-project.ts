@@ -5,6 +5,10 @@ import { reflowFrom, worldPortFrame } from '../src/lib/ports'
 import { DEFAULT_TOP_SPEED } from '../src/lib/driving'
 import { clipLength } from '../src/lib/connectors'
 import { junctionClipLength } from '../src/geometry/junction'
+import { supportLeg } from '../src/lib/supports'
+import { clipSeatY } from '../src/geometry/snapClip'
+import * as THREE from 'three'
+import { pieceQuaternion } from '../src/lib/ports'
 
 let fails = 0
 const check = (label: string, ok: boolean, extra = '') => {
@@ -19,6 +23,10 @@ const piece = (id: string, over: Partial<Piece> = {}): Piece => ({
   lanes: 2,
   lanesB: 3,
   length: 137.5,
+  slope: 0,
+  base: 'none',
+  openLeft: false,
+  openRight: false,
   cornerRadius: 6,
   flatEnd: 38,
   radius: 120,
@@ -26,17 +34,21 @@ const piece = (id: string, over: Partial<Piece> = {}): Piece => ({
   position: [1, 2, 3],
   rotation: [0.1, 0.2, 0.3],
   color: '#ff8800',
-  connectors: { a: false, b: true },
+  connectors: { a: false, b: true, l: false, r: false },
   connectorColor: '#334455',
-  links: { a: null, b: null },
+  links: { a: null, b: null, l: null, r: null },
   visible: true,
   locked: false,
   ...over,
 })
 
 // Two pieces joined b <-> a.
-const p1 = piece('p1', { links: { a: null, b: { pieceId: 'p2', port: 'a' } }, connectors: { a: false, b: true } })
-const p2 = piece('p2', { kind: 'curve', links: { a: { pieceId: 'p1', port: 'b' }, b: null } })
+const p1 = piece('p1', {
+  links: { a: null, b: { pieceId: 'p2', port: 'a' }, l: null, r: null },
+  connectors: { a: false, b: true, l: false, r: false },
+})
+const p2 = piece('p2', { kind: 'curve', links: { a: { pieceId: 'p1', port: 'b' }, b: null, l: null, r: null } })
+const p3 = piece('p3', { kind: 'bend', radius: 180, angleDeg: 22.5, slope: 35.5, base: 'b' })
 
 const snapshot = {
   projectName: 'My Big Track!',
@@ -44,7 +56,7 @@ const snapshot = {
   vehicle: 'diecast' as const,
   dims: { ...DEFAULT_DIMENSIONS, track: { ...DEFAULT_DIMENSIONS.track, totalHeight: 15.5 } },
   clipSize: 'long' as const,
-  pieces: [p1, p2],
+  pieces: [p1, p2, p3],
   printer: { id: 'prusa-mk4' },
   customPrinterSize: [200, 210, 220] as [number, number, number],
   gravity: 9810,
@@ -65,7 +77,34 @@ check('connector choice round-trips', back.clipSize === 'long')
 }
 check('edited dimension round-trips', back.dims.track.totalHeight === 15.5)
 check('untouched dimension kept', back.dims.snapClip.holeInset === DEFAULT_DIMENSIONS.snapClip.holeInset)
-check('piece count', back.pieces.length === 2)
+check('piece count', back.pieces.length === 3)
+check('a based bend keeps its shape and base', back.pieces[2].kind === 'bend' && back.pieces[2].slope === 35.5 && back.pieces[2].base === 'b')
+{
+  const old = JSON.parse(text)
+  for (const p of old.pieces) {
+    delete p.slope
+    delete p.base
+  }
+  check('a file from before bends opens with no piece based', parseProject(JSON.stringify(old)).pieces.every((p) => p.base === 'none' && p.slope === 0))
+  // 1.4.6's S-shaped ramp opens as a based bend about as high.
+  const s1 = JSON.parse(text)
+  s1.pieces[0] = { ...s1.pieces[0], kind: 'ramp', rise: 40 }
+  s1.pieces[1] = { ...s1.pieces[1], kind: 'ramp', rise: -20 }
+  const [r1, r2] = parseProject(JSON.stringify(s1)).pieces
+  // Height between the ends, measured square to whichever end sits on the base.
+  const height = (p: Piece) => {
+    const at = { ...p, position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number] }
+    const fa = worldPortFrame(at, 'a', DEFAULT_DIMENSIONS)
+    const fb = worldPortFrame(at, 'b', DEFAULT_DIMENSIONS)
+    const level = p.base === 'b' ? fb : fa
+    return Math.abs(fb.position.clone().sub(fa.position).dot(new THREE.Vector3(0, 1, 0).applyQuaternion(level.quaternion)))
+  }
+  check('an old ramp up opens as a ramp up from side A', r1.kind === 'bend' && r1.base === 'a' && r1.angleDeg === 15 && Math.abs(height(r1) - 40) < 1)
+  check('an old ramp down opens as a ramp down onto side B', r2.kind === 'bend' && r2.base === 'b' && r2.angleDeg === 15 && Math.abs(height(r2) - 20) < 1)
+  const dims = JSON.parse(text)
+  delete dims.dims.elevation
+  check('a file from before ramps picks up the support defaults', JSON.stringify(parseProject(JSON.stringify(dims)).dims.elevation) === JSON.stringify(DEFAULT_DIMENSIONS.elevation))
+}
 check('pieces identical', JSON.stringify(back.pieces) === JSON.stringify(snapshot.pieces))
 check('printer round-trips', back.printerId === 'prusa-mk4')
 check('friction round-trips', back.friction === 0.42)
@@ -180,6 +219,90 @@ for (const [label, bad] of [
   check('a transition with 40mm flat ends takes it', at({ kind: 'transition', length: 200, flatEnd: 40 }, { length: 135 }, 'long') === 70)
   check('one with 35mm flat ends does not', at({ kind: 'transition', length: 200, flatEnd: 35 }, { length: 135 }, 'long') === 40)
   check('a junction keeps its own clip', at({ kind: 'junction' }, { length: 135 }, 'long') === junctionClipLength(d))
+}
+
+
+{
+  // A whole hill: a ramp up from the floor, a slope, a bend over onto a level
+  // top, a bend back down, a slope, and a ramp down onto the floor. Which joints
+  // need a leg, and at what tilt?
+  const d = DEFAULT_DIMENSIONS
+  const flat = { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number] }
+  const chain = (ids: string[], i: number) => ({
+    a: i > 0 ? { pieceId: ids[i - 1], port: 'b' as const } : null,
+    b: i < ids.length - 1 ? { pieceId: ids[i + 1], port: 'a' as const } : null,
+    l: null,
+    r: null,
+  })
+  const ids = ['up', 'climb', 'over', 'top', 'off', 'fall', 'down']
+  const shapes: Partial<Piece>[] = [
+    { kind: 'bend', radius: 150, angleDeg: 20, slope: 0, base: 'a' },
+    { length: 150 },
+    { kind: 'bend', radius: 150, angleDeg: -20 },
+    { length: 135 },
+    { kind: 'bend', radius: 150, angleDeg: -20 },
+    { length: 150 },
+    { kind: 'bend', radius: 150, angleDeg: 20, slope: 0, base: 'b' },
+  ]
+  const hill = reflowFrom(
+    ids.map((id, i) => piece(id, { ...flat, ...shapes[i], links: chain(ids, i) })),
+    'up',
+    d,
+  )
+  const [up, climb, , top, , fall, down] = hill
+  const leg = (p: Piece, port: 'a' | 'b', next?: Piece) => supportLeg(p, port, next, 40, d)
+  check('the top of a ramp standing on the floor holds its own joint', leg(up, 'b', climb) === null && leg(climb, 'a', up) === null)
+  const climbing = leg(climb, 'b', hill[2])
+  check('a joint on the climb gets a support tipped 20°', !!climbing && Math.abs(climbing.pitchDeg - 20) < 1e-6, JSON.stringify(climbing))
+  const level = leg(top, 'b', hill[4])
+  check('the level top gets a level support down to the floor', !!level && Math.abs(level.pitchDeg) < 1e-6 && Math.abs(level.floor - (worldPortFrame(top, 'b', d).position.y + clipSeatY(d))) < 1e-9, JSON.stringify(level))
+  const falling = leg(fall, 'a', hill[4])
+  check('a joint on the way down gets one tipped the other way', !!falling && Math.abs(Math.abs(falling.pitchDeg) - 20) < 1e-6, JSON.stringify(falling))
+  check('the ramp down lands level on the floor', Math.abs(worldPortFrame(down, 'b', d).position.y) < 1e-9 && Math.abs(new THREE.Vector3(1, 0, 0).applyQuaternion(worldPortFrame(down, 'b', d).quaternion).y) < 1e-9)
+  check('and holds the slope coming onto it', leg(down, 'a', fall) === null && leg(fall, 'b', down) === null)
+  check('the foot of each ramp, on the floor, takes a plain clip', leg(up, 'a') === null && leg(down, 'b') === null)
+  const low = { ...top, position: [top.position[0], 3, top.position[2]] as [number, number, number] }
+  check('a joint just off the floor keeps a plain clip', leg(low, 'b') === null)
+  const rolled = { ...top, rotation: [0.2, 0, 0] as [number, number, number] }
+  check('a piece rolled sideways is left alone', leg(rolled, 'b') === null)
+  const lifted = hill.map((p) => ({ ...p, position: [p.position[0], p.position[1] + 30, p.position[2]] as [number, number, number] }))
+  check('a ramp lifted off the floor no longer holds its top', leg(lifted[0], 'b', lifted[1]) !== null)
+}
+{
+  // A hill from the kit: bend up 20°, a straight, bend back down 20°, a straight.
+  const d = DEFAULT_DIMENSIONS
+  const link = (a: string | null, b: string | null, ap: 'a' | 'b' = 'b', bp: 'a' | 'b' = 'a') => ({
+    a: a ? { pieceId: a, port: ap } : null,
+    b: b ? { pieceId: b, port: bp } : null,
+    l: null,
+    r: null,
+  })
+  const flat = { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number] }
+  const hill = reflowFrom(
+    [
+      piece('h1', { ...flat, kind: 'bend', radius: 150, angleDeg: 20, links: link(null, 'h2') }),
+      piece('h2', { ...flat, length: 200, links: link('h1', 'h3') }),
+      piece('h3', { ...flat, kind: 'bend', radius: 150, angleDeg: -20, links: link('h2', 'h4') }),
+      piece('h4', { ...flat, length: 135, links: link('h3', null) }),
+    ],
+    'h1',
+    d,
+  )
+  const [b1, slope, b2, top] = hill
+  const pitch = (p: Piece) => THREE.MathUtils.radToDeg(Math.asin(new THREE.Vector3(1, 0, 0).applyQuaternion(pieceQuaternion(p)).y))
+  check('a straight on a 20° bend climbs at 20°', Math.abs(pitch(slope) - 20) < 1e-9, pitch(slope).toFixed(6))
+  check('bending back down leaves the next straight level', Math.abs(pitch(top)) < 1e-9, pitch(top).toFixed(6))
+  const gained = worldPortFrame(top, 'a', d).position.y
+  const l1 = 150 * (1 - Math.cos(THREE.MathUtils.degToRad(20)))
+  const wantGain = 2 * (l1 + 40 * Math.sin(THREE.MathUtils.degToRad(20))) + 200 * Math.sin(THREE.MathUtils.degToRad(20))
+  check('and the top is as high as the two bends and the slope add up to', Math.abs(gained - wantGain) < 1e-6, `${gained.toFixed(3)} vs ${wantGain.toFixed(3)}`)
+  const sloped = supportLeg(slope, 'b', b2, 40, d)
+  check('a joint on the slope gets a support tipped to match', !!sloped && Math.abs(Math.abs(sloped.pitchDeg) - 20) < 1e-6, JSON.stringify(sloped))
+  check('the bend at the foot, on the floor, does not', supportLeg(b1, 'a', undefined, 40, d) === null)
+  check('the level top gets a level support', Math.abs(supportLeg(top, 'b', undefined, 40, d)?.pitchDeg ?? 99) < 1e-6)
+  const json = JSON.parse(JSON.stringify(serializeProject({ ...snapshot, pieces: hill })))
+  const back = parseProject(JSON.stringify(json))
+  check('a bend keeps its kind and angle', back.pieces[2].kind === 'bend' && back.pieces[2].angleDeg === -20)
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nall passed')

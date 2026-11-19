@@ -20,6 +20,216 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.4.9] — 2026-11-19
+
+Parts Library only. No part, dimension or tool changed.
+
+### Fixed
+
+- **The Parts Library fits a short window.** It used to grow past the bottom of
+  the screen, hiding the lower options and the Add button. Now it stops at the
+  window's height. The parts list and the options each scroll on their own, and
+  the title bar and the Add button stay in view. On a tall enough screen it
+  looks the same as before.
+
+---
+
+## [1.4.8] — 2026-11-19
+
+The Ramp and the Bend are now one part. The project owner asked for a ramp
+that stops at its angle so a clip can join there, rather than stepping up and
+levelling off, and then asked to fold it into the Bend as an option. Agreed
+before building: the S-shaped ramp goes, and the Bend gains a slope length and
+a solid base.
+
+### Added
+
+- **Solid base** on the Bend: **None**, **Under A** or **Under B**. With a base
+  the bend is filled down to a flat base level with that end, so it prints flat
+  and holds itself up. It is offered only on a bend up, since a crest has no
+  underside to fill.
+  - **Under A** is a ramp up. Side A sits level on the floor, the track curves
+    up, and it stops at the angle with its end square to the slope. A clip, a
+    straight at the same angle, or another bend joins there.
+  - **Under B** is a ramp down. It joins the end of a slope at side A, curves
+    out, and lands level on the floor at side B.
+  - Under the angled end, an opening 28.6 wide (Settings ▸ Dimensions ▸ Ramps
+    and supports) runs from the base up to each slot, so a clip can be pushed
+    in from below. Pushed straight up, the clip slides a little along the
+    tilted slot as it seats.
+  - A based bend standing on the floor holds up the joint at its angled end
+    itself, so that joint gets a plain clip, not a support clip.
+- **Slope length** on the Bend: a straight run at the angle built into the
+  part, between the curve and the angled end. Default 0. With a base, it makes
+  a taller ramp that is still one self-supporting print.
+- Default names follow the shape: "Ramp up 20°", "Ramp down 20°", "Bend up
+  15°", "Bend down 30°".
+- The library's side view now draws the bend to scale, with the base shaded,
+  and turned so the level end of a ramp down is level.
+
+### Removed
+
+- **The S-shaped Ramp from 1.4.6.** A project that has one opens with a Bend
+  15° in its place, radius 150, with a solid base and the slope length that
+  gives about the same height: under A for one that went up, under B for one
+  that went down. Its neighbours reflow to meet the angled end.
+
+### Fixed
+
+- **A bend with no slope could come out with open edges.** Where the curve
+  ends and the far connector section begins, a rounding difference of a
+  fraction of a micron was being built as a sliver of curve, stacking duplicate
+  cross-sections. A 2-lane, 20° bend on a 200 radius had 52 open edges. It
+  passes the audit now.
+
+### Audit
+
+- Based bends up and down, at 1 to 3 lanes, with and without slope, are
+  watertight. Their volume is worked out from the side, across the width,
+  independently of the mesh. The mesh comes out up to 0.1% over it, because
+  the road on a ramp is dished and the straight chords between cross-sections
+  sit just above the curve. Worked out again at the mesh's own cross-sections,
+  the volume matches to within 0.00002%, so that difference is all chord. Both
+  bases are checked to have nothing below them.
+- A project check builds a whole hill: ramp up, slope, bend over, level top,
+  bend down, slope, ramp down. It confirms the tops of both ramps hold their
+  own joints, the slopes get supports tilted ±20°, the top gets a level one,
+  the ramp down lands level on the floor, and a lifted ramp no longer counts as
+  holding its top. Opening a project with 1.4.6 ramps is checked too.
+
+---
+
+## [1.4.7] — 2026-11-19
+
+Track that climbs and falls at an angle you choose. The project owner asked for
+a part that sets the ramp angle and joins up from climbing to falling. Agreed
+before building: the bend follows the road rather than being filled
+underneath, raised joints get angled support clips, and angles have presets
+10/15/20/30° with any angle up to 90° typed in.
+
+### Added
+
+- **Bend**, a new part in the Parts Library. It tips the track **up** or
+  **down** by an **angle** (presets 10, 15, 20 and 30°, or any angle from 1 to
+  90°) on a **radius** you set (default 150, tightest 27). It has a straight
+  connector section at each end with the arc between, so it clips onto
+  anything. The angle is measured from the end it joins, so the pieces build
+  up a hill like a kit:
+  - **Bend up 20°**, then any straights. A straight clipped onto a bend's
+    angled end climbs at that angle by itself, so the slope can be as long as
+    you like.
+  - **Bend down 20°** to level off at the top.
+  - **Bend down 40°** to go straight from climbing to falling over a crest.
+    **Bend up 40°** goes from falling to climbing through a dip.
+- **On a bend, the track's cross-section stays square to the road**, tilting
+  with the slope. At an angled joint the T-slot is still its full 5.111 deep
+  square to the road, so the standard clip fits. A cross-section kept upright
+  would leave 4.426 at 30°, less than the clip is tall.
+- **Angled support clips.** A raised joint on a slope gets a support clip
+  tilted to match the slope, up to 60°. Its leg still runs straight down and
+  its foot sits flat on the workplane. Level joints get the same support as
+  before.
+- **The audit covers bends and angled supports.** Bends up and down, from 0.5°
+  to 90° at 1 to 3 lanes, are all watertight. Each one's volume is within
+  0.03% of the exact value, the same tolerance a curve gets. The far end of
+  every bend sits exactly at its port, and the slot at a 30° end is measured
+  at its full depth. Support clips at 0°, 20°, −30° and 45° are watertight with
+  exact volumes and a foot flat on the floor. A project check builds bend up,
+  slope, bend down and confirms the slope comes out at 20°, the top comes out
+  level and at the right height, and the slope's joint gets a support tipped
+  20°.
+
+### Changed
+
+- **The car follows bends**, riding square to the road and tilting over a crest
+  or through a dip.
+- The port tabs and clips at a sloped end sit square to the road instead of
+  straight up.
+
+### Still to confirm on a printed part
+
+1. **How to print a bend.** Lying flat, it needs supports under the curve. On
+   its side, it needs none, but the slot and channel become overhangs. Worth
+   trying both.
+2. **The tilted support clip's neck.** On a slope the neck is taller at one end
+   than the other: about 1.5 at the low end and up to 15 at the high end of a
+   20° clip. Check that the tall end is stiff enough.
+3. **How tight a dip or crest a car can take.** Check the default radius of 150
+   with a real car at speed.
+
+---
+
+## [1.4.6] — 2026-11-19
+
+Elevated track and ramps. Agreed with the project owner before building: an
+S-curve ramp with level ends, a solid underside that prints flat, support
+clips at raised joints, and Close Loop left for a later change.
+
+### Added
+
+- **Ramp**, a new part in the Parts Library. It climbs or drops by a **Rise**
+  you set (presets 10, 20, 40 and 60) over a **Length** measured along the
+  ground. **Direction** picks up or down from side A to side B. Both ends stay
+  level for a full connector pocket, so a ramp joins any straight, curve or
+  junction with the usual clip. The road between follows a smooth S with no
+  kink at either end. The library and Part Details show the steepest angle,
+  which is half way up. A new ramp is 240 long and rises 20, which comes to
+  11°. The shortest ramp is two pockets plus 10.
+- **A ramp is solid underneath**, down to the base of its low end, so it prints
+  flat with no supports and stands on its own. An opening 28.6 wide (the clip's
+  wings plus 1mm a side) is cut up under each slot at the high end, so a clip
+  can be pushed into the slot from below.
+- **Support clips.** Any joint higher than 6 above the workplane gets a support
+  clip instead of a plain one. It is the same snap clip with a leg and a foot
+  down to the workplane, placed and sized automatically as the track moves.
+  The leg joins only the clip's centre strip, so the arms still flex. The screw
+  holes are left out because the leg sits where they were. The top of a ramp
+  that stands on the floor holds its own joint and gets a plain clip. A tipped
+  piece is left alone. Support clips export with the track, named "support
+  clip". Print them standing on the foot.
+- **Settings ▸ Dimensions ▸ Ramps and supports**: the opening under a ramp's top
+  (28.6), the height a support starts at (6), neck height (1.5), leg width (16),
+  foot width (60), foot overhang past the clip ends (5) and foot thickness (3).
+  Two new warnings: an opening narrower than the clip's wings, and a leg wider
+  than the slot mouth.
+- **The audit covers ramps and supports.** Ramps going up and down, at 1, 2 and
+  3 lanes, and a clamped one, all come out watertight. Each one's volume
+  matches the value worked out from its cross-sections, with exact level ends.
+  Support clips at three leg lengths also come out watertight with exact
+  volumes. Project checks now cover which joints get a support and saving and
+  opening a ramp.
+
+### Changed
+
+- **The car climbs and descends ramps** in both the rolling preview and the
+  simulator. It slows going up, speeds up coming down, and tilts nose-up or
+  nose-down with the road.
+- **Close Loop explains a height difference.** For now it still joins only ends
+  at the same height, and its message now says a ramp can bring them level
+  first.
+- A project saved before this version opens with every piece level and the
+  default ramp and support settings.
+
+### Fixed
+
+- The project round-trip check had fallen behind the piece format when
+  junctions added side openings, so it failed on a fresh run. Its sample pieces
+  are up to date again.
+
+### Still to confirm on a printed part
+
+1. **The opening under a ramp's top.** It is sized so a clip can be pushed up
+   from below. Check that it goes in without the wings dragging, and that the
+   wall left between two lanes' openings is strong enough.
+2. **The support clip's overhang.** Printed standing on its foot, the clip
+   overhangs the neck by about 5mm on each side and 1mm at each end. Check it
+   prints cleanly, and that the 1.5 neck is strong enough at the 9.2 width
+   the centre strip allows.
+3. **The 60mm foot** was picked for stability on a single-lane joint. A tall
+   support may need it wider.
+
+---
+
 ## [1.4.5] — 2026-10-15
 
 README only. No part, dimension or tool changed.

@@ -99,12 +99,12 @@ export function Car() {
       return
     }
 
-    const len = centrelineLength(piece)
+    const len = centrelineLength(piece, dims)
     let { s, v, dir, offset, steer, yaw } = car
     s = THREE.MathUtils.clamp(s, 0, len)
 
     if (car.running) {
-      const here = sampleCentreline(piece, s)
+      const here = sampleCentreline(piece, s, dims)
       const nose = dir > 0 ? here.tangent : here.tangent.clone().negate()
 
       if (simulating) {
@@ -155,7 +155,7 @@ export function Car() {
       const onto = branch && piece.links[branch]
       const joined = onto ? pieces.find((p) => p.id === onto.pieceId) : undefined
       if (onto && joined) {
-        const entry = portEntry(joined, onto.port)
+        const entry = portEntry(joined, onto.port, dims)
         setCar({ pieceId: joined.id, s: entry.s, v, dir: entry.dir, offset: 0, yaw: 0, steer })
         return
       }
@@ -169,7 +169,7 @@ export function Car() {
           // Which way the next piece is travelled through, and so which way the
           // nose ends up pointing in its frame. Entering it backwards swaps its
           // left and right, so the car stays on the same side of the track.
-          const entry = portEntry(next, link.port, overflow)
+          const entry = portEntry(next, link.port, dims, overflow)
           const side = link.port === 'a' || link.port === 'b'
           const flipped = entry.dir !== (exit === 'b' ? 1 : -1)
           const room = lateralRoom(dims, next, entry.s, drawn.width)
@@ -197,25 +197,30 @@ export function Car() {
       }
     }
 
-    const at = sampleCentreline(piece, THREE.MathUtils.clamp(s, 0, len))
+    const at = sampleCentreline(piece, THREE.MathUtils.clamp(s, 0, len), dims)
     const up = UP.clone().applyQuaternion(pieceQuaternion(piece))
     const nose = dir > 0 ? at.tangent.clone() : at.tangent.clone().negate()
+    // The piece's up is plumb, but on a ramp the road is not level, so the car's
+    // own up leans back off it by the slope — square to the road, as its wheels are.
+    const carUp = up.clone().addScaledVector(at.tangent, -up.dot(at.tangent)).normalize()
     // Positive yaw is to the car's right, which is a negative turn about its up.
-    const heading = nose.applyAxisAngle(up, -yaw)
-    const across = at.tangent.clone().cross(up)
+    const heading = nose.applyAxisAngle(carUp, -yaw)
+    const across = at.tangent.clone().cross(up).normalize()
 
-    const position = at.point.clone().addScaledVector(across, offset).addScaledVector(up, railHeight(dims))
+    // The road is that far up off the underside, square to it — which on a bend
+    // or a sloped straight is not straight up.
+    const position = at.point.clone().addScaledVector(across, offset).addScaledVector(carUp, railHeight(dims))
     group.current.position.copy(position)
     // A full basis rather than one turn onto the heading, so the car banks with
     // the piece it is on instead of staying level over a rolled corner.
     group.current.quaternion.setFromRotationMatrix(
-      new THREE.Matrix4().makeBasis(heading, up, new THREE.Vector3().crossVectors(heading, up)),
+      new THREE.Matrix4().makeBasis(heading, carUp, new THREE.Vector3().crossVectors(heading, carUp)),
     )
 
     carPose.valid = true
     carPose.position.copy(position)
     carPose.forward.copy(heading)
-    carPose.up.copy(up)
+    carPose.up.copy(carUp)
     carPose.speed = v
     carPose.length = drawn.length
   })

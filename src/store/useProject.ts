@@ -8,6 +8,7 @@ import type {
   PartSpec,
   Piece,
   PieceKind,
+  BendBase,
   PortId,
   PrinterPreset,
   ToolId,
@@ -41,6 +42,7 @@ import { facingIsValid, type VehicleFacing } from '../geometry/vehicle'
 import { lanesAt } from '../geometry/parts'
 import { defaultTransitionLength } from '../geometry/transition'
 import { junctionSide } from '../geometry/junction'
+import { effectiveBase } from '../geometry/bend'
 import {
   collectGroup,
   pieceMatrix,
@@ -324,6 +326,8 @@ const startOfTrack = (pieces: Piece[]) => pieces.find((p) => !p.links.a) ?? piec
 const RESHAPES: (keyof Piece)[] = [
   'kind',
   'length',
+  'slope',
+  'base',
   'radius',
   'angleDeg',
   'flatEnd',
@@ -344,7 +348,9 @@ export const kindName = (kind: PieceKind) =>
       ? 'Transition'
       : kind === 'junction'
         ? 'Junction'
-        : 'Straight'
+        : kind === 'bend'
+            ? 'Bend'
+            : 'Straight'
 
 /** What a junction is called before the user renames it — the shape it makes. */
 export const junctionName = (openLeft: boolean, openRight: boolean) =>
@@ -355,6 +361,18 @@ export const junctionName = (openLeft: boolean, openRight: boolean) =>
       : openRight
         ? 'T-junction right'
         : 'Junction'
+
+/**
+ * What a bend is called before the user renames it — which way and how far.
+ * With a solid base it is a ramp: up away from side A, or down onto side B.
+ */
+export const bendName = (angleDeg: number, base: BendBase = 'none') => {
+  const deg = `${Math.round(Math.abs(angleDeg) * 10) / 10}°`
+  const based = effectiveBase({ angleDeg, base })
+  if (based === 'a') return `Ramp up ${deg}`
+  if (based === 'b') return `Ramp down ${deg}`
+  return `Bend ${angleDeg < 0 ? 'down' : 'up'} ${deg}`
+}
 
 /** What a transition is called before the user renames it — the step it makes. */
 export const transitionName = (lanesA: number, lanesB: number) =>
@@ -374,6 +392,8 @@ function makePiece(dims: Dimensions, init: Partial<Piece> = {}): Piece {
     length: junction
       ? junctionSide(dims, init.lanes ?? 1)
       : (init.length ?? dims.assembly.defaultStraightLength),
+    slope: init.slope ?? 0,
+    base: init.base ?? 'none',
     openLeft: init.openLeft ?? junction,
     openRight: init.openRight ?? junction,
     cornerRadius: init.cornerRadius ?? dims.assembly.transitionCornerRadius,
