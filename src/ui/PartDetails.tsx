@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Copy, Trash2 } from 'lucide-react'
 import { useProject } from '../store/useProject'
-import { portLabel, portsOf } from '../lib/ports'
+import { pieceQuaternion, portLabel, portsOf } from '../lib/ports'
+import * as THREE from 'three'
 import { ColorInput, Field, NumberInput, Panel, Section, Segmented, Toggle } from './controls'
 import { LengthInput, useUnits } from './units'
 import {
@@ -14,6 +15,10 @@ import {
   BendFields,
 } from './PartsLibrary'
 import { laneWidth } from '../geometry/dimensions'
+import { BankedFields } from './BankedFields'
+import { bankedSpecOf, bendSpecOf } from '../geometry/parts'
+import { rollEdge, rollLayout } from '../geometry/bend'
+import { portLean } from '../lib/levelling'
 import {
   defaultTransitionLength,
   minTransitionLength,
@@ -21,7 +26,7 @@ import {
 } from '../geometry/transition'
 
 import { PORT_IDS } from '../types'
-import type { GizmoAnchor, Vec3 } from '../types'
+import type { GizmoAnchor, Piece, Vec3 } from '../types'
 
 /**
  * The selected part's settings, floating over the workplane rather than docked
@@ -63,6 +68,16 @@ function Properties() {
 
   const selected = pieces.filter((p) => selection.pieceIds.includes(p.id))
   const piece = selected[0]
+  const gravity = useProject((st) => st.gravity)
+  const topSpeed = useProject((st) => st.topSpeed)
+  /** The lean a Roll would take to bring the end its side A joins back level, or null if it is level. */
+  const levelFrom = (p: Piece) => {
+    const link = p.links.a
+    const joined = link && pieces.find((x) => x.id === link.pieceId)
+    if (!link || !joined) return null
+    const lean = portLean(joined, link.port, dims, p)
+    return lean ? lean : null
+  }
 
   if (!piece) {
     return (
@@ -215,20 +230,57 @@ function Properties() {
           </>
         )}
 
+        {piece.kind === 'banked' && (
+          <>
+            {new THREE.Vector3(0, 1, 0).applyQuaternion(pieceQuaternion(piece)).y < 0.9999 && (
+              <p
+                className="mb-2 rounded border p-2 text-[11px]"
+                style={{ borderColor: '#d97706', background: 'color-mix(in srgb, #d97706 12%, transparent)' }}
+              >
+                This curve is tipped over, not level, so it will not print or run as a bank. It leans at
+                both ends, so joined straight to level track the whole turn tips to match. Delete it,
+                highlight the level end and add it again — a Roll goes in first to lean into the bank.
+              </p>
+            )}
+            <BankedFields spec={bankedSpecOf(piece)} onChange={(patch) => set(patch)} />
+          </>
+        )}
+
         {piece.kind === 'bend' && (
+          <>
           <BendFields
             angleDeg={piece.angleDeg}
             radius={piece.radius}
             slope={piece.slope}
             base={piece.base}
+            mode={piece.bendMode}
+            rollDeg={piece.rollDeg}
+            twist={piece.length}
             onAngle={(angleDeg) => set({ angleDeg })}
             onRadius={(radius) => set({ radius })}
             onSlope={(slope) => set({ slope })}
             onBase={(base) => set({ base })}
+            onMode={(bendMode) => set({ bendMode })}
+            onRoll={(rollDeg) => set({ rollDeg })}
+            onTwist={(length) => set({ length })}
+            levelTo={levelFrom(piece)}
+            rollPlan={
+              piece.bendMode === 'roll'
+                ? { ...rollEdge(rollLayout(dims, bendSpecOf(piece)), gravity), speed: topSpeed }
+                : undefined
+            }
           />
+          {piece.bendMode === 'roll' && (piece.easeFrom > 1e-9 || piece.easeTo < 1 - 1e-9) && (
+            <p className="mb-2 text-[10.5px]" style={{ color: 'var(--color-ink-2)' }}>
+              One part of a longer roll, taking {Math.round(piece.easeFrom * 100)}–{Math.round(piece.easeTo * 100)}% of
+              its smooth curve. Changing it on its own leaves a kink where it meets the next; to change the whole
+              roll, delete its parts and add it again.
+            </p>
+          )}
+          </>
         )}
 
-        {piece.kind === 'transition' || piece.kind === 'junction' || piece.kind === 'bend' ? null : piece.kind === 'straight' ? (
+        {piece.kind === 'transition' || piece.kind === 'junction' || piece.kind === 'bend' || piece.kind === 'banked' ? null : piece.kind === 'straight' ? (
           <>
             <Field label="Length" hint="Connector ends keep their width, so joins still fit.">
               <LengthInput

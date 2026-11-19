@@ -7,6 +7,7 @@ import { downloadBlob, exportParts, type ExportFormat, type ExportPart } from '.
 import { safeBaseName } from '../export/project'
 import { getSnapClipGeometry, getSupportClipGeometry, getTrackGeometry } from '../geometry/cache'
 import { clipPlacement, supportLeg } from '../lib/supports'
+import { clipTwistAt, twistClip } from '../lib/clipTwist'
 import { snapClipShape } from '../geometry/snapClip'
 import { connectorOffsets } from '../geometry/parts'
 import { DEFAULT_CONNECTOR_COLOR, longClipLength } from '../geometry/dimensions'
@@ -67,7 +68,9 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           leg === null ? getSnapClipGeometry(dims, length) : getSupportClipGeometry(dims, length, leg.floor, leg.pitchDeg)
         const clipKind = leg === null ? 'clip' : 'support clip'
         const { origin, quaternion, lateral } = clipPlacement(piece, port, length, dims)
-        const offsets = connectorOffsets(piece, dims, port)
+        const offsets = connectorOffsets(piece, dims, port, neighbour)
+        // Turned to follow a slot that is still turning through the joint.
+        const twist = leg === null ? clipTwistAt(piece, port, neighbour, dims) : null
         offsets.forEach((v, index) => {
           const local = new THREE.Matrix4().compose(
             origin.clone().addScaledVector(lateral, v),
@@ -79,7 +82,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
               offsets.length > 1
                 ? `${piece.name} ${clipKind} on ${portLabel(port)} ${index === 0 ? 'left' : 'right'}`
                 : `${piece.name} ${clipKind} on ${portLabel(port)}`,
-            geometry: connGeom,
+            geometry: twist ? twistClip(connGeom, length, v, twist, dims) : connGeom,
             matrix: matrix.clone().multiply(local),
             color: piece.connectorColor,
           })

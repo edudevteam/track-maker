@@ -16,6 +16,8 @@ import { at, capGeometryAt, ribbon, type Tri } from './section'
 import { buildTransitionGeometry } from './transition'
 import { buildJunctionGeometry, type JunctionSpec } from './junction'
 import { buildBendGeometry } from './bend'
+import { bankedLayout, buildBankedGeometry, type BankedSpec } from './banked'
+import type { BendSpec } from './bend'
 import { seatVehicleGeometry } from './vehicle'
 
 export { mergeGeometries }
@@ -23,6 +25,37 @@ export { mergeGeometries }
 /** What a junction piece asks the geometry for. Its size follows from its lanes. */
 export function junctionSpecOf(piece: Pick<Piece, 'lanes' | 'openLeft' | 'openRight'>): JunctionSpec {
   return { lanes: piece.lanes, openLeft: piece.openLeft, openRight: piece.openRight }
+}
+
+/** What a bend piece asks the geometry for. */
+export function bendSpecOf(
+  piece: Pick<Piece, 'lanes' | 'bendMode' | 'rollDeg' | 'length' | 'radius' | 'angleDeg' | 'slope' | 'base'> &
+    Partial<Pick<Piece, 'rollStart' | 'easeFrom' | 'easeTo'>>,
+): BendSpec {
+  return {
+    lanes: piece.lanes,
+    mode: piece.bendMode,
+    rollDeg: piece.rollDeg,
+    rollStart: piece.rollStart,
+    easeFrom: piece.easeFrom,
+    easeTo: piece.easeTo,
+    length: piece.length,
+    radius: piece.radius,
+    angleDeg: piece.angleDeg,
+    slope: piece.slope,
+    base: piece.base,
+  }
+}
+
+/** What a banked curve piece asks the geometry for. */
+export function bankedSpecOf(piece: Pick<Piece, 'lanes' | 'bankAngle' | 'bankBase' | 'radius' | 'angleDeg'>): BankedSpec {
+  return {
+    lanes: piece.lanes,
+    bankAngle: piece.bankAngle,
+    bankBase: piece.bankBase,
+    radius: piece.radius,
+    angleDeg: piece.angleDeg,
+  }
 }
 
 /** Geometry for a track piece, in its local frame (port `a` at the origin, +X down the centreline). */
@@ -37,21 +70,24 @@ export function buildTrackGeometry(piece: Piece, d: Dimensions): THREE.BufferGeo
     })
   }
   if (piece.kind === 'junction') return buildJunctionGeometry(d, junctionSpecOf(piece))
-  if (piece.kind === 'bend') {
-    return buildBendGeometry(d, {
-      lanes: piece.lanes,
-      radius: piece.radius,
-      angleDeg: piece.angleDeg,
-      slope: piece.slope,
-      base: piece.base,
-    })
-  }
+  if (piece.kind === 'banked') return buildBankedGeometry(d, bankedSpecOf(piece))
+  if (piece.kind === 'bend') return buildBendGeometry(d, bendSpecOf(piece))
   return buildPlainGeometry(d, piece)
 }
 
-/** A straight or a curve, as the distance along its centreline from end to end. */
-export function plainLength(piece: Pick<Piece, 'kind' | 'length' | 'radius' | 'angleDeg'>): number {
-  return piece.kind === 'curve'
+/**
+ * A straight or a curve, as the distance along its centreline from end to end.
+ * A banked curve is measured round its port's radius, which needs the
+ * dimensions to clamp; without them its own radius is taken as it stands.
+ */
+export function plainLength(
+  piece: Pick<Piece, 'kind' | 'length' | 'radius' | 'angleDeg'> & Partial<Pick<Piece, 'lanes' | 'bankAngle' | 'bankBase'>>,
+  d?: Dimensions,
+): number {
+  if (piece.kind === 'banked' && d) {
+    return arcLength(bankedLayout(d, bankedSpecOf(piece as Piece)).radius, piece.angleDeg)
+  }
+  return piece.kind === 'curve' || piece.kind === 'banked'
     ? arcLength(Math.max(1, piece.radius), piece.angleDeg)
     : Math.max(1, piece.length)
 }
@@ -207,7 +243,13 @@ export function laneOffsets(piece: Piece, d: Dimensions, port: PortId = 'a'): nu
  * two clips: the outermost lanes. Three or more clips add print time and
  * assembly fiddle without holding the joint any straighter.
  */
-export function connectorOffsets(piece: Piece, d: Dimensions, port: PortId = 'a'): number[] {
+export function connectorOffsets(
+  piece: Piece,
+  d: Dimensions,
+  port: PortId = 'a',
+  neighbour?: Piece,
+): number[] {
+  void neighbour
   const offsets = laneOffsets(piece, d, port)
   if (offsets.length <= 2) return offsets
   return [offsets[0], offsets[offsets.length - 1]]

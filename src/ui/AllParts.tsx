@@ -11,7 +11,9 @@ const kindLabel = (p: Piece) =>
     : p.kind === 'junction'
       ? junctionName(p.openLeft, p.openRight)
       : p.kind === 'bend'
-          ? bendName(p.angleDeg, p.base)
+          ? bendName(p.angleDeg, p.base, p.bendMode, p.rollDeg)
+          : p.kind === 'banked'
+            ? `Banked · ${Math.round(p.bankAngle)}° lean`
           : kindName(p.kind)
 
 /**

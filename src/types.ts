@@ -1,5 +1,8 @@
 export type Vec3 = [number, number, number]
 
+/** Whether a bend tips the track's nose up or down, or rolls it over to one side. */
+export type BendMode = 'pitch' | 'roll'
+
 /** Which end of a bend its solid base is level with, or none. */
 export type BendBase = 'none' | 'a' | 'b'
 
@@ -44,7 +47,7 @@ export type PortId = (typeof PORT_IDS)[number]
 /** The two side openings, in the order they are offered. */
 export const SIDE_PORTS = ['l', 'r'] as const satisfies readonly PortId[]
 
-export type PieceKind = 'straight' | 'curve' | 'transition' | 'junction' | 'bend'
+export type PieceKind = 'straight' | 'curve' | 'transition' | 'junction' | 'bend' | 'banked'
 
 export interface PortLink {
   pieceId: string
@@ -57,13 +60,35 @@ export interface Piece {
   kind: PieceKind
   /** Track width in lanes. 1 = single, 2 = double width with the middle walls removed, etc. */
   lanes: number
+  /** Banked curve pieces only — how far the road leans in towards the inside of the turn, degrees. */
+  bankAngle: number
+  /** Banked curve pieces only — whether it is filled down to a flat base, to print flat and stand on its own. */
+  bankBase: boolean
+  /** Bend pieces only — whether it tips the nose up or down, or rolls the road over to one side. */
+  bendMode: BendMode
+  /**
+   * Bend pieces in roll only — how much further it leans by side B, degrees.
+   * Positive leans left, dropping the driver's left side.
+   */
+  rollDeg: number
+  /** Bend pieces in roll only — how far the road already leans where side A joins, degrees. */
+  rollStart: number
+  /**
+   * Bend pieces in roll only — the stretch of one smooth curve this piece
+   * covers, 0 to 1, when a long roll is made of several. 0 and 1 for one piece.
+   */
+  easeFrom: number
+  easeTo: number
   /**
    * The second width, in lanes. A transition uses it for port `b`; a junction
    * uses it for how wide its side openings are, and so for the branch they take.
    * A straight or a curve is `lanes` wide throughout and ignores it.
    */
   lanesB: number
-  /** Straight, transition and junction pieces — centreline length in mm. */
+  /**
+   * Straight, transition and junction pieces — centreline length in mm. A bend
+   * in roll — the run its twist takes between its two connector sections.
+   */
   length: number
   /** Bend pieces only — a straight run at the angle, between the arc and the angled end, mm. */
   slope: number
@@ -121,6 +146,13 @@ export interface Piece {
 export interface PartSpec {
   kind: PieceKind
   lanes: number
+  bankAngle: number
+  bankBase: boolean
+  bendMode: BendMode
+  rollDeg: number
+  rollStart: number
+  easeFrom: number
+  easeTo: number
   lanesB: number
   length: number
   slope: number
@@ -162,6 +194,11 @@ export interface CarState {
   offset: number
   /** How far the wheels are turned, radians. Positive is to the car's right. */
   steer: number
+  /**
+   * How fast the car is sliding across a bank, mm/s, outwards positive — up the
+   * bank when it is going too fast for it, down when too slow.
+   */
+  slide: number
   /**
    * How far the nose has come off the track's own direction, radians. It follows
    * the wheels rather than matching them, so it has to be carried frame to frame.

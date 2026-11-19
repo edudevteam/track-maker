@@ -1,12 +1,21 @@
 import { parseProject, serializeProject, projectFileName } from '../src/export/project'
 import { DEFAULT_DIMENSIONS } from '../src/geometry/dimensions'
 import type { Piece } from '../src/types'
-import { reflowFrom, worldPortFrame } from '../src/lib/ports'
+import { centrelineLength, pieceMatrix, reflowFrom, sampleCentreline, worldPortFrame } from '../src/lib/ports'
+import { clipTwistAt, twistClip } from '../src/lib/clipTwist'
+import { clipPlacement } from '../src/lib/supports'
+import { buildSnapClipGeometry } from '../src/geometry/snapClip'
+import { slotMetrics } from '../src/geometry/trackProfile'
 import { DEFAULT_TOP_SPEED } from '../src/lib/driving'
 import { clipLength } from '../src/lib/connectors'
 import { junctionClipLength } from '../src/geometry/junction'
 import { supportLeg } from '../src/lib/supports'
 import { clipSeatY } from '../src/geometry/snapClip'
+import { bendSpecOf, buildTrackGeometry, connectorOffsets } from '../src/geometry/parts'
+import { trackProfile } from '../src/geometry/trackProfile'
+import { stepLeanSlide, SIDE_GRIP } from '../src/lib/driving'
+import { bedLength, levelOutRoll, portLean, rollIntoBank } from '../src/lib/levelling'
+import { MAX_EDGE_GRADE, rollEdge, rollLayout, rollLeanAt } from '../src/geometry/bend'
 import * as THREE from 'three'
 import { pieceQuaternion } from '../src/lib/ports'
 
@@ -22,6 +31,13 @@ const piece = (id: string, over: Partial<Piece> = {}): Piece => ({
   kind: 'straight',
   lanes: 2,
   lanesB: 3,
+  bankAngle: 30,
+  bankBase: true,
+  bendMode: 'pitch',
+  rollDeg: 30,
+  rollStart: 0,
+  easeFrom: 0,
+  easeTo: 1,
   length: 137.5,
   slope: 0,
   base: 'none',
@@ -303,6 +319,292 @@ for (const [label, bad] of [
   const json = JSON.parse(JSON.stringify(serializeProject({ ...snapshot, pieces: hill })))
   const back = parseProject(JSON.stringify(json))
   check('a bend keeps its kind and angle', back.pieces[2].kind === 'bend' && back.pieces[2].angleDeg === -20)
+}
+
+{
+  // Into a bank and out again: straight, Roll left 30° (base under A), Banked
+  // left 30°, a plain straight clipped on at the bank, Roll right 30° (base
+  // under B), straight. All 1 lane.
+  const d = DEFAULT_DIMENSIONS
+  const flat = { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number] }
+  const ids = ['s1', 'in', 'bank', 'lean', 'out', 's2']
+  const chain = (i: number) => ({
+    a: i > 0 ? { pieceId: ids[i - 1], port: 'b' as const } : null,
+    b: i < ids.length - 1 ? { pieceId: ids[i + 1], port: 'a' as const } : null,
+    l: null,
+    r: null,
+  })
+  const shapes: Partial<Piece>[] = [
+    { lanes: 1, length: 135 },
+    { lanes: 1, kind: 'bend', bendMode: 'roll', rollDeg: 30, length: 150, base: 'a' },
+    { lanes: 1, kind: 'banked', bankAngle: 30, bankBase: true, radius: 250, angleDeg: 90 },
+    { lanes: 1, length: 135 },
+    { lanes: 1, kind: 'bend', bendMode: 'roll', rollDeg: -30, rollStart: 30, length: 150, base: 'b' },
+    { lanes: 1, length: 135 },
+  ]
+  const run = reflowFrom(ids.map((id, i) => piece(id, { ...flat, ...shapes[i], links: chain(i) })), 's1', d)
+  const lean = (p: Piece, port: 'a' | 'b') => {
+    // How far the road leans at that end, degrees: its up, against straight up.
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(worldPortFrame(p, port, d).quaternion)
+    return THREE.MathUtils.radToDeg(Math.acos(THREE.MathUtils.clamp(up.y, -1, 1)))
+  }
+  const [s1, rin, bank, leaning, rout, s2] = run
+  const lowest = (p: Piece) => {
+    const g = buildTrackGeometry(p, d).clone().applyMatrix4(pieceMatrix(p))
+    g.computeBoundingBox()
+    return g.boundingBox!.min.y
+  }
+  check('the roll starts level and ends leaning 30°', Math.abs(lean(rin, 'a')) < 1e-6 && Math.abs(lean(rin, 'b') - 30) < 1e-6)
+  check('the banked curve leans 30° at both ends', Math.abs(lean(bank, 'a') - 30) < 1e-6 && Math.abs(lean(bank, 'b') - 30) < 1e-6)
+  check('a plain straight clipped on at the bank leans with it', Math.abs(lean(leaning, 'a') - 30) < 1e-6 && Math.abs(lean(leaning, 'b') - 30) < 1e-6)
+  check('rolling back out ends level', Math.abs(lean(rout, 'b')) < 1e-6 && Math.abs(lean(s2, 'b')) < 1e-6)
+  // Level out: read off the end it joins, it is exactly the roll back.
+  check('level out reads −30° off the end of a left-leaning 30° bank', Math.abs(levelOutRoll(leaning, 'b', d, rout) + 30) < 1e-9 && Math.abs(levelOutRoll(bank, 'b', d, rout) + 30) < 1e-9)
+  check('and nothing off a level end', portLean(s2, 'b', d, rout) === 0 && portLean(s1, 'b', d, rout) === 0)
+  {
+    // A right-hand bank: Roll lean right 30° into Banked right 30°, then level out
+    // with whatever it reads.
+    const rid = ['r1', 'rin', 'rbank']
+    const rchain = (i: number) => ({
+      a: i > 0 ? { pieceId: rid[i - 1], port: 'b' as const } : null,
+      b: i < rid.length - 1 ? { pieceId: rid[i + 1], port: 'a' as const } : null,
+      l: null,
+      r: null,
+    })
+    const rshapes: Partial<Piece>[] = [
+      { lanes: 1, length: 135 },
+      { lanes: 1, kind: 'bend', bendMode: 'roll', rollDeg: -30, length: 150, base: 'a' },
+      { lanes: 1, kind: 'banked', bankAngle: 30, bankBase: true, radius: 250, angleDeg: -90 },
+    ]
+    const rrun = reflowFrom(rid.map((id, i) => piece(id, { ...flat, ...rshapes[i], links: rchain(i) })), 'r1', d)
+    const outShape = piece('rout', { ...flat, kind: 'bend', bendMode: 'roll', lanes: 1, length: 150, base: 'b' })
+    const read = levelOutRoll(rrun[2], 'b', d, outShape)
+    const closer = { ...outShape, rollDeg: read, rollStart: -read, links: { a: { pieceId: 'rbank', port: 'b' as const }, b: null, l: null, r: null } }
+    const all = reflowFrom([...rrun.map((p) => (p.id === 'rbank' ? { ...p, links: { ...p.links, b: { pieceId: 'rout', port: 'a' as const } } } : p)), closer], 'r1', d)
+    const done = all[3]
+    check('off a right-leaning bank it reads +30°, and that brings it level on the floor',
+      Math.abs(read - 30) < 1e-9 && Math.abs(lean(done, 'b')) < 1e-6 && Math.abs(worldPortFrame(done, 'b', d).position.y) < 1e-6 && Math.abs(lowest(done)) < 1e-3,
+      `${read.toFixed(4)}°`)
+  }
+  check('and back on the floor', Math.abs(worldPortFrame(s2, 'b', d).position.y) < 1e-6, worldPortFrame(s2, 'b', d).position.y.toFixed(6))
+  check('the banked curve turns level: its two ends at the same height', Math.abs(worldPortFrame(bank, 'a', d).position.y - worldPortFrame(bank, 'b', d).position.y) < 1e-6)
+
+  // Every joint is the ordinary section on both sides: each piece's end face
+  // carries every corner of the track outline, at the same places in the world.
+  const meshFace = (p: Piece, port: 'a' | 'b') => {
+    const g = buildTrackGeometry(p, d)
+    const m = pieceMatrix(p)
+    const f = worldPortFrame(p, port, d)
+    const out = new THREE.Vector3(1, 0, 0).applyQuaternion(f.quaternion)
+    const pos = g.getAttribute('position')
+    const face: THREE.Vector3[] = []
+    for (let i = 0; i < pos.count; i++) {
+      const v = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(m)
+      if (Math.abs(v.clone().sub(f.position).dot(out)) < 1e-3) face.push(v)
+    }
+    return face
+  }
+  const outline = (p: Piece, port: 'a' | 'b') => {
+    const f = worldPortFrame(p, port, d)
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(f.quaternion)
+    const lat = new THREE.Vector3(0, 0, 1).applyQuaternion(f.quaternion)
+    // Profile +x is −z at a port b and +z at a port a, in that port's own frame.
+    const sideways = port === 'b' ? -1 : 1
+    return trackProfile(d, 1, true).map((q) => f.position.clone().addScaledVector(up, q.y).addScaledVector(lat, sideways * q.x))
+  }
+  const has = (face: THREE.Vector3[], pts: THREE.Vector3[]) => pts.every((p) => face.some((v) => v.distanceTo(p) < 2e-3))
+  for (let i = 0; i < run.length - 1; i++) {
+    const [x, y] = [run[i], run[i + 1]]
+    const ox = outline(x, 'b')
+    const oy = outline(y, 'a')
+    const same = ox.every((p) => oy.some((q) => q.distanceTo(p) < 1e-6))
+    check(`${x.id} meets ${y.id} on the same outline, in both meshes`, same && has(meshFace(x, 'b'), ox) && has(meshFace(y, 'a'), oy))
+  }
+
+  // The bases stand on the floor.
+  check('the roll in, the banked curve and the roll out all stand on the floor',
+    [rin, bank, rout].every((p) => Math.abs(lowest(p)) < 1e-3), [rin, bank, rout].map((p) => lowest(p).toFixed(4)).join(', '))
+  void s1
+
+  // The physics on a 30° lean: parked it slides down; on the banked curve at
+  // v = √(r·g·tan θ) it holds its line with no grip at all; level, nothing.
+  const g = 9810
+  const at = sampleCentreline(bank, 100, d)
+  const across = at.tangent.clone().cross(at.up).normalize()
+  const parked = stepLeanSlide(across, at.up, new THREE.Vector3(), g, 0, 0.01)
+  check('parked on the 30° lean it slides down towards the inside', Math.tan(Math.PI / 6) > SIDE_GRIP && parked.moved !== 0 && across.y * parked.moved < 0)
+  const r = 250
+  const v = Math.sqrt(r * g * Math.tan(Math.PI / 6))
+  const inward = new THREE.Vector3(across.x, 0, across.z).normalize().multiplyScalar(-1)
+  const bal = stepLeanSlide(across, at.up, inward.multiplyScalar((v * v) / r), g, 0, 0.01)
+  check('at v = √(r·g·tan θ) a car on the bank holds its line', bal.slide === 0 && bal.moved === 0, `${v.toFixed(1)} mm/s`)
+  const levelAt = sampleCentreline(s2, 50, d)
+  const level = stepLeanSlide(levelAt.tangent.clone().cross(levelAt.up).normalize(), levelAt.up, new THREE.Vector3(), g, 0, 0.01)
+  check('on level track nothing slides', level.slide === 0)
+  check('a project keeps a roll and a banked curve as they were', (() => {
+    const back = parseProject(JSON.stringify(serializeProject({ ...snapshot, pieces: [rin, bank] })))
+    const [a, b] = back.pieces
+    return a.kind === 'bend' && a.bendMode === 'roll' && a.rollDeg === 30 && a.base === 'a' && b.kind === 'banked' && b.bankAngle === 30 && b.bankBase
+  })())
+}
+
+{
+  // The reported case: the default banked curve, 4 lanes, added onto a level
+  // 4-lane straight on the floor — with a Top speed of 500 mm/s and a 256 mm bed.
+  const d = DEFAULT_DIMENSIONS
+  const sizing = { speed: 500, gravity: 9810, bed: bedLength([256, 256, 256]) }
+  const flat = { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number] }
+  const straight = piece('st', { ...flat, lanes: 4, length: 135, links: { a: null, b: null, l: null, r: null } })
+  const curve = { lanes: 4, angleDeg: 90, bankAngle: 30, color: '#e2622a' }
+  const rolls = rollIntoBank(straight, 'b', curve, d, sizing)
+  const total = rolls.reduce((sum, r) => sum + (r.rollDeg ?? 0), 0)
+  check('onto a level end a banked curve gets Rolls in first, 30° into a left turn all told, with a base',
+    rolls.length > 1 && Math.abs(total - 30) < 1e-9 && rolls.every((r) => r.base !== 'none' && r.lanes === 4),
+    `${rolls.length} pieces, ${total.toFixed(6)}°`)
+  check('each fits the 256 mm bed', rolls.every((r) => (r.length ?? 0) + 2 * d.assembly.connectorInset <= sizing.bed + 1e-9),
+    rolls.map((r) => ((r.length ?? 0) + 2 * d.assembly.connectorInset).toFixed(1)).join(', '))
+  const ids = ['st', ...rolls.map((_, k) => `r${k}`), 'bk']
+  const chain = (i: number) => ({
+    a: i > 0 ? { pieceId: ids[i - 1], port: 'b' as const } : null,
+    b: i < ids.length - 1 ? { pieceId: ids[i + 1], port: 'a' as const } : null,
+    l: null,
+    r: null,
+  })
+  const run = reflowFrom(
+    [
+      { ...straight, links: chain(0) },
+      ...rolls.map((r, k) => piece(`r${k}`, { ...flat, ...r, links: chain(k + 1) })),
+      piece('bk', { ...flat, kind: 'banked', lanes: 4, bankAngle: 30, bankBase: true, radius: 250, angleDeg: 90, links: chain(ids.length - 1) }),
+    ],
+    'st',
+    d,
+  )
+  const bk = run[run.length - 1]
+  const upright = (p: Piece) => new THREE.Vector3(0, 1, 0).applyQuaternion(pieceQuaternion(p)).y
+  check('the banked curve after them turns level, not tipped', Math.abs(upright(bk) - 1) < 1e-9, upright(bk).toFixed(9))
+  const lowestOf = (p: Piece) => {
+    const g = buildTrackGeometry(p, d).clone().applyMatrix4(pieceMatrix(p))
+    g.computeBoundingBox()
+    return g.boundingBox!.min.y
+  }
+  check('every Roll and the banked curve stand flat on the floor', run.slice(1).every((p) => Math.abs(lowestOf(p)) < 1e-3),
+    run.slice(1).map((p) => lowestOf(p).toFixed(4)).join(', '))
+  // The outside edge, piece by piece: no steeper than 15%, and a car at Top
+  // speed stays down.
+  const edges = run.slice(1, -1).map((p) => rollEdge(rollLayout(d, bendSpecOf(p)), sizing.gravity))
+  check('the outside edge climbs no steeper than 15% anywhere', edges.every((e) => e.grade <= MAX_EDGE_GRADE),
+    edges.map((e) => `${(e.grade * 100).toFixed(1)}%`).join(', '))
+  check('and a car at 500 mm/s stays on all the way', edges.every((e) => e.liftSpeed >= sizing.speed),
+    edges.map((e) => `${Math.round(e.liftSpeed)}`).join(', '))
+  // No dips: walk the outside edge's height along the whole run, joints and all.
+  // Through the steady middle — past the easing at each end — it must climb at
+  // one grade, with no flat where one piece meets the next.
+  {
+    const W = 4 * (d.track.channelTopWidth + 2 * d.track.wallThickness)
+    // Sampled by distance along the whole run, so a joint falls between two
+    // samples a millimetre apart like anywhere else.
+    const layouts = run.slice(1, -1).map((p) => rollLayout(d, bendSpecOf(p)))
+    const total = layouts.reduce((sum, l) => sum + l.length, 0)
+    const step = 1
+    const heights: number[] = []
+    for (let sigma = 0; sigma <= total + 1e-9; sigma += step) {
+      let along = sigma
+      let k = 0
+      while (k < layouts.length - 1 && along > layouts[k].length) along -= layouts[k++].length
+      heights.push(W * Math.sin(rollLeanAt(layouts[k], Math.min(along, layouts[k].length))))
+    }
+    const inset = d.assembly.connectorInset
+    const span = total - 2 * inset
+    const grades = heights.slice(1).map((h, i) => (h - heights[i]) / step)
+    const middle = grades.filter((_, i) => i * step > inset + 0.3 * span && i * step < total - inset - 0.3 * span)
+    const top = Math.max(...middle)
+    const low = Math.min(...middle)
+    check('no dips: through the middle of the run the outside edge climbs at a steady grade, joints included',
+      low > 0.9 * top, `${(low * 100).toFixed(2)}% to ${(top * 100).toFixed(2)}% over ${total.toFixed(0)} mm`)
+  }
+  // The clips at the joints in the middle of the run, where the slot is still
+  // turning: a straight clip stands proud of it at the outside lanes; one
+  // turned to follow it stays inside the slot all the way along.
+  {
+    const { slotH } = slotMetrics(d)
+    const layouts = run.map((p) => p)
+    /** The road under a world point, as the piece and distance along it. */
+    const roadAt = (v: THREE.Vector3) => {
+      for (const p of layouts.slice(1, -1)) {
+        const len = centrelineLength(p, d)
+        const start = worldPortFrame(p, 'a', d).position
+        const along = sampleCentreline(p, 0, d).tangent
+        const s = v.clone().sub(start).dot(along)
+        if (s >= -1e-6 && s <= len + 1e-6) return sampleCentreline(p, THREE.MathUtils.clamp(s, 0, len), d)
+      }
+      return null
+    }
+    let straightWorst = 0
+    let twistedWorst = 0
+    let twistedLowest = Infinity
+    let joints = 0
+    for (let i = 1; i < run.length - 2; i++) {
+      const [x, y] = [run[i], run[i + 1]]
+      const twist = clipTwistAt(x, 'b', y, d)
+      if (!twist) continue
+      joints++
+      for (const length of [40, 70]) {
+        const clip = buildSnapClipGeometry(d, length)
+        const place = clipPlacement(x, 'b', length, d)
+        const m = pieceMatrix(x)
+        for (const lane of [connectorOffsets(x, d, 'b')[0], connectorOffsets(x, d, 'b').slice(-1)[0]]) {
+          for (const [geom, worst] of [
+            [clip, (h: number) => (straightWorst = Math.max(straightWorst, h))],
+            [twistClip(clip, length, lane, twist, d), (h: number, lo: number) => {
+              twistedWorst = Math.max(twistedWorst, h)
+              twistedLowest = Math.min(twistedLowest, lo)
+            }],
+          ] as [THREE.BufferGeometry, (h: number, lo: number) => void][]) {
+            const pos = geom.getAttribute('position')
+            const at = new THREE.Matrix4().compose(
+              place.origin.clone().addScaledVector(place.lateral, lane),
+              place.quaternion,
+              new THREE.Vector3(1, 1, 1),
+            )
+            let hi = -Infinity
+            let lo = Infinity
+            for (let k = 0; k < pos.count; k++) {
+              const v = new THREE.Vector3().fromBufferAttribute(pos, k).applyMatrix4(at).applyMatrix4(m)
+              const road = roadAt(v)
+              if (!road) continue
+              const h = v.clone().sub(road.point).dot(road.up)
+              hi = Math.max(hi, h)
+              lo = Math.min(lo, h)
+            }
+            worst(hi, lo)
+          }
+        }
+      }
+    }
+    check('a straight clip at a turning joint would stand proud of its slot', joints > 0 && straightWorst > slotH + 0.1,
+      `${joints} joints; tops ${straightWorst.toFixed(2)} mm up against a ${slotH.toFixed(2)} mm slot`)
+    check('a clip turned to follow it stays inside the slot, end to end, on both outside lanes',
+      twistedWorst <= slotH + 1e-3 && twistedLowest >= -1e-3,
+      `${twistedLowest.toFixed(3)} to ${twistedWorst.toFixed(3)} mm, slot 0 to ${slotH.toFixed(3)} mm`)
+  }
+  // The pieces carry on from each other: what one finishes at, the next starts at.
+  check('each Roll starts at the lean the one before finishes at', rolls.every((r, k) =>
+    k === 0 ? r.rollStart === 0 : Math.abs((r.rollStart ?? 0) - ((rolls[k - 1].rollStart ?? 0) + (rolls[k - 1].rollDeg ?? 0))) < 1e-9))
+  for (let i = 0; i < run.length - 1; i++) {
+    const [x, y] = [run[i], run[i + 1]]
+    const outline = (p: Piece, port: 'a' | 'b') => {
+      const f = worldPortFrame(p, port, d)
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(f.quaternion)
+      const lat = new THREE.Vector3(0, 0, 1).applyQuaternion(f.quaternion)
+      return trackProfile(d, 4, true).map((q) => f.position.clone().addScaledVector(up, q.y).addScaledVector(lat, (port === 'b' ? -1 : 1) * q.x))
+    }
+    const ox = outline(x, 'b')
+    const oy = outline(y, 'a')
+    check(`${x.id} meets ${y.id} on the same outline`, ox.every((p) => oy.some((q) => q.distanceTo(p) < 1e-6)))
+  }
+  check('a second banked curve on its end clips straight on, no Roll', rollIntoBank(bk, 'b', curve, d, sizing).length === 0)
+  check('a right-hand one gets Rolls leaning right',
+    rollIntoBank(straight, 'b', { ...curve, angleDeg: -90 }, d, sizing).reduce((sum, r) => sum + (r.rollDeg ?? 0), 0) < -29.999)
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nall passed')

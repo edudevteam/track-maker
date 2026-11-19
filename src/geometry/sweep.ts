@@ -121,7 +121,13 @@ export function sweepSections(
       const p1 = p0 + 1
       const p2 = p0 + 2
       const p3 = p0 + 3
-      indices.push(p0, p1, p2, p1, p3, p2)
+      // A strip whose section turns about the direction of travel — a roll —
+      // has panels that are not flat, and splitting every one along the same
+      // diagonal shaves a little off each, all the same way. Alternating the
+      // diagonal station by station cancels that out. A flat panel is the same
+      // whichever way it is split.
+      if (i % 2) indices.push(p0, p1, p3, p0, p3, p2)
+      else indices.push(p0, p1, p2, p1, p3, p2)
     }
   }
 

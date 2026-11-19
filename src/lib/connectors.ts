@@ -43,7 +43,7 @@ function pocketDepth(piece: Piece, d: Dimensions): number {
       flatEnd: piece.flatEnd,
     }).flatEnd
   }
-  return connectorInset(d, plainLength(piece))
+  return connectorInset(d, plainLength(piece, d))
 }
 
 /** Whether the long clip can reach into this piece and still leave the end gap clear. */

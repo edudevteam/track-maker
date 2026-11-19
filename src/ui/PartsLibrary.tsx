@@ -1,6 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Plus, X } from 'lucide-react'
-import { bendName, junctionName, transitionName, useProject } from '../store/useProject'
+import {
+  bankedName,
+  bendName,
+  DEFAULT_BANK_ANGLE,
+  junctionName,
+  transitionName,
+  useProject,
+} from '../store/useProject'
+import { BankedFields } from './BankedFields'
+import type { BankedSpec } from '../geometry/banked'
+import { LeanSection } from './BankedFields'
+import { bedLength, portLean, rollIntoBank } from '../lib/levelling'
 import { Field, NumberInput, Segmented } from './controls'
 import { LengthInput, useUnits } from './units'
 import { laneWidth } from '../geometry/dimensions'
@@ -12,8 +23,22 @@ import {
   transitionCornerLimit,
 } from '../geometry/transition'
 import { junctionSide } from '../geometry/junction'
-import { bendFrameAt, bendLayout, canHaveBase, effectiveBase, MAX_BEND_ANGLE, minBendRadius } from '../geometry/bend'
-import type { BendBase, PartSpec, PieceKind } from '../types'
+import {
+  bendFrameAt,
+  bendLayout,
+  canHaveBase,
+  effectiveBase,
+  gentleRollLength,
+  MAX_BEND_ANGLE,
+  MAX_EDGE_GRADE,
+  MAX_ROLL,
+  MIN_TWIST,
+  minBendRadius,
+  rollEdge,
+  rollLayout,
+  splitRoll,
+} from '../geometry/bend'
+import type { BendBase, BendMode, PartSpec, PieceKind } from '../types'
 
 /** Lanes are free-typed, so they need sane bounds. Widths are whole lanes. */
 export const MAX_LANES = 8
@@ -29,6 +54,11 @@ const DEFAULT_BEND_ANGLE = 15
 const DEFAULT_BEND_RADIUS = 150
 const MAX_BEND_RADIUS = 800
 const MAX_SLOPE = 600
+/** The common roll angles, degrees — the same as the banked curves they lead into. */
+const ROLL_ANGLES = [15, 30, 45, 60]
+const DEFAULT_ROLL = 30
+/** The longest roll offered, all told, mm — it prints as however many pieces that takes. */
+const MAX_ROLL_LENGTH = 4000
 
 type Turn = 'left' | 'right'
 
@@ -37,7 +67,8 @@ const CATALOGUE: { kind: PieceKind; name: string; blurb: string }[] = [
   { kind: 'curve', name: 'Curve', blurb: 'A turn on a fixed radius.' },
   { kind: 'transition', name: 'Transition', blurb: 'Opens one width into the next.' },
   { kind: 'junction', name: 'Junction', blurb: 'Opens one or both sides.' },
-  { kind: 'bend', name: 'Bend', blurb: 'Tips the track up or down. Add a base for a ramp.' },
+  { kind: 'bend', name: 'Bend', blurb: 'Tips the track up or down, or rolls it into a bank.' },
+  { kind: 'banked', name: 'Banked curve', blurb: 'A level turn whose road leans in.' },
 ]
 
 /**
@@ -51,6 +82,9 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
   const snapToPort = useProject((s) => s.snapToPort)
   const activePort = useProject((s) => s.activePort)
   const pieces = useProject((s) => s.pieces)
+  const topSpeed = useProject((s) => s.topSpeed)
+  const gravity = useProject((s) => s.gravity)
+  const printer = useProject((s) => s.printer)
   const { fmt, val } = useUnits()
 
   const [kind, setKind] = useState<PieceKind>('straight')
@@ -64,7 +98,18 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
   const [bendRadius, setBendRadius] = useState(DEFAULT_BEND_RADIUS)
   const [bendSlope, setBendSlope] = useState(0)
   const [bendBase, setBendBase] = useState<BendBase>('none')
-  const bend = { radius: bendRadius, angleDeg: bendAngle, slope: bendSlope, base: bendBase }
+  const [bendMode, setBendMode] = useState<BendMode>('pitch')
+  const [rollDeg, setRollDeg] = useState(DEFAULT_ROLL)
+  // A roll's length is worked out for it until it is typed over.
+  const [twistSet, setTwist] = useState<number | null>(null)
+  const bend = { radius: bendRadius, angleDeg: bendAngle, slope: bendSlope, base: bendBase, mode: bendMode, rollDeg }
+  const [bankTurn, setBankTurn] = useState<Omit<BankedSpec, 'lanes'>>({
+    bankAngle: DEFAULT_BANK_ANGLE,
+    bankBase: true,
+    radius: 250,
+    angleDeg: 90,
+  })
+  const banked: BankedSpec = { ...bankTurn, lanes }
   // A junction is a square whose side follows from its lanes, so the only thing
   // to pick is which of its walls are open.
   const [openLeft, setOpenLeft] = useState(true)
@@ -91,6 +136,13 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
     length,
     slope: 0,
     base: 'none' as BendBase,
+    bankAngle: DEFAULT_BANK_ANGLE,
+    bankBase: true,
+    bendMode: 'pitch' as BendMode,
+    rollDeg: DEFAULT_ROLL,
+    rollStart: 0,
+    easeFrom: 0,
+    easeTo: 1,
     cornerRadius: corner,
     flatEnd: flat,
     radius,
@@ -110,17 +162,30 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
               ? {
                   ...base,
                   kind,
+                  // A roll's length is its twist; a pitch's is worked out from its arc.
                   length: bendLayout(dims, bend).length,
                   radius: Math.max(bendRadius, minBendRadius(dims)),
                   angleDeg: bendAngle,
                   slope: bendSlope,
                   base: effectiveBase(bend),
-                  name: bendName(bendAngle, bendBase),
+                  bendMode,
+                  rollDeg,
+                  name: bendName(bendAngle, bendBase, bendMode, rollDeg),
                 }
-            : { ...base, kind, name: `Straight ${fmt(length, 0)}` }
+            : kind === 'banked'
+              ? { ...base, ...banked, kind, name: bankedName(banked) }
+              : { ...base, kind, name: `Straight ${fmt(length, 0)}` }
 
   const add = () => {
-    addPiece({ ...spec })
+    if (kind === 'bend' && bendMode === 'roll') {
+      // A long roll goes in as its pieces, one after another.
+      let end: { pieceId: string; port: 'b' } | null = null
+      rollParts.forEach((part, k) => {
+        const name = `${spec.name}${rollParts.length > 1 ? ` (${k + 1}/${rollParts.length})` : ''}`
+        const id = addPiece({ ...spec, ...part, name }, end ? { attachTo: end } : {})
+        end = { pieceId: id, port: 'b' }
+      })
+    } else addPiece({ ...spec })
     onClose()
   }
 
@@ -135,6 +200,40 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
 
   const host = activePort && pieces.find((p) => p.id === activePort.pieceId)
   const willJoin = snapToPort && !!host && !host.links[activePort!.port]
+  // Joining onto an end that leans, a Roll can bring it back level.
+  const lean = willJoin && host ? portLean(host, activePort!.port, dims, { ...spec, kind: 'bend' }) : 0
+  const levelTo = lean ? lean : null
+  // A roll starts from however far the end it joins leans, and is sized and
+  // split from there.
+  const fromDeg = -lean
+  // The roll's length all told, both level connector sections included.
+  const autoTwist = gentleRollLength(dims, lanes, fromDeg, fromDeg + rollDeg, topSpeed, gravity)
+  const twist = Math.max(2 * dims.assembly.connectorInset + MIN_TWIST, twistSet ?? autoTwist)
+  const based = bendBase !== 'none'
+  const rollParts = splitRoll(dims, { lanes, fromDeg, changeDeg: rollDeg, total: twist, based }, bedLength(printer.size))
+  // The whole run as one piece, for what its outside edge does.
+  const edge = rollEdge(
+    rollLayout(dims, { lanes, rollDeg, length: twist - 2 * dims.assembly.connectorInset, base: bendBase, rollStart: fromDeg }),
+    gravity,
+  )
+  const rollPlan: RollPlan = {
+    ...edge,
+    speed: topSpeed,
+    auto: autoTwist,
+    isAuto: twistSet === null,
+    pieces: rollParts.length,
+    // What prints: the twist and both connector sections.
+    each: (rollParts[0]?.length ?? 0) + 2 * dims.assembly.connectorInset,
+  }
+  // Picking a Bend for a leaning end starts on what it most likely is for: levelling out.
+  useEffect(() => {
+    if (kind !== 'bend' || levelTo === null) return
+    setBendMode('roll')
+    setRollDeg(levelTo)
+    setBendBase('a')
+    // Only when the part or the end changes, not as the fields are edited.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind, activePort?.pieceId, activePort?.port])
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={onClose}>
@@ -191,6 +290,9 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
           </div>
 
           <div className="min-w-0 flex-1 overflow-y-auto p-3">
+            {kind === 'banked' ? null : kind === 'bend' && bendMode === 'roll' ? (
+              <LeanSection lanes={lanes} lean={Math.abs(rollDeg)} base={bendBase !== 'none'} />
+            ) : (
             <Preview
               kind={kind}
               lanes={lanes}
@@ -204,6 +306,7 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
               turn={turn}
               bend={bend}
             />
+            )}
 
             {kind === 'transition' ? (
               <div className="grid grid-cols-2 gap-2">
@@ -282,16 +385,33 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
                 />
                 <JunctionSizeNote lanes={lanes} />
               </>
+            ) : kind === 'banked' ? (
+              <BankedFields
+                spec={banked}
+                onChange={({ lanes: l, ...patch }) => {
+                  if (l !== undefined) setLanes(l)
+                  setBankTurn((b) => ({ ...b, ...patch }))
+                }}
+              />
             ) : kind === 'bend' ? (
               <BendFields
                 angleDeg={bendAngle}
                 radius={bendRadius}
                 slope={bendSlope}
                 base={bendBase}
+                mode={bendMode}
+                rollDeg={rollDeg}
+                twist={twist}
                 onAngle={setBendAngle}
                 onRadius={setBendRadius}
                 onSlope={setBendSlope}
                 onBase={setBendBase}
+                onMode={setBendMode}
+                onRoll={setRollDeg}
+                onTwist={setTwist}
+                levelTo={levelTo}
+                rollPlan={rollPlan}
+                onTwistAuto={() => setTwist(null)}
               />
             ) : kind === 'straight' ? (
               <Field label="Length">
@@ -370,7 +490,15 @@ export function PartsLibrary({ onClose }: { onClose: () => void }) {
           style={{ borderColor: 'var(--color-line)' }}
         >
           <span className="text-[11px]" style={{ color: 'var(--color-ink-2)' }}>
-            {willJoin ? 'Joins onto the highlighted end.' : 'Lands loose on the workplane.'}
+            {willJoin
+              ? kind === 'banked' && host && rollIntoBank(host, activePort!.port, { ...spec, color: host.color }, dims, {
+                  speed: topSpeed,
+                  gravity,
+                  bed: bedLength(printer.size),
+                }).length
+                ? 'Rolls go in first to lean gently into the bank, then the curve.'
+                : 'Joins onto the highlighted end.'
+              : 'Lands loose on the workplane.'}
           </span>
           <button className="tm-btn tm-btn-primary" onClick={add}>
             <Plus size={13} /> Add {spec.name}
@@ -544,6 +672,51 @@ export function OpenSidesField({
   )
 }
 
+/** A roll's outside edge, and how it prints. */
+export interface RollPlan {
+  climb: number
+  grade: number
+  liftSpeed: number
+  /** The car's Top speed, to hold the lift-off speed against. */
+  speed: number
+  /** The length worked out for it, when there is one to offer. */
+  auto?: number
+  isAuto?: boolean
+  /** How many pieces it prints as, and how long each is. */
+  pieces?: number
+  each?: number
+}
+
+/**
+ * What a roll does to the outside edge — which climbs as the road leans over —
+ * and how it prints. Amber when the climb is steep or a car at Top speed would
+ * lift off.
+ */
+function RollReadout({ plan }: { plan: RollPlan }) {
+  const { fmt } = useUnits()
+  const steep = plan.grade > MAX_EDGE_GRADE + 1e-6
+  const lifts = plan.liftSpeed < plan.speed
+  const warn = steep || lifts
+  return (
+    <p
+      className="mb-2 rounded border p-2 text-[11px]"
+      style={
+        warn
+          ? { borderColor: '#d97706', background: 'color-mix(in srgb, #d97706 12%, transparent)' }
+          : { borderColor: 'var(--color-line)', color: 'var(--color-ink-2)' }
+      }
+    >
+      The outside edge climbs {fmt(plan.climb, 0)}, at most {(plan.grade * 100).toFixed(0)}%. A car stays on up to{' '}
+      {Number.isFinite(plan.liftSpeed) ? `${Math.round(plan.liftSpeed)} mm/s` : 'any speed'}
+      {lifts ? ` — below your ${Math.round(plan.speed)} mm/s Top speed, so it would lift off` : ''}
+      {steep && !lifts ? ' — steeper than the 15% a gentle roll keeps to' : ''}.
+      {plan.pieces && plan.pieces > 1
+        ? ` Prints as ${plan.pieces} pieces of ${fmt(plan.each ?? 0, 0)}, each its share of one smooth curve.`
+        : ''}
+    </p>
+  )
+}
+
 /**
  * A bend's shape: which way it tips the track, how far, and how sharply. Shared
  * by the library and Part Details.
@@ -553,19 +726,43 @@ export function BendFields({
   radius,
   slope,
   base,
+  mode,
+  rollDeg,
+  twist,
   onAngle,
   onRadius,
   onSlope,
   onBase,
+  onMode,
+  onRoll,
+  onTwist,
+  levelTo = null,
+  rollPlan,
+  onTwistAuto,
 }: {
   angleDeg: number
   radius: number
   slope: number
   base: BendBase
+  mode: BendMode
+  rollDeg: number
+  twist: number
   onAngle: (deg: number) => void
   onRadius: (mm: number) => void
   onSlope: (mm: number) => void
   onBase: (base: BendBase) => void
+  onMode: (mode: BendMode) => void
+  onRoll: (deg: number) => void
+  onTwist: (mm: number) => void
+  /**
+   * The lean that brings the road back level from the end side A joins — or
+   * null when that end is level, or there is no end to join.
+   */
+  levelTo?: number | null
+  /** What the roll does to the outside edge, and — in the library — how it prints. */
+  rollPlan?: RollPlan
+  /** Put the roll's length back to the one worked out for it. */
+  onTwistAuto?: () => void
 }) {
   const dims = useProject((s) => s.dims)
   const { fmt } = useUnits()
@@ -573,8 +770,123 @@ export function BendFields({
   const sign = angleDeg < 0 ? -1 : 1
   const l = bendLayout(dims, { radius, angleDeg, slope, base })
   const baseable = canHaveBase({ angleDeg })
+  const kindField = (
+    <Field label="Bend" hint="Pitch tips the nose up or down. Roll leans the road over to one side, into a bank.">
+      <Segmented<BendMode>
+        value={mode}
+        onChange={onMode}
+        options={[
+          { value: 'pitch', label: 'Pitch' },
+          { value: 'roll', label: 'Roll' },
+        ]}
+      />
+    </Field>
+  )
+  if (mode === 'roll') {
+    const lean = Math.abs(rollDeg)
+    const way = rollDeg < 0 ? -1 : 1
+    const levelling = levelTo !== null && base !== 'none' && Math.abs(rollDeg - levelTo) < 0.05
+    return (
+      <>
+        {kindField}
+        <Field
+          label="Lean"
+          hint={
+            levelling
+              ? `Rolls the ${Math.abs(levelTo!).toFixed(0)}° lean it joins back to level, ending flat on the floor, ready for ordinary track.`
+              : levelTo !== null
+                ? `The end it joins leans ${Math.abs(levelTo).toFixed(0)}°. Level out brings it back flat.`
+                : 'Lean left to bank into a left turn, right for a right. To come back out of a bank, highlight its end and pick Level out.'
+          }
+        >
+          <Segmented<'left' | 'right' | 'level'>
+            value={levelling ? 'level' : way < 0 ? 'right' : 'left'}
+            onChange={(v) => {
+              if (v === 'level') {
+                if (levelTo === null) return
+                onRoll(levelTo)
+                onBase('a')
+              } else onRoll((v === 'left' ? 1 : -1) * lean)
+            }}
+            options={[
+              { value: 'left', label: 'Lean left' },
+              { value: 'right', label: 'Lean right' },
+              ...(levelTo !== null ? [{ value: 'level' as const, label: 'Level out' }] : []),
+            ]}
+          />
+        </Field>
+        {!levelling && (
+        <Field label="Angle" hint="The same as the banked curve it leads into.">
+          <div className="mb-1.5 grid grid-cols-4 gap-1">
+            {ROLL_ANGLES.map((a) => (
+              <button
+                key={a}
+                className="tm-btn px-0"
+                style={Math.abs(lean - a) < 0.05 ? { borderColor: 'var(--color-accent)' } : undefined}
+                onClick={() => onRoll(way * a)}
+              >
+                {a}°
+              </button>
+            ))}
+          </div>
+          <NumberInput
+            value={lean}
+            onChange={(v) => onRoll(way * Math.min(MAX_ROLL, Math.max(1, v)))}
+            step={5}
+            min={1}
+            max={MAX_ROLL}
+            suffix="°"
+          />
+        </Field>
+        )}
+        <Field
+          label="Roll length"
+          hint={
+            rollPlan?.auto !== undefined
+              ? 'The whole roll, end to end. It holds level for a connector section at each end and leans over steadily between, through its own joints. Longer is gentler on the car.'
+              : `This piece's twist, between its two ${fmt(dims.assembly.connectorInset, 0)} connector sections.`
+          }
+        >
+          {rollPlan?.auto !== undefined && onTwistAuto ? (
+            <div className="grid grid-cols-2 gap-1">
+              <button
+                className="tm-btn px-0"
+                style={rollPlan.isAuto ? { borderColor: 'var(--color-accent)' } : undefined}
+                onClick={onTwistAuto}
+                title="Long enough for the outside edge to climb gently and a car at Top speed to stay down"
+              >
+                Fit · {fmt(rollPlan.auto, 0)}
+              </button>
+              <LengthInput value={twist} onChange={onTwist} step={10} min={MIN_TWIST} max={MAX_ROLL_LENGTH} />
+            </div>
+          ) : (
+            <LengthInput value={twist} onChange={onTwist} step={10} min={MIN_TWIST} max={MAX_ROLL_LENGTH} />
+          )}
+        </Field>
+        {rollPlan && <RollReadout plan={rollPlan} />}
+        <Field
+          label="Solid base"
+          hint={
+            base !== 'none'
+              ? 'Filled down to the floor under the leaning road, its low edge on the floor, so it prints flat and holds itself up.'
+              : 'The road only — it needs holding up, and supports under it when printed.'
+          }
+        >
+          <Segmented<'on' | 'off'>
+            value={base !== 'none' ? 'on' : 'off'}
+            onChange={(v) => onBase(v === 'on' ? 'a' : 'none')}
+            options={[
+              { value: 'on', label: 'On' },
+              { value: 'off', label: 'Off' },
+            ]}
+          />
+        </Field>
+      </>
+    )
+  }
   return (
     <>
+      {kindField}
       <Field
         label="Direction"
         hint="Up tips the road upwards, as at the foot of a hill; down tips it back, as at the top."
@@ -708,6 +1020,12 @@ export function PartIcon({ kind }: { kind: PieceKind }) {
         <>
           <path d="M3 13h20" stroke="var(--color-track)" strokeWidth={7} strokeLinecap="round" fill="none" />
           <path d="M13 3v20" stroke="var(--color-track)" strokeWidth={7} strokeLinecap="round" fill="none" />
+        </>
+      )}
+      {kind === 'banked' && (
+        <>
+          <path d="M4 22a18 18 0 0 1 18-18" stroke="var(--color-track)" strokeWidth={7} strokeLinecap="round" fill="none" />
+          <path d="M9 24a14 14 0 0 1 14-14" stroke="#2f7fd1" strokeWidth={3} strokeLinecap="round" fill="none" />
         </>
       )}
       {kind === 'bend' && (

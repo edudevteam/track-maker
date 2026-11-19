@@ -1,5 +1,6 @@
 import { laneWidth, type Dimensions } from '../geometry/dimensions'
 import { transitionHalfWidthAt } from '../geometry/transition'
+import * as THREE from 'three'
 import { wallMetrics } from '../geometry/trackProfile'
 import type { Piece, PortId, VehicleSize } from '../types'
 
@@ -320,6 +321,67 @@ export function channelHalfWidth(d: Dimensions, piece: Piece, s: number): number
  */
 export function lateralRoom(d: Dimensions, piece: Piece, s: number, carWidth: number): number {
   return Math.max(0, channelHalfWidth(d, piece, s) - carWidth / 2)
+}
+
+/**
+ * Where a car `carWidth` wide may sit across a piece at `s`, as the least and
+ * most offset — measured with port `b` ahead, to the right positive. Leaning or
+ * not, the room is between the two walls' ramps.
+ */
+export function lateralLimits(d: Dimensions, piece: Piece, s: number, carWidth: number): [number, number] {
+  const room = lateralRoom(d, piece, s, carWidth)
+  return [-room, room]
+}
+
+/**
+ * Sideways grip of a toy car's plastic wheels, as a share of the load on them.
+ * Low enough that a car parked on a road leaning more than about 19° slides
+ * down it, and one going too fast for a bank drifts up it.
+ */
+export const SIDE_GRIP = 0.35
+
+/** Below this lean, in radians, the road counts as level and nothing slides. */
+const LEVEL = 1e-3
+
+/**
+ * A step of sliding across a leaning road.
+ *
+ * `across` is the direction across the road the car's offset is measured in,
+ * lying in the road's surface; `up` is square to the road. `turn` is the
+ * acceleration it takes to follow the road round, v²/r towards the centre of
+ * the turn, or nothing on a straight; `gravity` is down. Across the road the
+ * two leave an imbalance that the tyres hold up to their grip of the load
+ * pressing them into it. Past that the car slides, against what grip there is,
+ * until it comes back within it or reaches a wall. On a bank at exactly
+ * v = √(r·g·tan θ) the imbalance is nothing and it needs no grip at all.
+ *
+ * Returns the new sliding speed and how far it moved across, both along
+ * `across`. A level road returns nothing: an ordinary curve keeps its own
+ * handling.
+ */
+export function stepLeanSlide(
+  across: THREE.Vector3,
+  up: THREE.Vector3,
+  turn: THREE.Vector3,
+  gravity: number,
+  slide: number,
+  dt: number,
+): { slide: number; moved: number } {
+  const down = new THREE.Vector3(0, -gravity, 0)
+  if (Math.abs(across.y) < LEVEL) return { slide: 0, moved: 0 }
+  // What the road has to supply across it and into it to keep the car on its line.
+  const need = turn.dot(across) - down.dot(across)
+  const load = turn.dot(up) - down.dot(up)
+  const grip = SIDE_GRIP * Math.max(0, load)
+  let next = 0
+  if (Math.abs(slide) > 1e-6 || Math.abs(need) > grip) {
+    // Left to itself the car goes the way the road does not hold it.
+    const way = Math.sign(slide) || -Math.sign(need)
+    next = slide + (-need - way * grip) * dt
+    // Slowed through nothing while back within grip: it has stopped sliding.
+    if (Math.sign(next) !== way && Math.abs(need) <= grip) next = 0
+  }
+  return { slide: next, moved: next * dt }
 }
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v)

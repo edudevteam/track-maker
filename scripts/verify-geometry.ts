@@ -10,7 +10,8 @@ import {
   supportClipVolume,
   supportLegShape,
 } from '../src/geometry/snapClip.ts'
-import { baseAccessHalf, bendFrameAt, bendLayout, bendVolume, buildBendGeometry } from '../src/geometry/bend.ts'
+import { bankedLayout, bankedVolume, buildBankedGeometry } from '../src/geometry/banked.ts'
+import { baseAccessHalf, bendFrameAt, bendLayout, bendVolume, buildBendGeometry, rollLayout } from '../src/geometry/bend.ts'
 import { buildTrackGeometry, plainVolume, plainZones } from '../src/geometry/parts.ts'
 import { slotMetrics, trackProfile, wallMetrics } from '../src/geometry/trackProfile.ts'
 import { signedArea } from '../src/geometry/sweep.ts'
@@ -585,5 +586,80 @@ for (const spec of [
         ` base under ${base.toUpperCase()}: nothing below it (lowest ${lowest.toFixed(4)}), ${onBase} vertices on it,` +
         ` ${acc.toFixed(3)}mm opening for ${d.snapClip.wingSpan}mm wings`,
     )
+  }
+}
+
+bar('rolls and banked curves')
+{
+  const rolls = [
+    { lanes: 1, rollDeg: 30, length: 150, base: 'none' as const },
+    { lanes: 1, rollDeg: 30, length: 150, base: 'a' as const },
+    { lanes: 2, rollDeg: -45, length: 200, base: 'a' as const },
+    { lanes: 1, rollDeg: -30, length: 150, base: 'b' as const },
+    { lanes: 3, rollDeg: 15, length: 100, base: 'b' as const },
+    // The middle part of a long roll: already leaning, on its stretch of one curve.
+    { lanes: 4, rollDeg: 12, rollStart: 9, easeFrom: 1 / 3, easeTo: 2 / 3, length: 206, base: 'a' as const },
+    // Its last part, ending at full lean, and the first part of a roll back out.
+    { lanes: 2, rollDeg: 8, rollStart: 22, easeFrom: 2 / 3, easeTo: 1, length: 206, base: 'a' as const },
+    { lanes: 2, rollDeg: -8, rollStart: 30, easeFrom: 0, easeTo: 1 / 3, length: 206, base: 'a' as const },
+  ]
+  for (const r of rolls) {
+    const spec = { ...r, mode: 'roll' as const, radius: 150, angleDeg: 15, slope: 0 }
+    const g = buildBendGeometry(d, spec)
+    const audit = edgeAudit(g)
+    const got = volume(g)
+    const want = bendVolume(d, spec)
+    const off = (want - got) / want
+    const bb = g.boundingBox!
+    // A based roll stands on its base: nothing below it, and its low edge on it
+    // all the way along.
+    const l = rollLayout(d, spec)
+    let baseOk = true
+    if (r.base !== 'none') {
+      // The floor, in the piece's own frame: straight up, turned back by the
+      // lean side A starts at, through the low edge.
+      const up = new THREE.Vector3(0, Math.cos(l.leanIn), Math.sin(l.leanIn))
+      const pivot = new THREE.Vector3(0, 0, -l.pivot)
+      const pos = g.getAttribute('position')
+      const v = new THREE.Vector3()
+      let lowest = Infinity
+      for (let i = 0; i < pos.count; i++) lowest = Math.min(lowest, v.fromBufferAttribute(pos, i).sub(pivot).dot(up))
+      baseOk = Math.abs(lowest) < 1e-3
+    }
+    console.log(
+      `${Math.abs(off) < 2e-3 && audit.nonManifold === 0 && baseOk ? 'ok  ' : 'BAD '}` +
+        ` roll ${'rollStart' in r ? `${r.rollStart}°→${r.rollStart + r.rollDeg}°` : `${r.rollDeg}°`} over ${r.length} lanes=${r.lanes} base=${r.base}` +
+        ` tris=${g.getIndex()!.count / 3} vol=${got.toFixed(1)}mm³ (expect ${want.toFixed(1)}, ${off >= 0 ? 'under' : 'over'} by ${(Math.abs(off) * 100).toFixed(4)}%)` +
+        ` bbox=[${bb.min.toArray().map((n) => n.toFixed(1))}]→[${bb.max.toArray().map((n) => n.toFixed(1))}]` +
+        ` nonManifoldEdges=${audit.nonManifold}/${audit.edges}`,
+    )
+    for (const smp of audit.samples) console.log('  bad edge', smp)
+  }
+  const banks = [
+    { lanes: 1, bankAngle: 30, bankBase: true, radius: 250, angleDeg: 90 },
+    { lanes: 1, bankAngle: 30, bankBase: true, radius: 250, angleDeg: -90 },
+    { lanes: 2, bankAngle: 45, bankBase: true, radius: 300, angleDeg: 45 },
+    { lanes: 1, bankAngle: 30, bankBase: false, radius: 250, angleDeg: 90 },
+    { lanes: 3, bankAngle: 15, bankBase: true, radius: 400, angleDeg: -180 },
+    // Too short for a solid middle: all connector section.
+    { lanes: 1, bankAngle: 30, bankBase: true, radius: 150, angleDeg: 20 },
+  ]
+  for (const spec of banks) {
+    const g = buildBankedGeometry(d, spec)
+    const l = bankedLayout(d, spec)
+    const audit = edgeAudit(g)
+    const got = volume(g)
+    const want = bankedVolume(d, spec)
+    const off = (want - got) / want
+    const bb = g.boundingBox!
+    const floorOk = !spec.bankBase || Math.abs(bb.min.y - l.floor) < 1e-3
+    console.log(
+      `${Math.abs(off) < 2e-3 && audit.nonManifold === 0 && floorOk ? 'ok  ' : 'BAD '}` +
+        ` banked ${spec.angleDeg}° at ${spec.bankAngle}° lanes=${spec.lanes} base=${spec.bankBase}` +
+        ` tris=${g.getIndex()!.count / 3} vol=${got.toFixed(1)}mm³ (expect ${want.toFixed(1)}, ${off >= 0 ? 'under' : 'over'} by ${(Math.abs(off) * 100).toFixed(4)}%)` +
+        ` base at ${bb.min.y.toFixed(3)} (want ${l.floor.toFixed(3)})` +
+        ` nonManifoldEdges=${audit.nonManifold}/${audit.edges}`,
+    )
+    for (const smp of audit.samples) console.log('  bad edge', smp)
   }
 }

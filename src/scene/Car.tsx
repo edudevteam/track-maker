@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { useProject } from '../store/useProject'
 import { getBlockGeometry, getCarGeometry } from '../geometry/cache'
-import { centrelineLength, pieceQuaternion, portEntry, sampleCentreline } from '../lib/ports'
+import { arcRadius, centrelineLength, isArc, portEntry, sampleCentreline } from '../lib/ports'
 import { railHeight } from '../geometry/trackProfile'
 import { vehicleScale, vehicleSizeOf } from '../geometry/vehicle'
 import { BLOCK_CAR, BUILT_IN_CAR, useLoadedCar, withFacing } from '../lib/carLibrary'
@@ -11,7 +11,8 @@ import { REFERENCE_VEHICLE } from '../lib/carScales'
 import {
   driveInput,
   junctionExit,
-  lateralRoom,
+  lateralLimits,
+  stepLeanSlide,
   performanceOf,
   stepSpeed,
   stepYaw,
@@ -100,7 +101,8 @@ export function Car() {
     }
 
     const len = centrelineLength(piece, dims)
-    let { s, v, dir, offset, steer, yaw } = car
+    let { s, v, dir, offset, steer, yaw, slide = 0 } = car
+    const turn = Math.sign(piece.angleDeg) || 1
     s = THREE.MathUtils.clamp(s, 0, len)
 
     if (car.running) {
@@ -126,9 +128,9 @@ export function Car() {
       }
 
       // Across the track: the car crabs by its yaw angle, held inside the walls.
-      const room = lateralRoom(dims, piece, s, drawn.width)
+      const [lo, hi] = lateralLimits(dims, piece, s, drawn.width)
       const wanted = dir * v * Math.sin(yaw) * dt
-      const moved = THREE.MathUtils.clamp(offset + wanted, -room, room) - offset
+      const moved = THREE.MathUtils.clamp(offset + wanted, lo, hi) - offset
       offset += moved
       // A wall it is steering into takes the crab out of it: the car runs along
       // the wall rather than grinding into it at an angle. Squaring the nose up
@@ -139,11 +141,30 @@ export function Car() {
         yaw = Math.asin(THREE.MathUtils.clamp(moved / (dir * v * dt), -1, 1))
       }
 
+      // On a leaning road — a roll, a banked curve, or a straight clipped on to
+      // either — the car can also slide across it: down it when it is going too
+      // slow for the lean, up it on a bank when too fast. A wall stops it dead.
+      {
+        const g = simulating ? perf.gravity : gravity
+        const across = here.tangent.clone().cross(here.up).normalize()
+        // Following a turn round takes v²/r in towards its centre, which is off
+        // the driver's left on a left turn.
+        const pull = new THREE.Vector3()
+        if (isArc(piece)) {
+          const inward = new THREE.Vector3(across.x, 0, across.z).normalize().multiplyScalar(-turn)
+          const r = Math.max(1, arcRadius(piece, dims) + turn * offset)
+          pull.copy(inward).multiplyScalar((v * v) / r)
+        }
+        const step = stepLeanSlide(across, here.up, pull, g, slide, dt)
+        const target = offset + step.moved
+        offset = THREE.MathUtils.clamp(target, lo, hi)
+        slide = offset === target ? step.slide : 0
+      }
+
       // Along it: on a curve the inside line is shorter, so the same ground speed
       // covers more of the centreline out wide and less of it tucked in.
-      const turn = Math.sign(piece.angleDeg) || 1
-      const factor =
-        piece.kind === 'curve' ? piece.radius / Math.max(1e-3, piece.radius + turn * offset) : 1
+      const radius = isArc(piece) ? arcRadius(piece, dims) : 0
+      const factor = isArc(piece) ? radius / Math.max(1e-3, radius + turn * offset) : 1
       const was = s
       s += dir * v * Math.cos(yaw) * factor * dt
 
@@ -156,7 +177,7 @@ export function Car() {
       const joined = onto ? pieces.find((p) => p.id === onto.pieceId) : undefined
       if (onto && joined) {
         const entry = portEntry(joined, onto.port, dims)
-        setCar({ pieceId: joined.id, s: entry.s, v, dir: entry.dir, offset: 0, yaw: 0, steer })
+        setCar({ pieceId: joined.id, s: entry.s, v, dir: entry.dir, offset: 0, yaw: 0, steer, slide: 0 })
         return
       }
 
@@ -172,7 +193,7 @@ export function Car() {
           const entry = portEntry(next, link.port, dims, overflow)
           const side = link.port === 'a' || link.port === 'b'
           const flipped = entry.dir !== (exit === 'b' ? 1 : -1)
-          const room = lateralRoom(dims, next, entry.s, drawn.width)
+          const [nextLo, nextHi] = lateralLimits(dims, next, entry.s, drawn.width)
           setCar({
             pieceId: next.id,
             s: entry.s,
@@ -181,8 +202,10 @@ export function Car() {
             // rather than along it, so it takes that piece's own direction.
             dir: side ? ((entry.dir * (Math.sign(v) || dir)) as 1 | -1) : entry.dir,
             yaw: side ? yaw : 0,
-            offset: side ? THREE.MathUtils.clamp(flipped ? -offset : offset, -room, room) : 0,
+            offset: side ? THREE.MathUtils.clamp(flipped ? -offset : offset, nextLo, nextHi) : 0,
             steer,
+            // Still sliding if it carries straight on, the same way round.
+            slide: side && !flipped ? slide : 0,
           })
           return
         }
@@ -190,22 +213,22 @@ export function Car() {
         // rolling, there is nothing left to roll to, so the preview ends.
         s = exit === 'b' ? len : 0
         v = 0
-        setCar({ s, v, dir, offset, steer, yaw, running: simulating })
+        setCar({ s, v, dir, offset, steer, yaw, slide: 0, running: simulating })
         if (!simulating) return
       } else {
-        setCar({ s, v, dir, offset, steer, yaw })
+        setCar({ s, v, dir, offset, steer, yaw, slide })
       }
     }
 
     const at = sampleCentreline(piece, THREE.MathUtils.clamp(s, 0, len), dims)
-    const up = UP.clone().applyQuaternion(pieceQuaternion(piece))
     const nose = dir > 0 ? at.tangent.clone() : at.tangent.clone().negate()
-    // The piece's up is plumb, but on a ramp the road is not level, so the car's
-    // own up leans back off it by the slope — square to the road, as its wheels are.
-    const carUp = up.clone().addScaledVector(at.tangent, -up.dot(at.tangent)).normalize()
+    // Square to the road, as its wheels are: tipped on a bend, leaning on a
+    // roll or a banked curve, and so leaning with them.
+    const carUp = at.up.clone()
+    const across = at.tangent.clone().cross(carUp).normalize()
     // Positive yaw is to the car's right, which is a negative turn about its up.
     const heading = nose.applyAxisAngle(carUp, -yaw)
-    const across = at.tangent.clone().cross(up).normalize()
+    heading.addScaledVector(carUp, -heading.dot(carUp)).normalize()
 
     // The road is that far up off the underside, square to it — which on a bend
     // or a sloped straight is not straight up.

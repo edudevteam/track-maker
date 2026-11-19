@@ -149,6 +149,13 @@ export function suggestPart(kind: PieceKind, gap: Gap, d: Dimensions): PartSpec 
     // Close Loop only joins ends at the same height, so it never offers a bend.
     slope: 0,
     base: 'none',
+    bankAngle: 30,
+    bankBase: true,
+    bendMode: 'pitch',
+    rollDeg: 30,
+    rollStart: 0,
+    easeFrom: 0,
+    easeTo: 1,
     cornerRadius: d.assembly.transitionCornerRadius,
     flatEnd: d.assembly.transitionFlatEnd,
     radius: 120,

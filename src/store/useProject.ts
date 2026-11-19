@@ -9,6 +9,7 @@ import type {
   Piece,
   PieceKind,
   BendBase,
+  BendMode,
   PortId,
   PrinterPreset,
   ToolId,
@@ -40,6 +41,7 @@ import {
 } from '../geometry/dimensions'
 import { facingIsValid, type VehicleFacing } from '../geometry/vehicle'
 import { lanesAt } from '../geometry/parts'
+import { bedLength, rollIntoBank } from '../lib/levelling'
 import { defaultTransitionLength } from '../geometry/transition'
 import { junctionSide } from '../geometry/junction'
 import { effectiveBase } from '../geometry/bend'
@@ -111,6 +113,8 @@ export interface AddOptions {
    * highlighted end. `null` forces the piece to land loose.
    */
   attachTo?: { pieceId: string; port: PortId } | null
+  /** Set when a banked curve's lead-in Roll has already been put in for it. */
+  viaRoll?: boolean
 }
 
 export interface ProjectState {
@@ -309,6 +313,7 @@ const PARKED_CAR: CarState = {
   offset: 0,
   steer: 0,
   yaw: 0,
+  slide: 0,
   running: false,
 }
 
@@ -328,6 +333,13 @@ const RESHAPES: (keyof Piece)[] = [
   'length',
   'slope',
   'base',
+  'bendMode',
+  'rollDeg',
+  'rollStart',
+  'easeFrom',
+  'easeTo',
+  'bankAngle',
+  'bankBase',
   'radius',
   'angleDeg',
   'flatEnd',
@@ -350,6 +362,8 @@ export const kindName = (kind: PieceKind) =>
         ? 'Junction'
         : kind === 'bend'
             ? 'Bend'
+            : kind === 'banked'
+              ? 'Banked curve'
             : 'Straight'
 
 /** What a junction is called before the user renames it — the shape it makes. */
@@ -366,13 +380,24 @@ export const junctionName = (openLeft: boolean, openRight: boolean) =>
  * What a bend is called before the user renames it — which way and how far.
  * With a solid base it is a ramp: up away from side A, or down onto side B.
  */
-export const bendName = (angleDeg: number, base: BendBase = 'none') => {
+export const bendName = (angleDeg: number, base: BendBase = 'none', mode: BendMode = 'pitch', rollDeg = 0) => {
+  if (mode === 'roll') {
+    const lean = `${Math.round(Math.abs(rollDeg) * 10) / 10}°`
+    return `Roll ${rollDeg < 0 ? 'right' : 'left'} ${lean}`
+  }
   const deg = `${Math.round(Math.abs(angleDeg) * 10) / 10}°`
   const based = effectiveBase({ angleDeg, base })
   if (based === 'a') return `Ramp up ${deg}`
   if (based === 'b') return `Ramp down ${deg}`
   return `Bend ${angleDeg < 0 ? 'down' : 'up'} ${deg}`
 }
+
+/** How far a new banked curve leans in, degrees. */
+export const DEFAULT_BANK_ANGLE = 30
+
+/** What a banked curve is called before the user renames it — its turn and its bank. */
+export const bankedName = (p: Pick<Piece, 'bankAngle' | 'angleDeg'>) =>
+  `Banked ${Math.round(Math.abs(p.angleDeg))}° ${p.angleDeg < 0 ? 'right' : 'left'} · ${Math.round(p.bankAngle)}° lean`
 
 /** What a transition is called before the user renames it — the step it makes. */
 export const transitionName = (lanesA: number, lanesB: number) =>
@@ -387,6 +412,13 @@ function makePiece(dims: Dimensions, init: Partial<Piece> = {}): Piece {
     kind,
     lanes: init.lanes ?? 1,
     lanesB: init.lanesB ?? (init.lanes ?? 1) + 1,
+    bankAngle: init.bankAngle ?? DEFAULT_BANK_ANGLE,
+    bankBase: init.bankBase ?? true,
+    bendMode: init.bendMode ?? 'pitch',
+    rollDeg: init.rollDeg ?? 30,
+    rollStart: init.rollStart ?? 0,
+    easeFrom: init.easeFrom ?? 0,
+    easeTo: init.easeTo ?? 1,
     // A junction is a square whose side follows from its lanes, so its length is
     // not a field of its own — it is kept in step with the width.
     length: junction
@@ -566,6 +598,28 @@ export const useProject = create<ProjectState & ProjectActions>((set, get) => ({
 
   addPiece: (init = {}, opts = {}) => {
     const state = get()
+
+    // A banked curve leans the same at both ends, so clipped straight onto an
+    // end that does not lean to match it would tip the whole turn over. A Roll
+    // goes in first, from that end's lean to the bank's, and the curve onto it.
+    if (init.kind === 'banked' && !opts.viaRoll) {
+      const target = opts.attachTo !== undefined ? opts.attachTo : state.snapToPort ? state.activePort : null
+      const host = target && state.pieces.find((p) => p.id === target.pieceId)
+      if (target && host && !host.links[target.port]) {
+        const draft = makePiece(state.dims, init)
+        const rolls = rollIntoBank(host, target.port, draft, state.dims, {
+          speed: state.topSpeed,
+          gravity: state.gravity,
+          bed: bedLength(state.printer.size),
+        })
+        if (rolls.length) {
+          let end = target
+          for (const roll of rolls) end = { pieceId: get().addPiece(roll, { attachTo: end }), port: 'b' }
+          return get().addPiece(init, { attachTo: end, viaRoll: true })
+        }
+      }
+    }
+
     state.commit()
     const piece = makePiece(state.dims, init)
 
@@ -1275,6 +1329,7 @@ function refitFromWidth(pieces: Piece[], id: string, patch: Partial<Piece>): Pie
 
     if (!wave.fromTransition) continue
     settled.add(neighbour.id)
+    // A banked curve takes the new width into whichever lanes meet the joint.
     refits.set(neighbour.id, { ...neighbour, lanes: wave.lanes })
     // A straight, a curve or a junction is the same width all round, so its
     // other ways on now offer the new width to whatever is clipped beyond them.

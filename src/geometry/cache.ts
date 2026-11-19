@@ -61,9 +61,11 @@ export function getTrackGeometry(piece: Piece, d: Dimensions): THREE.BufferGeome
         ? `t:${piece.length}:${piece.lanesB}:${piece.cornerRadius}:${piece.flatEnd}`
         : piece.kind === 'junction'
           ? `j:${piece.openLeft ? 'l' : ''}${piece.openRight ? 'r' : ''}`
-          : piece.kind === 'bend'
-            ? `b:${piece.radius}:${piece.angleDeg}:${piece.slope}:${piece.base}:${d.elevation.rampAccessWidth}`
-            : `s:${piece.length}`
+          : piece.kind === 'banked'
+            ? `k:${piece.radius}:${piece.angleDeg}:${piece.bankAngle}:${piece.bankBase}:${d.elevation.rampAccessWidth}`
+            : piece.kind === 'bend'
+              ? `b:${piece.bendMode}:${piece.radius}:${piece.angleDeg}:${piece.rollDeg}:${piece.rollStart}:${piece.easeFrom}:${piece.easeTo}:${piece.length}:${piece.slope}:${piece.base}:${d.elevation.rampAccessWidth}`
+              : `s:${piece.length}`
   return take(`track|${shape}|${piece.lanes}|${trackKey(d)}`, () => buildTrackGeometry(piece, d))
 }
 

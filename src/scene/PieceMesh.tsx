@@ -1,10 +1,11 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import type { ThreeEvent } from '@react-three/fiber'
 import type { Piece, PortId } from '../types'
 import { useProject } from '../store/useProject'
 import { getSnapClipGeometry, getSupportClipGeometry, getTrackGeometry } from '../geometry/cache'
 import { clipPlacement, supportLeg } from '../lib/supports'
+import { clipTwistAt, twistClip } from '../lib/clipTwist'
 import { connectorOffsets, lanesAt } from '../geometry/parts'
 import { laneWidth } from '../geometry/dimensions'
 import { localPortFrame, portsOf } from '../lib/ports'
@@ -69,19 +70,31 @@ function ConnectorAt({ piece, port }: { piece: Piece; port: PortId }) {
   const leg = supportLeg(piece, port, neighbour, length, dims)
   const geometry =
     leg === null ? getSnapClipGeometry(dims, length) : getSupportClipGeometry(dims, length, leg.floor, leg.pitchDeg)
-  const lanes = useMemo(() => connectorOffsets(piece, dims, port), [piece.kind, piece.lanes, piece.lanesB, port, dims])
+  // A banked curve clips every lane to a matching banked curve, and only its
+  // flat lanes to anything else, so what is next door matters.
+  const lanes = useMemo(
+    () => connectorOffsets(piece, dims, port, neighbour),
+    [piece, port, dims, neighbour],
+  )
 
   const placement = useMemo(
     () => clipPlacement(piece, port, length, dims),
-    [piece.kind, piece.lanes, piece.length, piece.slope, piece.base, piece.radius, piece.angleDeg, port, length, dims],
+    [piece, port, length, dims],
   )
+  // Where the road is still turning through the joint — in the middle of a
+  // long roll — each clip is turned to follow its slot.
+  const shaped = useMemo(() => {
+    const twist = leg === null ? clipTwistAt(piece, port, neighbour, dims) : null
+    return lanes.map((v) => (twist ? twistClip(geometry, length, v, twist, dims) : geometry))
+  }, [piece, port, neighbour, dims, lanes, geometry, length, leg])
+  useEffect(() => () => shaped.forEach((g) => g !== geometry && g.dispose()), [shaped, geometry])
 
   return (
     <>
       {lanes.map((v, i) => (
         <mesh
           key={i}
-          geometry={geometry}
+          geometry={shaped[i]}
           position={placement.origin.clone().addScaledVector(placement.lateral, v)}
           quaternion={placement.quaternion}
           castShadow
@@ -122,7 +135,10 @@ function PortHandle({ piece, port }: { piece: Piece; port: PortId }) {
     const depth =
       port === 'l' || port === 'r'
         ? 6
-        : Math.min(12, (piece.kind === 'curve' || piece.kind === 'bend' ? piece.radius : piece.length) * 0.2)
+        : Math.min(
+            12,
+            (piece.kind === 'curve' || piece.kind === 'bend' || piece.kind === 'banked' ? piece.radius : piece.length) * 0.2,
+          )
     // Half the track's height up off the end — square to the road on a slope.
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(frame.quaternion)
     const pos = frame.position

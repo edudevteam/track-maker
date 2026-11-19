@@ -227,18 +227,35 @@ function readPiece(v: unknown, index: number, ids: Set<string>): Piece | null {
   if (!id) return null
   // 1.4.6's S-shaped ramp is gone; one opens as a based bend instead.
   const oldRamp = v.kind === 'ramp' ? fromOldRamp(num(v.rise, 20)) : null
+  const known: PieceKind[] = ['curve', 'transition', 'junction', 'bend', 'banked']
   const kind: PieceKind = oldRamp
     ? 'bend'
-    : v.kind === 'curve' || v.kind === 'transition' || v.kind === 'junction' || v.kind === 'bend'
-      ? v.kind
+    : known.includes(v.kind as PieceKind)
+      ? (v.kind as PieceKind)
       : 'straight'
-  const lanes = Math.max(1, Math.round(num(v.lanes, 1)))
+  // A banked curve saved by 1.4.10 or 1.4.11 kept its flat and bank lanes apart;
+  // it is now as wide as both together, all of it banked.
+  const split = kind === 'banked' && typeof v.bankLanes === 'number'
+  const lanes = Math.max(
+    1,
+    Math.round(split ? (bool(v.flat, true) ? num(v.lanes, 1) : 0) + num(v.bankLanes, 1) : num(v.lanes, 1)),
+  )
   return {
     id,
     name: str(v.name, kind === 'straight' ? 'Straight' : `Piece ${index + 1}`),
     kind,
     lanes,
     lanesB: Math.max(1, Math.round(num(v.lanesB, lanes))),
+    // Only a banked curve reads it.
+    bankAngle: num(v.bankAngle, 30),
+    bankBase: bool(v.bankBase, true),
+    bendMode: v.bendMode === 'roll' ? 'roll' : 'pitch',
+    rollDeg: num(v.rollDeg, 30),
+    // A roll saved before 1.4.18 did not say where it started: one levelling
+    // out to a base under B started at minus its own lean.
+    rollStart: num(v.rollStart, v.base === 'b' ? -num(v.rollDeg, 30) : 0),
+    easeFrom: num(v.easeFrom, 0),
+    easeTo: num(v.easeTo, 1),
     length: num(v.length, DEFAULT_DIMENSIONS.assembly.defaultStraightLength),
     // Only a bend reads these; a file from before them has every piece unbased.
     slope: oldRamp?.slope ?? Math.max(0, num(v.slope, 0)),

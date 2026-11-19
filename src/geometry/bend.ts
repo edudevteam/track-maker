@@ -1,17 +1,8 @@
 import * as THREE from 'three'
 import type { Dimensions } from './dimensions'
-import {
-  ensureOutwardWinding,
-  framePoint,
-  mergeGeometries,
-  signedArea,
-  sweepSections,
-  type Frame,
-  type Pt2,
-} from './sweep'
-import { pieceWidth, slotCentres, slotMetrics, topOutline, trackProfile } from './trackProfile'
-import { capGeometryAt, type Tri } from './section'
-import { pocketWall } from './parts'
+import { ensureOutwardWinding, signedArea, type Frame, type Pt2 } from './sweep'
+import { pieceWidth, slotCentres, topOutline, trackProfile } from './trackProfile'
+import { baseAccessHalf, sweepFilled, sweepOpen, type TrackPath } from './filled'
 
 /**
  * The bend: a curve in the vertical plane, so the track changes angle going up
@@ -36,11 +27,23 @@ import { pocketWall } from './parts'
  * little along the tilted slot as it goes home.
  */
 
-import type { BendBase } from '../types'
-export type { BendBase }
+import type { BendBase, BendMode } from '../types'
+export type { BendBase, BendMode }
+export { baseAccessHalf }
 
 export interface BendSpec {
   lanes: number
+  /** Pitch tips the nose up or down; roll leans the road over to one side. */
+  mode: BendMode
+  /** Roll only — how far it leans, degrees. Positive leans left, dropping the driver's left side. */
+  rollDeg: number
+  /** Roll only — the run the twist takes between the two connector sections, mm. */
+  length: number
+  /** Roll only — how far the road already leans at side A, degrees. Positive leans left. */
+  rollStart?: number
+  /** Roll only — the stretch of one smooth curve this piece covers, when it is one of several. */
+  easeFrom?: number
+  easeTo?: number
   /** Radius of the arc, measured to the piece's underside. */
   radius: number
   /** How far the track's angle changes, degrees. Positive bends up. */
@@ -59,13 +62,17 @@ export function minBendRadius(d: Dimensions): number {
   return Math.ceil(d.track.totalHeight + 10)
 }
 
-/** Whether a bend can carry a solid base: it has to curve up, and not past the vertical. */
-export function canHaveBase(spec: Pick<BendSpec, 'angleDeg'>): boolean {
+/**
+ * Whether a bend can carry a solid base. A pitch has to curve up, and not past
+ * the vertical; a roll always can — its low edge stays on the floor.
+ */
+export function canHaveBase(spec: Pick<BendSpec, 'angleDeg'> & Partial<Pick<BendSpec, 'mode'>>): boolean {
+  if (spec.mode === 'roll') return true
   return spec.angleDeg > 0 && spec.angleDeg < MAX_BEND_ANGLE
 }
 
 /** The base actually built — none on a bend that cannot carry one. */
-export function effectiveBase(spec: Pick<BendSpec, 'angleDeg' | 'base'>): BendBase {
+export function effectiveBase(spec: Pick<BendSpec, 'angleDeg' | 'base'> & Partial<Pick<BendSpec, 'mode'>>): BendBase {
   return canHaveBase(spec) ? spec.base : 'none'
 }
 
@@ -132,20 +139,15 @@ function stations(l: BendLayout, s0: number, s1: number): number[] {
   return out
 }
 
-/**
- * Half-width of the opening cut up under each slot at a base's angled end.
- * Wider than the mouth so the clip's body clears it, and narrow enough to leave
- * a wall between neighbouring lanes and at the outside.
- */
-export function baseAccessHalf(d: Dimensions): number {
-  const { pitch, mouthHalf } = slotMetrics(d)
-  return THREE.MathUtils.clamp(d.elevation.rampAccessWidth / 2, mouthHalf + 0.1, pitch / 2 - 1)
-}
-
 /** Geometry for a bend, port `a` at the origin heading +X. */
 export function buildBendGeometry(d: Dimensions, spec: BendSpec): THREE.BufferGeometry {
+  if (spec.mode === 'roll') return buildRollGeometry(d, spec)
   const l = bendLayout(d, spec)
-  const geom = l.base === 'none' ? buildOpen(d, spec.lanes, l) : buildBased(d, spec.lanes, l)
+  const geom = l.base === 'none' ? sweepOpen(d, spec.lanes, pitchPath(l)) : buildBased(d, spec.lanes, l)
+  return finish(geom)
+}
+
+function finish(geom: THREE.BufferGeometry): THREE.BufferGeometry {
   ensureOutwardWinding(geom)
   geom.deleteAttribute('normal')
   geom.computeVertexNormals()
@@ -154,265 +156,327 @@ export function buildBendGeometry(d: Dimensions, spec: BendSpec): THREE.BufferGe
   return geom
 }
 
-/** A bend that follows the road: the plain section swept along it, pockets at each end. */
-function buildOpen(d: Dimensions, lanes: number, l: BendLayout): THREE.BufferGeometry {
-  const slotted = trackProfile(d, lanes, true)
-  const solid = trackProfile(d, lanes, false)
-  const zones = [
-    { s0: 0, s1: l.inset, section: slotted },
-    { s0: l.inset, s1: l.length - l.inset, section: solid },
-    { s0: l.length - l.inset, s1: l.length, section: slotted },
-  ]
-  const parts = zones.map((z, i) => {
-    const frames = stations(l, z.s0, z.s1).map((s) => bendFrameAt(l, s))
-    return sweepSections(frames.map(() => z.section), frames, i === 0, i === zones.length - 1, false)
-  })
-  // The pockets stop a connector section in from each end; the walls closing
-  // them face back into each pocket.
-  const wall = pocketWall(d, lanes)
-  parts.push(capGeometryAt(wall, bendFrameAt(l, l.inset), true))
-  parts.push(capGeometryAt(wall, bendFrameAt(l, l.length - l.inset), false))
-  const geom = mergeGeometries(parts.filter((g) => (g.getIndex()?.count ?? 0) > 0))
-  for (const p of parts) p.dispose()
-  return geom
-}
-
-/**
- * The bottom of the section with the opening's corners on it, so every station
- * can be stitched to every other edge for edge. Right to left, as the section
- * runs. `slotted` notches each lane with its T-slot.
- */
-function bottomPoints(d: Dimensions, lanes: number, slotted: boolean): Pt2[] {
-  const halfW = pieceWidth(d, lanes) / 2
-  const { slotH, mouthH, outerHalf, mouthHalf } = slotMetrics(d)
-  const acc = baseAccessHalf(d)
-  const pts: Pt2[] = [{ x: halfW, y: 0 }]
-  const centres = slotCentres(d, lanes)
-  for (let i = centres.length - 1; i >= 0; i--) {
-    const c = centres[i]
-    pts.push({ x: c + acc, y: 0 }, { x: c + mouthHalf, y: 0 })
-    if (slotted) {
-      pts.push(
-        { x: c + mouthHalf, y: mouthH },
-        { x: c + outerHalf, y: mouthH },
-        { x: c + outerHalf, y: slotH },
-        { x: c - outerHalf, y: slotH },
-        { x: c - outerHalf, y: mouthH },
-        { x: c - mouthHalf, y: mouthH },
-      )
-    }
-    pts.push({ x: c - mouthHalf, y: 0 }, { x: c - acc, y: 0 })
+/** A bend's path, for the sweeps to follow. */
+function pitchPath(l: BendLayout): TrackPath {
+  return {
+    frameAt: (s) => bendFrameAt(l, s),
+    stations: (s0, s1) => stations(l, s0, s1),
+    length: l.length,
+    inset: l.inset,
   }
-  pts.push({ x: -halfW, y: 0 })
-  return pts
 }
-
-/** The full section with the opening's corners on its bottom. */
-function baseSection(d: Dimensions, lanes: number, slotted: boolean): Pt2[] {
-  return [...topOutline(d.track, pieceWidth(d, lanes) / 2), ...bottomPoints(d, lanes, slotted)]
-}
-
-type V3 = THREE.Vector3
 
 /**
  * A bend up with a solid base under side A: level pocket on the base, the arc
- * and the slope filled down to it, and the angled pocket at the far end with an
- * opening up through the fill to each slot. A base under side B is the same
- * solid turned end for end.
- *
- * Built as rings of points, one per station, joined strip by strip. On the fill
- * a ring is the pitched road section with its underside dropped straight down
- * onto the base; at the angled pocket the road's own underside is kept as well,
- * since the openings meet it there.
+ * and the slope filled down to it, and the angled pocket at the far end raised
+ * off it. A base under side B is the same solid turned end for end.
  */
 function buildBased(d: Dimensions, lanes: number, l: BendLayout): THREE.BufferGeometry {
-  // Build it as a ramp climbing away from side A, then turn it round if the
-  // base is under side B.
   const up: BendLayout = { ...l, before: 0, after: l.slope, arcStart: l.inset, base: 'a' }
-  const halfW = pieceWidth(d, lanes) / 2
-  const { slotH, mouthH, outerHalf, mouthHalf } = slotMetrics(d)
-  const acc = baseAccessHalf(d)
-  const centres = slotCentres(d, lanes)
-  const top = topOutline(d.track, halfW)
-  const tris: [V3, V3, V3][] = []
-
-  const onRoad = (f: Frame, p: Pt2) => framePoint(f, p)
-  const onBase = (f: Frame, x: number) => {
-    const v = framePoint(f, { x, y: 0 })
-    v.y = 0
-    return v
-  }
-  const quad = (a: V3, b: V3, c: V3, e: V3) => {
-    tris.push([a, b, e], [b, c, e])
-  }
-  const loft = (rings: V3[][]) => {
-    for (let i = 0; i < rings.length - 1; i++) {
-      const r0 = rings[i]
-      const r1 = rings[i + 1]
-      for (let j = 0; j < r0.length; j++) {
-        const k = (j + 1) % r0.length
-        quad(r0[j], r0[k], r1[k], r1[j])
-      }
-    }
-  }
-  const face = (f: Frame, faceTris: Tri[]) => {
-    for (const t of faceTris) tris.push([onRoad(f, t[0]), onRoad(f, t[1]), onRoad(f, t[2])])
-  }
-  const polygon = (f: Frame, poly: Pt2[]) => {
-    const idx = THREE.ShapeUtils.triangulateShape(poly.map((p) => new THREE.Vector2(p.x, p.y)), [])
-    face(f, idx.map((t) => [poly[t[0]], poly[t[1]], poly[t[2]]] as Tri))
-  }
-
-  // Level pocket on the base: the ordinary slotted section.
-  const lowSection = baseSection(d, lanes, true)
-  const lowFrames = [0, up.inset].map((s) => bendFrameAt(up, s))
-  loft(lowFrames.map((f) => lowSection.map((p) => onRoad(f, p))))
-  polygon(lowFrames[0], lowSection)
-  face(lowFrames[1], pocketWall(d, lanes))
-
-  // The fill: the road's top, dropped straight down to the base at each station.
-  const floorXs = bottomPoints(d, lanes, false).map((p) => p.x)
-  const fillRing = (f: Frame) => [...top.map((p) => onRoad(f, p)), ...floorXs.map((x) => onBase(f, x))]
-  const pocketStart = up.length - up.inset
-  const fillFrames = stations(up, up.inset, pocketStart).map((s) => bendFrameAt(up, s))
-  loft(fillFrames.map(fillRing))
-
-  // The angled pocket: the road's section with its underside kept, the base
-  // below it, and the openings between.
-  const pocketRing = (f: Frame): V3[] => {
-    const ring: V3[] = top.map((p) => onRoad(f, p))
-    ring.push(onRoad(f, { x: halfW, y: 0 }), onBase(f, halfW))
-    for (let i = centres.length - 1; i >= 0; i--) {
-      const c = centres[i]
-      ring.push(onBase(f, c + acc))
-      for (const p of [
-        { x: c + acc, y: 0 },
-        { x: c + mouthHalf, y: 0 },
-        { x: c + mouthHalf, y: mouthH },
-        { x: c + outerHalf, y: mouthH },
-        { x: c + outerHalf, y: slotH },
-        { x: c - outerHalf, y: slotH },
-        { x: c - outerHalf, y: mouthH },
-        { x: c - mouthHalf, y: mouthH },
-        { x: c - mouthHalf, y: 0 },
-        { x: c - acc, y: 0 },
-      ])
-        ring.push(onRoad(f, p))
-      ring.push(onBase(f, c - acc))
-    }
-    ring.push(onBase(f, -halfW), onRoad(f, { x: -halfW, y: 0 }))
-    return ring
-  }
-  const pocketFrames = [pocketStart, up.length].map((s) => bendFrameAt(up, s))
-  loft(pocketFrames.map(pocketRing))
-
-  // Where the fill meets the angled pocket: a sliver of side wall each side
-  // down to the road's underside, and for each lane the back of the opening
-  // (upright, from the base to the road's underside) and of the slot (square
-  // to the road, like any pocket wall).
-  const f0 = pocketFrames[0]
-  for (const x of [halfW, -halfW]) {
-    tris.push([onRoad(f0, { x, y: d.track.totalHeight }), onRoad(f0, { x, y: 0 }), onBase(f0, x)])
-  }
-  face(f0, pocketWall(d, lanes))
-  for (const c of centres) {
-    const xs = [c - acc, c - mouthHalf, c + mouthHalf, c + acc]
-    const lower = xs.map((x) => onBase(f0, x))
-    const upper = xs.map((x) => onRoad(f0, { x, y: 0 }))
-    for (let i = 0; i < 3; i++) quad(lower[i], lower[i + 1], upper[i + 1], upper[i])
-  }
-
-  // The far end: the road's section square to the slope, and below it upright
-  // panels of fill between the openings.
-  const f1 = pocketFrames[1]
-  polygon(f1, baseSection(d, lanes, true))
-  const edges = [halfW, ...centres.slice().reverse().flatMap((c) => [c + acc, c - acc]), -halfW]
-  for (let i = 0; i < edges.length; i += 2) {
-    const [x0, x1] = [edges[i], edges[i + 1]]
-    quad(onBase(f1, x0), onBase(f1, x1), onRoad(f1, { x: x1, y: 0 }), onRoad(f1, { x: x0, y: 0 }))
-  }
-
-  const geom = trianglesToGeometry(tris)
-  orientConsistently(geom)
+  const geom = sweepFilled(d, lanes, pitchPath(up), { normal: new THREE.Vector3(0, 1, 0), level: 0 }, true, false)
   if (l.base === 'b') {
     // Turned end for end: the level end becomes side B at its port, the
     // angled end side A at the origin.
     const end = bendFrameAt(l, l.length)
-    const m = new THREE.Matrix4()
-      .makeTranslation(end.position.x, end.position.y, end.position.z)
-      .multiply(new THREE.Matrix4().makeRotationZ(l.sign * l.turn))
-      .multiply(new THREE.Matrix4().makeRotationY(Math.PI))
-    geom.applyMatrix4(m)
+    geom.applyMatrix4(
+      new THREE.Matrix4()
+        .makeTranslation(end.position.x, end.position.y, end.position.z)
+        .multiply(new THREE.Matrix4().makeRotationZ(l.sign * l.turn))
+        .multiply(new THREE.Matrix4().makeRotationY(Math.PI)),
+    )
   }
   return geom
 }
 
-function trianglesToGeometry(tris: [V3, V3, V3][]): THREE.BufferGeometry {
-  const positions: number[] = []
-  for (const t of tris) for (const v of t) positions.push(v.x, v.y, v.z)
-  const geom = new THREE.BufferGeometry()
-  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
-  geom.setIndex(Array.from({ length: positions.length / 3 }, (_, i) => i))
-  return geom
+// ── Roll ────────────────────────────────────────────────────────────────────
+
+/** The most a roll may lean the track over, degrees. */
+export const MAX_ROLL = 60
+/** The shortest twist between a roll's two connector sections, mm. */
+export const MIN_TWIST = 20
+
+/** Smootherstep: 0 to 1 with its rate, and its rate's rate, nothing at both ends. */
+export const smootherstep = (u: number) => {
+  const t = THREE.MathUtils.clamp(u, 0, 1)
+  return t * t * t * (t * (6 * t - 15) + 10)
+}
+
+/** How much of a roll's twist its rate takes to build up, and again to die away. */
+export const ROLL_EASE = 0.25
+
+/**
+ * How far through a roll's twist the lean is, 0 to 1, a share `x` of the way
+ * along it. The rate the road leans over builds up smoothly over the first
+ * `ROLL_EASE` of the run, holds steady through the middle — a steady roll, so
+ * the outside edge climbs at one steady grade — and dies away smoothly over the
+ * last. The rate's own change starts and stops at nothing, so there is no jolt.
+ */
+export function rollRamp(x: number, a = ROLL_EASE): number {
+  const u = THREE.MathUtils.clamp(x, 0, 1)
+  const c = 1 / (1 - a)
+  // Smoothstep's running total from 0 to t.
+  const rise = (t: number) => t * t * t - (t * t * t * t) / 2
+  if (u < a) return c * a * rise(u / a)
+  if (u > 1 - a) return 1 - c * a * rise((1 - u) / a)
+  return c * (a / 2 + (u - a))
 }
 
 /**
- * Turn triangles so every shared edge is walked one way by one of them and the
- * other way by the other — a consistent winding — working out from the first.
- * The solid is built from strips, caps and stitches whose windings were never
- * agreed, so this settles them; the outside is then picked by signed volume.
+ * A roll's numbers after clamping.
+ *
+ * A roll is a straight whose road leans over. `rollStart` is how far the road
+ * already leans where side A joins — 0 off level track — and `rollDeg` how much
+ * further it leans by side B; positive leans left. It turns about its low edge,
+ * the side the road leans towards, so that edge stays where it is the whole way
+ * and a run of rolls keeps it on the floor.
+ *
+ * A long roll is several pieces sharing one twist: `easeFrom` to `easeTo` is
+ * the stretch of the whole run this piece is, 0 to 1 for a roll in one piece.
+ * The run holds level for a connector section at its very start and at its
+ * very end, where it meets ordinary track, and twists steadily everywhere
+ * between — straight through the joints between its own pieces, so the road
+ * never pauses there.
  */
-function orientConsistently(geom: THREE.BufferGeometry): void {
-  const pos = geom.getAttribute('position')
-  const index = geom.getIndex()!
-  const arr = index.array as Uint32Array | Uint16Array
-  const n = arr.length / 3
-  const q = (v: number) => Math.round(v * 1e4)
-  const key = (i: number) => `${q(pos.getX(i))},${q(pos.getY(i))},${q(pos.getZ(i))}`
-  const keys = Array.from({ length: arr.length }, (_, i) => key(arr[i]))
-  const byEdge = new Map<string, number[]>()
-  for (let t = 0; t < n; t++) {
-    for (let e = 0; e < 3; e++) {
-      const a = keys[t * 3 + e]
-      const b = keys[t * 3 + ((e + 1) % 3)]
-      const id = a < b ? `${a}|${b}` : `${b}|${a}`
-      const list = byEdge.get(id)
-      if (list) list.push(t)
-      else byEdge.set(id, [t])
+export function rollLayout(
+  d: Dimensions,
+  spec: Pick<BendSpec, 'lanes' | 'rollDeg' | 'length' | 'base'> & Partial<Pick<BendSpec, 'rollStart' | 'easeFrom' | 'easeTo'>>,
+) {
+  const inset = Math.max(d.assembly.connectorInset, 0.5)
+  const twist = Math.max(MIN_TWIST, spec.length || 0)
+  const length = 2 * inset + twist
+  const rad = THREE.MathUtils.degToRad
+  const change = rad(THREE.MathUtils.clamp(spec.rollDeg, -2 * MAX_ROLL, 2 * MAX_ROLL))
+  // A roll saved before rolls knew where they started: one levelling out to a
+  // base under B started at minus its own lean.
+  const startDeg = spec.rollStart ?? (spec.base === 'b' ? -spec.rollDeg : 0)
+  const leanIn = rad(startDeg)
+  const leanOut = leanIn + change
+  const halfW = pieceWidth(d, spec.lanes) / 2
+  // The low edge: the side the road leans to at whichever end leans most.
+  const most = Math.abs(leanIn) >= Math.abs(leanOut) ? leanIn : leanOut
+  const side = Math.sign(most) || Math.sign(change) || 1
+  // Its place across the section, profile x: +x is the driver's left.
+  const pivot = side * halfW
+  const easeFrom = THREE.MathUtils.clamp(spec.easeFrom ?? 0, 0, 1)
+  const easeTo = THREE.MathUtils.clamp(spec.easeTo ?? 1, Math.min(1, easeFrom + 1e-6), 1)
+  // The whole run this piece is part of, and where along it the piece starts.
+  const run = length / (easeTo - easeFrom)
+  const offset = easeFrom * run
+  return {
+    inset, twist, length, change, leanIn, leanOut, halfW, pivot, easeFrom, easeTo, run, offset,
+    based: spec.base !== 'none',
+    /** Which ends sit level on the floor, rather than leaning off it. */
+    startLow: Math.abs(leanIn) < 1e-6,
+    endLow: Math.abs(leanOut) < 1e-6,
+  }
+}
+
+export type RollLayout = ReturnType<typeof rollLayout>
+
+/** How far through the whole run's lean it is at `sigma` along the run, 0 to 1. */
+function runShare(l: RollLayout, sigma: number): number {
+  const span = l.run - 2 * l.inset
+  if (span <= 1e-9) return sigma > l.run / 2 ? 1 : 0
+  return rollRamp((sigma - l.inset) / span)
+}
+
+/** How far through its own lean a piece is at `s` along it, 0 to 1. */
+function rollShare(l: RollLayout, s: number): number {
+  const a = runShare(l, l.offset)
+  const b = runShare(l, l.offset + l.length)
+  if (b - a < 1e-12) return 0
+  return (runShare(l, l.offset + THREE.MathUtils.clamp(s, 0, l.length)) - a) / (b - a)
+}
+
+/** The roll at `s`, as the turn about the direction of travel from side A, radians. */
+export function rollAt(l: RollLayout, s: number): number {
+  // Leaning left drops the driver's left side: a turn about +X by a negative angle.
+  return -l.change * rollShare(l, s)
+}
+
+/** How far the road leans at `s`, radians, against straight up. Positive leans left. */
+export function rollLeanAt(l: RollLayout, s: number): number {
+  return l.leanIn + l.change * rollShare(l, s)
+}
+
+/** The station `s` along a roll, in its local frame. */
+export function rollFrameAt(l: RollLayout, s: number): Frame & { up: THREE.Vector3 } {
+  const turn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), rollAt(l, s))
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(turn)
+  const tangent = new THREE.Vector3(1, 0, 0)
+  const lateral = up.clone().cross(tangent).normalize()
+  // The pivot edge stays where it is; the bottom of the centreline swings about it.
+  const pivot = new THREE.Vector3(s, 0, -l.pivot)
+  return { position: pivot.addScaledVector(lateral, -l.pivot), tangent, up }
+}
+
+/** A roll's far end: where it is, and its turn about the direction of travel. */
+export function rollEnd(l: RollLayout) {
+  return {
+    position: rollFrameAt(l, l.length).position,
+    quaternion: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), rollAt(l, l.length)),
+  }
+}
+
+function rollPath(l: RollLayout): TrackPath {
+  return {
+    frameAt: (s) => rollFrameAt(l, s),
+    stations: (s0, s1) => {
+      // The road may be turning anywhere along a piece — through its connector
+      // sections too, inside a long run — so stations go closely the whole way,
+      // except where it is not turning at all.
+      const turning = Math.abs(rollAt(l, s1) - rollAt(l, s0)) > 1e-9
+      const segs = turning ? Math.max(8, Math.ceil((s1 - s0) / 4)) : 1
+      return Array.from({ length: segs + 1 }, (_, i) => s0 + ((s1 - s0) * i) / segs)
+    },
+    length: l.length,
+    inset: l.inset,
+  }
+}
+
+/**
+ * The floor under a roll, in its own frame: the side A frame leans by
+ * `leanIn`, so straight up is turned back the other way — through the low
+ * edge, which is on it.
+ */
+function rollFloor(l: RollLayout) {
+  const normal = new THREE.Vector3(0, Math.cos(l.leanIn), Math.sin(l.leanIn))
+  return { normal, level: normal.dot(new THREE.Vector3(0, 0, -l.pivot)) }
+}
+
+/** Geometry for a roll, port `a` at the origin heading +X. */
+function buildRollGeometry(d: Dimensions, spec: BendSpec): THREE.BufferGeometry {
+  const l = rollLayout(d, spec)
+  const path = rollPath(l)
+  if (!l.based) return finish(sweepOpen(d, spec.lanes, path))
+  return finish(sweepFilled(d, spec.lanes, path, rollFloor(l), l.startLow, l.endLow))
+}
+
+/**
+ * A roll's volume from its sections, independently of the mesh. Turning a
+ * section about the direction of travel keeps its area, so without a base it
+ * is each section's area times its run. With one, each station adds the
+ * triangle of fill under the leaning road — its underside rises across its
+ * width from the low edge at the sine of the lean — less, through a connector
+ * section that leans, the opening under each slot.
+ */
+export function rollVolume(d: Dimensions, spec: BendSpec): number {
+  const l = rollLayout(d, spec)
+  const slotted = area(trackProfile(d, spec.lanes, true))
+  const solid = area(trackProfile(d, spec.lanes, false))
+  if (!l.based) return slotted * 2 * l.inset + solid * l.twist
+  const W = 2 * l.halfW
+  const fill = (lean: number) => 0.5 * W * W * Math.abs(Math.cos(lean) * Math.sin(lean))
+  const acc = baseAccessHalf(d)
+  const openings = (lean: number) =>
+    slotCentres(d, spec.lanes).reduce(
+      (sum, c) => sum + 2 * acc * Math.abs(Math.cos(lean)) * Math.abs(l.pivot - c) * Math.abs(Math.sin(lean)),
+      0,
+    )
+  /** Simpson's rule over one stretch of the piece. */
+  const over = (s0: number, s1: number, at: (lean: number) => number) => {
+    const n = 200
+    let sum = 0
+    for (let k = 0; k <= n; k++) {
+      const w = k === 0 || k === n ? 1 : k % 2 ? 4 : 2
+      sum += w * at(rollLeanAt(l, s0 + ((s1 - s0) * k) / n))
     }
+    return (sum * (s1 - s0)) / (3 * n)
   }
-  /** Whether triangle t walks from key a to key b. */
-  const walks = (t: number, a: string, b: string) => {
-    for (let e = 0; e < 3; e++) if (keys[t * 3 + e] === a && keys[t * 3 + ((e + 1) % 3)] === b) return true
-    return false
+  // An end that sits on the floor is an ordinary pocket; one that leans has
+  // its openings — the mesh decides by the lean at the end itself.
+  const pocket = (low: boolean) => (lean: number) => slotted + fill(lean) - (low ? 0 : openings(lean))
+  return (
+    over(0, l.inset, pocket(l.startLow)) +
+    over(l.inset, l.length - l.inset, (lean) => solid + fill(lean)) +
+    over(l.length - l.inset, l.length, pocket(l.endLow))
+  )
+}
+
+/** The steepest an outside edge may climb on an automatic roll, as a grade. */
+export const MAX_EDGE_GRADE = 0.15
+
+/**
+ * What a roll does to the outside edge of the road, which climbs as the road
+ * leans over: how far it climbs, its steepest grade, and the fastest a car can
+ * take it there without lifting off where the climb rounds over — where the
+ * road falls away under it faster than gravity can bring it down, v²·κ = g.
+ */
+export function rollEdge(l: RollLayout, gravity: number) {
+  const W = 2 * l.halfW
+  const n = 600
+  const h = Array.from({ length: n + 1 }, (_, k) => W * Math.abs(Math.sin(rollLeanAt(l, (l.length * k) / n))))
+  const dx = l.length / n
+  let grade = 0
+  let bend = 0
+  for (let k = 1; k < n; k++) {
+    grade = Math.max(grade, Math.abs(h[k + 1] - h[k - 1]) / (2 * dx))
+    bend = Math.max(bend, Math.abs(h[k + 1] - 2 * h[k] + h[k - 1]) / (dx * dx))
   }
-  const flip = (t: number) => {
-    const i = t * 3
-    ;[arr[i + 1], arr[i + 2]] = [arr[i + 2], arr[i + 1]]
-    ;[keys[i + 1], keys[i + 2]] = [keys[i + 2], keys[i + 1]]
+  return {
+    climb: Math.abs(h[n] - h[0]),
+    grade,
+    /** mm/s — as fast as a car can go before the rounding over lifts it. */
+    liftSpeed: bend > 1e-12 ? Math.sqrt(gravity / bend) : Infinity,
   }
-  const done = new Uint8Array(n)
-  for (let seed = 0; seed < n; seed++) {
-    if (done[seed]) continue
-    done[seed] = 1
-    const queue = [seed]
-    while (queue.length) {
-      const t = queue.pop()!
-      for (let e = 0; e < 3; e++) {
-        const a = keys[t * 3 + e]
-        const b = keys[t * 3 + ((e + 1) % 3)]
-        if (a === b) continue
-        const id = a < b ? `${a}|${b}` : `${b}|${a}`
-        for (const u of byEdge.get(id) ?? []) {
-          if (u === t || done[u]) continue
-          if (walks(u, a, b)) flip(u)
-          done[u] = 1
-          queue.push(u)
-        }
-      }
+}
+
+/**
+ * How long a roll must be all told — both level connector sections included —
+ * for the outside edge to climb no steeper than `MAX_EDGE_GRADE` and for a car
+ * at `speed` to stay down where the climb rounds over, from leaning `fromDeg`
+ * to `toDeg` on track `lanes` wide. The steady middle climbs at 1/(1 − ease)
+ * of the average; the sharpest rounding over is 1.5/(ease·(1 − ease)) of the
+ * climb over the twist squared.
+ */
+export function gentleRollLength(
+  d: Dimensions,
+  lanes: number,
+  fromDeg: number,
+  toDeg: number,
+  speed: number,
+  gravity: number,
+) {
+  const W = pieceWidth(d, lanes)
+  const rad = THREE.MathUtils.degToRad
+  const climb = W * Math.abs(Math.abs(Math.sin(rad(toDeg))) - Math.abs(Math.sin(rad(fromDeg))))
+  const a = ROLL_EASE
+  // A little under the limit: the outside edge climbs by the sine of the lean,
+  // which is steepest where the lean is least.
+  const byGrade = climb / ((1 - a) * MAX_EDGE_GRADE * 0.95)
+  const bySpeed = Math.sqrt((1.5 * climb * speed * speed) / (a * (1 - a) * Math.max(1, gravity)))
+  const inset = Math.max(d.assembly.connectorInset, 0.5)
+  return Math.ceil((Math.max(150, byGrade, bySpeed) + 2 * inset) / 10) * 10
+}
+
+/**
+ * A roll `total` long all told, split into as few pieces as fit a print bed
+ * `bed` long, each the same length and each its stretch of one steady twist.
+ */
+export function splitRoll(
+  d: Dimensions,
+  roll: { lanes: number; fromDeg: number; changeDeg: number; total: number; based: boolean },
+  bed: number,
+): Pick<BendSpec, 'lanes' | 'rollDeg' | 'rollStart' | 'length' | 'easeFrom' | 'easeTo' | 'base'>[] {
+  const inset = Math.max(d.assembly.connectorInset, 0.5)
+  const total = Math.max(2 * inset + MIN_TWIST, roll.total)
+  const count = Math.max(1, Math.ceil(total / Math.max(2 * inset + MIN_TWIST, bed) - 1e-9))
+  const each = total / count
+  const span = total - 2 * inset
+  const share = (sigma: number) => (span <= 1e-9 ? 0 : rollRamp((sigma - inset) / span))
+  return Array.from({ length: count }, (_, k) => {
+    const s0 = each * k
+    const s1 = each * (k + 1)
+    return {
+      lanes: roll.lanes,
+      rollStart: roll.fromDeg + roll.changeDeg * share(s0),
+      rollDeg: roll.changeDeg * (share(s1) - share(s0)),
+      length: each - 2 * inset,
+      easeFrom: k / count,
+      easeTo: (k + 1) / count,
+      base: roll.based ? 'a' : 'none',
     }
-  }
-  index.needsUpdate = true
+  })
 }
 
 /** How far a section's centroid sits above its underside. */
@@ -443,6 +507,7 @@ const area = (p: Pt2[]) => Math.abs(signedArea(p))
  * and the openings.
  */
 export function bendVolume(d: Dimensions, spec: BendSpec, chorded = false): number {
+  if (spec.mode === 'roll') return rollVolume(d, spec)
   const l = bendLayout(d, spec)
   const slotted = trackProfile(d, spec.lanes, true)
   const solid = trackProfile(d, spec.lanes, false)

@@ -2,7 +2,9 @@ import * as THREE from 'three'
 import type { Piece, PortId, Vec3 } from '../types'
 import type { Dimensions } from '../geometry/dimensions'
 import { junctionLayout } from '../geometry/junction'
-import { bendFrameAt, bendLayout } from '../geometry/bend'
+import { bendFrameAt, bendLayout, rollEnd, rollFrameAt, rollLayout } from '../geometry/bend'
+import { bankedFrameAt, bankedLayout, bankedPortA, bankedPortB } from '../geometry/banked'
+import { bankedSpecOf, bendSpecOf } from '../geometry/parts'
 
 /**
  * Every piece is authored in a local frame whose origin is port `a`, with the
@@ -23,6 +25,37 @@ export interface PortFrame {
 const Y_AXIS = new THREE.Vector3(0, 1, 0)
 const Z_AXIS = new THREE.Vector3(0, 0, 1)
 
+/** Whether a piece runs round a level arc — a curve, or a banked curve. */
+export const isArc = (p: Pick<Piece, 'kind'>) => p.kind === 'curve' || p.kind === 'banked'
+
+/**
+ * The radius a level arc's port centreline runs on. A banked curve's is clamped
+ * so its inside edge cannot cross the turn's centre, and ports, the car and the
+ * geometry all have to agree on it.
+ */
+export function arcRadius(p: PieceShape, d: Dimensions): number {
+  return p.kind === 'banked' ? bankedLayout(d, bankedSpecOf(p)).radius : p.radius
+}
+
+/**
+ * The frame at `s` along a piece whose road is tipped or leant — a bend, in
+ * pitch or roll, or a banked curve — in its local frame. Null for the rest,
+ * whose road is level all the way.
+ */
+function tippedFrameAt(p: PieceShape, s: number, d: Dimensions) {
+  if (p.kind === 'banked') return bankedFrameAt(bankedLayout(d, bankedSpecOf(p)), s)
+  if (p.kind !== 'bend') return null
+  if (p.bendMode === 'roll') return rollFrameAt(rollLayout(d, bendSpecOf(p)), s)
+  return bendFrameAt(bendLayout(d, p), s)
+}
+
+/** How long a piece's centreline is, for the ones `tippedFrameAt` follows. */
+function tippedLength(p: PieceShape, d: Dimensions): number | null {
+  if (p.kind === 'banked') return bankedLayout(d, bankedSpecOf(p)).length
+  if (p.kind !== 'bend') return null
+  return p.bendMode === 'roll' ? rollLayout(d, bendSpecOf(p)).length : bendLayout(d, p).length
+}
+
 export function pieceMatrix(p: Piece): THREE.Matrix4 {
   return new THREE.Matrix4().compose(
     new THREE.Vector3(...p.position),
@@ -42,7 +75,23 @@ export function pieceQuaternion(p: Piece): THREE.Quaternion {
  */
 export type PieceShape = Pick<
   Piece,
-  'kind' | 'lanes' | 'lanesB' | 'length' | 'slope' | 'base' | 'radius' | 'angleDeg' | 'openLeft' | 'openRight'
+  | 'kind'
+  | 'lanes'
+  | 'lanesB'
+  | 'length'
+  | 'slope'
+  | 'base'
+  | 'radius'
+  | 'angleDeg'
+  | 'openLeft'
+  | 'openRight'
+  | 'bankAngle'
+  | 'bankBase'
+  | 'bendMode'
+  | 'rollDeg'
+  | 'rollStart'
+  | 'easeFrom'
+  | 'easeTo'
 >
 
 /**
@@ -69,10 +118,23 @@ export function portLabel(port: PortId): string {
 /** Local (piece-space) frame of a port. */
 export function localPortFrame(p: PieceShape, port: PortId, d: Dimensions): PortFrame {
   if (port === 'a') {
+    // A banked curve leans at both its ends, so whatever joins on leans with it.
+    if (p.kind === 'banked') {
+      return { position: new THREE.Vector3(0, 0, 0), quaternion: bankedPortA(bankedLayout(d, bankedSpecOf(p))) }
+    }
     return {
       position: new THREE.Vector3(0, 0, 0),
       quaternion: new THREE.Quaternion().setFromAxisAngle(Y_AXIS, Math.PI),
     }
+  }
+  if (p.kind === 'banked') {
+    const l = bankedLayout(d, bankedSpecOf(p))
+    return { position: bankedFrameAt(l, l.length).position, quaternion: bankedPortB(l) }
+  }
+  // A roll's far end leans by its angle, so whatever joins there leans with it.
+  if (p.kind === 'bend' && p.bendMode === 'roll') {
+    const end = rollEnd(rollLayout(d, bendSpecOf(p)))
+    return { position: end.position, quaternion: end.quaternion }
   }
   // A junction is a square whose side follows from its lanes, so all four of its
   // ports are read off that rather than off a length someone could have left
@@ -99,15 +161,16 @@ export function localPortFrame(p: PieceShape, port: PortId, d: Dimensions): Port
       quaternion: new THREE.Quaternion().setFromAxisAngle(Z_AXIS, l.sign * l.turn),
     }
   }
-  if (p.kind !== 'curve') {
+  if (!isArc(p)) {
     return { position: new THREE.Vector3(p.length, 0, 0), quaternion: new THREE.Quaternion() }
   }
+  const r = arcRadius(p, d)
   const rad = THREE.MathUtils.degToRad(p.angleDeg)
   const sign = Math.sign(p.angleDeg) || 1
   const abs = Math.abs(rad)
-  const cz = -sign * p.radius
+  const cz = -sign * r
   return {
-    position: new THREE.Vector3(p.radius * Math.sin(abs), 0, cz + sign * p.radius * Math.cos(abs)),
+    position: new THREE.Vector3(r * Math.sin(abs), 0, cz + sign * r * Math.cos(abs)),
     quaternion: new THREE.Quaternion().setFromAxisAngle(Y_AXIS, rad),
   }
 }
@@ -131,18 +194,17 @@ export function portOutward(frame: PortFrame): THREE.Vector3 {
 export function pieceMidpoint(p: Piece, d: Dimensions): THREE.Vector3 {
   const q = pieceQuaternion(p)
   const origin = new THREE.Vector3(...p.position)
-  if (p.kind === 'bend') {
-    const l = bendLayout(d, p)
-    return bendFrameAt(l, l.length / 2).position.applyQuaternion(q).add(origin)
-  }
-  if (p.kind !== 'curve') {
+  const len = tippedLength(p, d)
+  if (len !== null) return tippedFrameAt(p, len / 2, d)!.position.applyQuaternion(q).add(origin)
+  if (!isArc(p)) {
     return new THREE.Vector3(p.length / 2, 0, 0).applyQuaternion(q).add(origin)
   }
+  const r = arcRadius(p, d)
   const rad = THREE.MathUtils.degToRad(p.angleDeg) / 2
   const sign = Math.sign(p.angleDeg) || 1
   const abs = Math.abs(rad)
-  const cz = -sign * p.radius
-  return new THREE.Vector3(p.radius * Math.sin(abs), 0, cz + sign * p.radius * Math.cos(abs))
+  const cz = -sign * r
+  return new THREE.Vector3(r * Math.sin(abs), 0, cz + sign * r * Math.cos(abs))
     .applyQuaternion(q)
     .add(origin)
 }
@@ -171,8 +233,9 @@ export function transformToMate(
 
 /** Centreline length of a piece in mm. A bend's is measured along the road. */
 export function centrelineLength(p: Piece, d: Dimensions): number {
-  if (p.kind === 'bend') return bendLayout(d, p).length
-  return p.kind === 'curve' ? p.radius * Math.abs(THREE.MathUtils.degToRad(p.angleDeg)) : p.length
+  const len = tippedLength(p, d)
+  if (len !== null) return len
+  return isArc(p) ? arcRadius(p, d) * Math.abs(THREE.MathUtils.degToRad(p.angleDeg)) : p.length
 }
 
 /**
@@ -196,35 +259,41 @@ export function portEntry(
 }
 
 /**
- * Point and tangent at arc-length `s` along a piece's centreline, in world space.
- * `s` runs from 0 at port `a` to `centrelineLength` at port `b`.
+ * Point, tangent and the road's up at arc-length `s` along a piece's
+ * centreline, in world space. `s` runs from 0 at port `a` to
+ * `centrelineLength` at port `b`. The up is square to the road: tipped on a
+ * bend, leaning on a roll or a banked curve.
  */
 export function sampleCentreline(
   p: Piece,
   s: number,
   d: Dimensions,
-): { point: THREE.Vector3; tangent: THREE.Vector3 } {
+): { point: THREE.Vector3; tangent: THREE.Vector3; up: THREE.Vector3 } {
   const q = pieceQuaternion(p)
   const origin = new THREE.Vector3(...p.position)
   let local: THREE.Vector3
   let tan: THREE.Vector3
-  if (p.kind === 'bend') {
-    const f = bendFrameAt(bendLayout(d, p), s)
-    local = f.position
-    tan = f.tangent
-  } else if (p.kind !== 'curve') {
+  let up = new THREE.Vector3(0, 1, 0)
+  const tipped = tippedFrameAt(p, s, d)
+  if (tipped) {
+    local = tipped.position
+    tan = tipped.tangent
+    up = tipped.up
+  } else if (!isArc(p)) {
     local = new THREE.Vector3(s, 0, 0)
     tan = new THREE.Vector3(1, 0, 0)
   } else {
+    const r = arcRadius(p, d)
     const sign = Math.sign(p.angleDeg) || 1
-    const t = s / p.radius
-    const cz = -sign * p.radius
-    local = new THREE.Vector3(p.radius * Math.sin(t), 0, cz + sign * p.radius * Math.cos(t))
+    const t = s / r
+    const cz = -sign * r
+    local = new THREE.Vector3(r * Math.sin(t), 0, cz + sign * r * Math.cos(t))
     tan = new THREE.Vector3(Math.cos(t), 0, -sign * Math.sin(t))
   }
   return {
     point: local.applyQuaternion(q).add(origin),
     tangent: tan.applyQuaternion(q).normalize(),
+    up: up.applyQuaternion(q).normalize(),
   }
 }
 

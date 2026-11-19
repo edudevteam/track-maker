@@ -20,6 +20,617 @@ Dimensions are millimetres throughout.
 
 ---
 
+## [1.4.20] — 2026-11-19
+
+Clips that sit inside a twisting joint. The project owner saw the clips
+standing out through the road at the joints in the middle of a long roll.
+There the road keeps leaning over straight through the joint, so the T-slot
+turns along a clip's length, about the road's low edge. A straight, rigid
+clip followed the slot at the joint itself and stood proud of it towards its
+ends. On the outside lanes of the default 4-lane, 30° lead-in, its top reached
+9.99 above the road's underside, out through a road surface 6.4 up.
+
+### Fixed
+
+- **A clip at a joint where the road is still turning is shaped to follow its
+  slot.** Every point along it turns by as much as the slot has turned there,
+  about the same low edge the road turns about. That is a degree or two over
+  a clip's length, which prints like any other clip. Each joint and lane gets
+  its own clip, in the 3D view and in the export. Clips at joints where the
+  road is not turning are unchanged.
+
+### Audit
+
+- A project check takes the clips at the three joints in the middle of the
+  default 4-lane, 30° lead-in, 40 and 70 long, on both outside lanes, and
+  measures every point of each against the road under it.
+  - A straight clip reaches 9.99 up: out of its 5.111 slot and through the
+    road.
+  - The shaped clip stays between 0.464, its usual seat, and 5.111, the slot's
+    ceiling, from end to end.
+
+### Still to confirm on a printed part
+
+- **A shaped clip pushed into a twisting slot,** in the middle of a long roll.
+
+---
+
+## [1.4.19] — 2026-11-19
+
+A roll into the bank with no dips. The project owner found the split roll
+still dipping: every piece held its lean still through the connector sections
+at each end, so the outside edge went flat at every joint and climbed again,
+like a staircase. They asked for it to work like the slope Bend: a steady,
+slow incline with a flat section at each end. They confirmed the pivot is on
+the inside: the inside edge stays on the floor and the outside rises.
+
+### Changed
+
+- **A roll is one steady twist from end to end.** It holds level for a
+  connector section at its very start and very end, where it meets ordinary
+  track. In between it leans over at one steady rate, straight through the
+  joints between its own pieces, so the outside edge climbs at one steady
+  grade.
+  - The rate builds up smoothly over the first quarter of the twist and dies
+    away smoothly over the last, with no jolt at either end.
+  - The road still pivots on its inside edge, which stays on the floor, while
+    the outside edge rises.
+- **Shorter for the same gentleness.** A steady climb uses the length better
+  than one that speeds up and slows down. The default 4-lane, 30° bank, with a
+  Top speed of 500 mm/s and a 256 mm bed, now gets 4 Rolls of 208 mm before
+  it rather than 7. The outside edge stays under 15% and a car stays on up to
+  about 2,900 mm/s.
+- **Roll length in the Parts Library is the whole roll**, both level connector
+  sections included. In Part Details it is still that one piece's twist.
+
+### Fixed
+
+- **The connector sections between a long roll's pieces now twist with the
+  road**, about 1–2° over a clip's length on a 4-lane, 30° roll. Each was
+  built from its two ends only, which cut the twist straight across. On a
+  piece with a solid base that came out up to 0.5% off in volume. The audit
+  caught it.
+
+### Audit
+
+- Rolls that are one part of a longer run, starting and ending leaning, are
+  watertight and within 0.0002% of their volume.
+- A new project check walks the outside edge along the whole 4-piece lead-in,
+  a millimetre at a time and joints included. It confirms the edge climbs at a
+  steady 13.7–14.8% through the middle, with no flat at any joint. The rest of
+  the reported case still holds: every piece fits the bed, every joint lines
+  up, everything stands on the floor, and the banked curve after it is level.
+
+### Still to confirm on a printed part
+
+- **A clip in a twisting connector section.** In the middle of a long roll
+  the slot turns about 1–2° along a clip's length. A snap clip should take
+  that, but it needs trying.
+
+---
+
+## [1.4.18] — 2026-11-19
+
+A gentle roll into the bank. The project owner found the lead-in Roll far too
+abrupt: the point of a bank is to let the car go faster without leaving the
+track, and this one would throw it. A Roll leans the road about its inside
+edge, so the outside edge climbs. On 4 lanes at 30° it climbs about 80 mm, and
+over the old 150 mm twist that was up to 100% steep, rounding over sharply at
+the top. Agreed before building: a long roll is split into printable pieces
+following one smooth curve, and the automatic lead-in is long enough to hold
+a car at Top speed.
+
+### Added
+
+- **A long roll prints as several pieces.** Set one **Roll length**, as long as
+  it needs to be, and the Parts Library adds as many Rolls as it takes to fit
+  your printer's bed (Settings ▸ Printer). Each piece takes its share of one
+  smooth curve and carries on from the lean the one before finishes at. Every
+  piece's solid base sits on the real floor, even when it starts already
+  leaning. Pieces are named "(1/7)", "(2/7)" and so on.
+- **Fit**, on the Roll length. The length is worked out so the outside edge
+  climbs no steeper than 15%, and a car at your **Top speed** stays down where
+  the climb rounds over. Type over it to change it.
+- **What the outside edge does**, shown under the length: how far it climbs,
+  its steepest grade, the fastest a car can take it without lifting off, and
+  how many pieces it prints as. It turns amber when the climb is steeper than
+  15% or a car at Top speed would lift off. Part Details shows the same for a
+  Roll already placed, and says when a piece is one part of a longer roll.
+
+### Changed
+
+- **The automatic lead-in to a banked curve is sized and split the same way.**
+  For example, the default 4-lane, 30° bank, with a Top speed of 500 mm/s and
+  a 256 mm bed, gets 7 Rolls of 229 mm before it. Their outside edge never
+  climbs steeper than 14.6%, and a car stays on up to about 4,500 mm/s. Steeper
+  banks and wider track get longer lead-ins. Fewer lanes, a gentler bank or a
+  bigger bed mean fewer pieces.
+- **Level out** is sized and split the same way, and the Roll's solid base is
+  now On or Off. Where a piece starts and ends leaning decides which of its
+  ends sit on the floor, so there is no longer an Under A or Under B to
+  choose.
+- **A Roll saved before this version** opens as it was.
+
+### Audit
+
+- Parts of a long roll, starting already leaning and covering a stretch of one
+  curve, are watertight and within 0.001% of their volume. Their bases sit on
+  the floor under their low edge.
+- A project check builds the reported case with a 256 mm bed. It confirms the
+  7 Rolls lean 30° all told, each fits the bed and starts where the last
+  ended, and every joint lines up on the same outline. Every piece stands on
+  the floor and the banked curve after them is level. The outside edge stays
+  under 15% everywhere, and a car at 500 mm/s stays on throughout.
+
+---
+
+## [1.4.17] — 2026-11-19
+
+A banked curve added onto level track no longer tips over. Reported by the
+project owner: the default banked curve, 4 lanes, added onto a level 4-lane
+straight, came out tipped on its side and could not print. A banked curve
+leans the same at both ends, so joining one straight onto a level end turned
+the whole curve to match it: the turn went off level and its base tipped.
+
+### Fixed
+
+- **Adding a banked curve puts a Roll in first.** When the highlighted end does
+  not already lean to match the curve, the Parts Library adds a Roll from that
+  end's lean to the curve's — into the turn by its bank angle — and then the
+  curve onto the Roll. The Roll is named "Roll into bank 30°" and has the same
+  lanes and colour.
+  - **On the floor:** the Roll takes a base under side A, so it and the bank
+    after it stand on the floor.
+  - **Already leaning:** joining onto an end that already leans the same way,
+    such as another banked curve or a straight after one, adds no Roll. An end
+    leaning the other way gets one that rolls the whole difference.
+  - **Library hint:** the footer says when a Roll will go in first.
+- **Part Details warns about a tipped banked curve**, one joined straight to
+  level track with the Connect tool or saved that way, and says how to fix it.
+
+### Audit
+
+- A project check builds the reported case: a level 4-lane straight on the
+  floor, then the default banked curve. It confirms a 30° Roll with a base
+  under A goes in first and the banked curve after it is level. Both stand
+  on the floor. A second banked curve clips straight on with no Roll, a
+  right-hand one gets a Roll leaning right, and one leaning the wrong way
+  rolls the whole 60°.
+
+---
+
+## [1.4.16] — 2026-11-19
+
+Coming back out of a bank. The project owner asked for a part to take the
+track from a bank back to flat. It existed — a Roll leaning the other way with
+its base under B — but nothing pointed to it. Clipping the default Roll onto a
+bank's end leaned the road further over instead.
+
+### Added
+
+- **Level out**, on the Roll. With an end that leans highlighted, Roll offers
+  **Lean left**, **Lean right** and **Level out**.
+  - **What it does:** it reads how far that end leans and rolls the road
+    exactly back to flat, with its base under B, so side B sits level on the
+    floor ready for a straight. There is no angle to set: it hides the Angle
+    field and says what it is levelling.
+  - **In the Parts Library:** picking a Bend for a leaning end starts on Roll ▸
+    Level out.
+  - **In Part Details:** a Roll whose side A is joined to a leaning end offers
+    Level out too, and shows it selected when that is what it does.
+- **The way out of a banked turn:** highlight the bank's end, or a straight
+  leaning after it, then Bend ▸ Level out ▸ Add, then a straight.
+
+### Audit
+
+- Project checks confirm:
+  - Level out reads −30° off the end of a left-leaning 30° bank, and off a
+    straight leaning after it.
+  - It reads nothing off a level end.
+  - On a right-hand bank it reads +30°, and the Roll it makes ends level
+    with its base on the floor.
+
+---
+
+## [1.4.15] — 2026-11-19
+
+Banking rebuilt from ordinary track. Printed, the 1.4.10–1.4.14 banked curve
+had no end that anything else could clip onto: its bowl-shaped road matched no
+other part. Asked whether a bank could be made from the existing parts instead,
+the answer was nearly. Joints already follow a lean, so a straight clipped onto
+a leaning end leans too. What was missing was a piece that rolls the track over
+to one side, and a turn that stays level while it leans. The project owner
+agreed to build it this way, with the twist as a Roll setting on the Bend.
+This replaces the bowl-shaped banked curve and its Side B setting.
+
+### Added
+
+- **Roll, on the Bend.** **Bend: Pitch** is the bend as before. **Bend: Roll**
+  leans the road over to one side along a straight run.
+  - **Lean left** or **right**, by an **Angle** (presets 15, 30, 45 and 60°, up
+    to 60°), over a **Twist length** (default 150) between a level connector
+    section at each end.
+  - The road leans about its low edge, so that edge stays where it was the
+    whole way. The lean follows smootherstep, starting and finishing with no
+    jolt.
+  - **Solid base: Under A** stands side A level on the floor and leans away
+    from it. **Under B** is for levelling out: the road comes in leaning and
+    side B sits level on the floor. The low edge stays on the floor either
+    way, and there is an opening up through the fill to each slot at the
+    leaning end.
+- **A run into a bank and out:** straight → Roll lean left 30° (base under A) →
+  Banked curve left 30° → any straights, which lean with it → Roll lean right
+  30° (base under B) → straight.
+
+### Changed
+
+- **The banked curve is a level turn whose road leans in.** It is the ordinary
+  track section, leaning by the bank angle, the same all the way round and at
+  both ends. A Roll, another banked curve or a plain straight clips on at
+  either end, clips included.
+  - **Settings:** bank angle (presets 15, 30, 45 and 60°, up to 60°), solid
+    base on or off, radius, sweep and direction. It always leans in towards
+    the inside of the turn.
+  - **Solid base:** fills down to the floor under the leaning road, with
+    openings up to the slots at both ends.
+  - **Drawing:** the Parts Library and Part Details show the leaning section
+    end-on, with its angle and base.
+- **The car rides the road's own frame.** It leans with a Roll, a banked curve
+  or a straight clipped on to one, and sits square to the road.
+- **Sliding works on any leaning road, not just banked curves.** Stopped on a
+  lean steeper than about 19°, a car slides down it. On a banked curve, going
+  too fast it slides up, and at v = √(r·g·tan θ) it holds its line with no
+  grip. Level track, ordinary curves included, handles as before.
+- **The bend's solid base is built by the same code as the roll's and the
+  banked curve's**, generalised to a base plane at any angle and either end on
+  the base or raised off it. The pitch bend audits exactly as before.
+- **A banked curve saved by 1.4.10–1.4.14** opens as a leaning one at the same
+  angle, with a solid base.
+
+### Removed
+
+- The bowl-shaped bank, the automatic blending from neighbours and the Side B
+  "Stay banked / Close to flat" setting.
+
+### Fixed
+
+These were caught by the audit while building and never reached a release.
+- **A twisting road came out a little short.** Its panels are not flat, and
+  splitting every one along the same diagonal shaved a little off each, all
+  the same way. A 30° roll was 0.9% under volume. Diagonals now alternate
+  station by station, which cancels it to 0.004%. Flat panels, on every other
+  piece, are unaffected.
+- **The fill under a leaning road lost a sliver along its high wall.** The wall
+  leans too, so its foot is not straight above the base under it. That was
+  12% of a banked curve. The fill now keeps the road's bottom corners.
+
+### Audit
+
+- Rolls left and right, on 1 to 3 lanes, with no base or a base under either
+  end, are watertight and within 0.005% of their volume. That volume is worked
+  out from the section's area, which leaning does not change, plus the
+  triangle of fill under the lean, less the openings. Each based roll's low
+  edge is on its base.
+- Banked curves left and right, on 1 to 3 lanes, with and without a base, are
+  watertight and within 0.08% of their volume, by Pappus. That includes one
+  too short for a solid middle. The base is at the inside edge's foot.
+- A project check builds the run straight → roll in → banked → straight →
+  roll out → straight and confirms:
+  - The roll goes from level to 30°, and the banked curve and the straight
+    after it lean 30°.
+  - The roll out ends level, on the floor.
+  - Every joint carries every corner of the track outline at the same place
+    in both pieces' meshes.
+  - All three based pieces stand on the floor.
+  - A parked car slides down the lean, holds at the balanced speed, and does
+    not slide on level track.
+
+---
+
+## [1.4.14] — 2026-11-19
+
+A smoother way in and out of the bank. The project owner found a closing
+curve's way down still too steep and asked for a change the car would not
+notice.
+
+### Changed
+
+- **The bank changes over the whole turn, not just the first 30° of it.** Past
+  each end's connector section, a closing curve now eases down over all the
+  rest of its turn, and a first piece rises over all of its. A curve that
+  changes at both ends gives each half. The longer the curve, the gentler the
+  change, so a bigger sweep or radius on the closing piece makes it gentler
+  still.
+- **The blend follows smootherstep instead of half a cosine.** Both start and
+  finish level, but with half a cosine the rate at which the tilt speeds up
+  jumps at each end, which a car feels as a small jolt going into and out of
+  the bank. With smootherstep (6u⁵ − 15u⁴ + 10u³) that settles to nothing too,
+  so the tilt builds in and fades out.
+
+### Fixed
+
+- **A blend allowed to span the whole turn would have stepped.** The bank was
+  worked out from one end, then the other, so the end that was not changing
+  held its angle right up to where the far end's change should have finished.
+  A 60°→15° closing curve would have dropped 45° in one step at its connector
+  section. Each end now pulls the bank towards its own angle by however far
+  its blend has still to go, so the two combine instead of taking turns. It
+  was caught by the audit, coming out 0.4% under volume, before it reached a
+  piece.
+- **A curve too short to blend no longer goes below flat.** It keeps each
+  end's angle up to its middle.
+
+### Audit
+
+- All banked cases are still watertight and within 0.05% of their volume,
+  including the 60°→15° half turn.
+- A project check rolls a 30° closing curve from end to end, a quarter
+  millimetre at a time. It is held at 30° through its first connector section,
+  at 15° half way round and flat through its last. Nowhere does it tilt faster
+  than the smooth curve's own peak of 0.144° per mm. Over the first and last
+  2% of each blend the tilt has barely begun to change.
+
+---
+
+## [1.4.13] — 2026-11-19
+
+A banked curve can now end at full bank. In 1.4.12 one with nothing after it
+eased back down to flat inside the same piece, so a single banked curve rose
+and fell again. The project owner asked for it to stop where it has rounded up
+to the bank, so more track can carry on at that angle, and for a closing piece
+chosen on purpose. Agreed before building: a setting on side B, defaulting to
+staying banked.
+
+### Added
+
+- **Side B: Stay banked or Close to flat**, on every banked curve.
+  - **Stay banked** (the default) ends at full bank, cut square across, so
+    another banked curve clipped on carries on at that angle with no dip.
+  - **Close to flat** eases back down over the end of the turn and finishes as
+    an ordinary track's end, ready for a straight or a curve. Use it on the
+    last banked piece of a run.
+  - A straight clipped onto a curve set to stay banked leaves a step in the
+    road. Part Details says so and suggests closing it.
+  - Default names say "closing" for a closing piece.
+
+### Changed
+
+- **An open end stays banked.** Side A still starts from whatever it is joined
+  to: flat after ordinary track or nothing, or whatever the banked curve
+  before it finishes at.
+- **Only an end that changes angle takes a blend.** A first piece that rises
+  from flat and stays banked gets all the room between its connector sections
+  for the rise, up to 30° of the turn, instead of half of it.
+
+### Audit
+
+- A first piece rising 0°→30° and staying at 30° is watertight, at the right
+  height and within 0.03% of its volume, alongside the earlier cases.
+- Project checks confirm:
+  - A curve left open, or set to stay banked, finishes at full bank.
+  - A closing curve finishes flat for the straight after it.
+  - The next piece carries on from what the one before finishes at, including
+    flat after a closing one.
+  - A straight on a stay-banked end is flagged.
+  - Two curves joined side B to side B agree.
+  - A one-sided blend gets the whole room.
+  - The setting is saved with the project.
+
+---
+
+## [1.4.12] — 2026-11-19
+
+The banked curve, simplified. The project owner found 1.4.10–1.4.11 too
+complicated and asked for just a bank angle, with the bank blending smoothly
+from whatever it is joined to. This removes the flat section, the separate
+bank lanes, the per-end settings and the pivot setting.
+
+### Changed
+
+- **A banked curve has one setting of its own: the bank angle.** Its width is
+  the ordinary Width field, as on a Curve. Radius, sweep and direction work as
+  they did. The whole road between the two walls tilts up towards the outside
+  of the turn as a curved bowl, and the outer wall rises with it.
+- **It blends automatically from what it is joined to.**
+  - After ordinary track, or nothing, it starts flat. Its end is then exactly an
+    ordinary straight's end, wall for wall.
+  - After another banked curve, it carries on from that curve's angle.
+  - Before ordinary track, or nothing, it eases back to flat.
+  - Before another banked curve, it holds its own angle and lets the next one
+    blend from it.
+  - It changes as you join and unjoin pieces, so a chain of banked curves at
+    different angles flows from one to the next without dipping at the joints.
+  - Each blend follows half a cosine, starting and finishing gently, over up to
+    30° of the turn after each end's connector section. On a short curve the
+    two blends share what room there is.
+- **The drawings follow suit.** The end-on view shows the road at the bank
+  angle over the road it starts from. The strip below shows the bank round the
+  turn, labelled with what it starts at, reaches and finishes at. In the Parts
+  Library, the start is the angle of the banked curve it is about to join onto,
+  if any.
+- **A banked curve saved by 1.4.10 or 1.4.11** opens as wide as its flat and
+  bank lanes together, all of it banked.
+
+### Removed
+
+- The Flat section, Banked section and Ends and pivot cards, and the flat-lane
+  and bank-lane counts.
+
+### Fixed
+
+- **A right-hand banked curve's pocket walls faced inward.** Mirroring them
+  for the right turn turned their faces inside out. A one-lane right turn came
+  out 12% under volume in the audit. They are now laid out at the mirrored
+  slot positions without being flipped.
+- **Two banked curves meeting at the same angle could use different numbers
+  of points across the bowl**, leaving a hairline step at the joint. Every
+  banked curve now uses the same number, so they meet on the very same
+  section.
+
+### Audit
+
+- Banked curves blending 0→30→0, 30→45→45, 60→60→15 and 15→15→15, left and
+  right, at 1 to 4 lanes, are watertight. Each one's height is that of its
+  steepest point, and its volume is within 0.04% of a value summed
+  independently round the turn.
+- A flat end has every corner of an ordinary straight of the same width, and a
+  30° curve and a 45° one meet on the same 30° section, point for point.
+- A project check runs straight, banked 30°, banked 45°, straight. It confirms
+  each end's angle is as described above, that both sides of every joint agree
+  whichever way the pieces are joined, and that the blend is at its start
+  angle through the connector section, half way at half way, and at its own
+  angle once blended. It also checks that a flat end holds a parked car and
+  the bank lets it slide.
+
+---
+
+## [1.4.11] — 2026-11-19
+
+The banked curve now eases in. In 1.4.10 the bank ran right to the ends, so at
+a joint with ordinary track the bank and outer wall stuck out past the straight
+and a car met the full bank all at once. The project owner asked for the end
+to start flat and pivot into the bank to suit the car's inertia, with the
+outer walls meeting seamlessly. This reverses 1.4.10's "bank runs to the ends".
+Agreed before building:
+- A flat end is ordinary track as wide as all the lanes.
+- Each end can be flat or stay banked.
+- The pivot is a setting, 30° of turn by default.
+
+### Changed
+
+- **A flat end is an ordinary straight's end, as wide as all the lanes, flat
+  and bank together.** Its walls, fillets, road and slots are exactly those of a
+  straight that wide, so the two meet wall for wall. To join a narrower
+  straight, put a Transition between them.
+- **The bank pivots up into the turn.** Past the end's connector section, the
+  bank lanes tilt up about the edge of the flat lanes and the outer wall rises
+  with them, until they reach the bank angle. The tilt follows half a cosine,
+  starting and finishing gently, so the car's weight comes onto the bank as
+  the turn takes hold.
+- **The car's track is measured to the middle of the whole width**, as on any
+  ordinary piece, not to the middle of the flat lanes.
+- **Both walls keep the ordinary fillet at their foot.** On the outer wall it
+  rises with the top of the bank.
+- **Clips go on the outermost lanes**, as on any piece as wide.
+- **A car may use the whole width** between the two walls' fillets. The physics
+  read the bank's angle where the car actually is, so it is level at a flat
+  end and grows through the pivot.
+
+### Added
+
+- **Ends and pivot**, a fourth card in purple:
+  - **Side A** and **Side B**, each **Flat** or **Banked**. Banked stays at
+    full bank to the joint, so two banked curves can meet bank to bank. A long
+    banked turn is then Flat→Banked, Banked→Banked, …, Banked→Flat.
+  - **Pivot over**: how much of the turn a flat end takes to reach full bank.
+    Presets 15, 30 and 45° of turn, anything from 5 to 90°; default 30°. On a
+    curve too short for it, the pivot is shortened to meet in the middle, and
+    the card says so.
+- **Two more marks on the drawings.** The end-on view shows the flat end's
+  road dashed in purple behind the full bank, so you can see what the pivot
+  turns. Under it, a strip plots the bank's angle round the turn from side A
+  to side B, with the connector sections shaded.
+
+### Audit
+
+- Pivoting banked curves are watertight: left and right, flat lanes on and
+  off, one end banked or both, at 15° to 75°, with a pivot too long for the
+  curve, at the tightest radius, and with the shortest pivot. Each one's
+  volume is within 0.05% of a value summed independently round the turn.
+- Every corner of an ordinary straight as wide as all the lanes is on a flat
+  end's face, and nothing on that face is higher or wider.
+- Project checks confirm:
+  - A banked curve between two 4-lane straights has 4-lane ends, and its clips
+    land on the straights' slots.
+  - The bank is flat through each connector section, full once it has
+    pivoted, and half way up half way through. A banked end stays banked.
+  - A pivot too long is shortened to fit.
+  - At a flat end, the spot that slides down at full bank is level and holds.
+
+### Fixed
+
+- **A pivot of 0° made a step.** The bank jumped to full in one slice of the
+  mesh, leaving a wedge across the road. The shortest pivot is now 5° of turn.
+
+---
+
+## [1.4.10] — 2026-11-19
+
+Banked curves. The project owner supplied CAD drafts with guard walls on both
+sides and a flat section inside the bank, and asked for three settings kept
+visibly apart: the flat section and its lanes, the bank's lanes, and the bank's
+angle. Agreed before building: a curved bowl rather than a straight incline,
+the bank running right to the ends, solid to a flat base, and real banking
+physics in the simulator.
+
+### Added
+
+- **Banked curve**, a new part in the Parts Library. Seen end-on, from the
+  inside of the turn outward, it has the inner guard wall, the flat lanes, the
+  bank, and the outer guard wall. The bank is a curved bowl: it leaves the flat
+  lanes level and curves up to the bank angle at the outer wall. The outer wall
+  stands as high above the top of the bank as an ordinary wall stands above
+  its road. The bank is always on the outside of the turn.
+- **Three settings, each in its own numbered, colour-keyed card:**
+  1. **Flat section**: on or off, and how many lanes (default on, 1 lane).
+  2. **Banked section**: how many lanes across the bank (default 1).
+  3. **Bank angle**: how steep the bank is at the outer wall (presets 15, 30,
+     45 and 60°, any angle from 1 to 75°; default 30°).
+  Radius, sweep and direction follow, as on a curve.
+- **An end-on view of the cross-section, drawn to scale**, in the Parts Library
+  and Part Details. The flat lanes' road is drawn in the track colour, the bank
+  in blue, and the angle at the top of the bank in amber with its value. Each
+  section's lanes are bracketed and labelled underneath. Changing a setting
+  changes only its own part of the drawing.
+- **Joining.** The cross-section runs right to both ends. The radius is
+  measured to the middle of the flat lanes, so they meet ordinary track of the
+  same width exactly, and their clips go on their own slots. Two banked curves
+  built the same way clip across their full width, bank lanes included, so
+  several can make one long banked turn. With the flat section off, the bank's
+  lanes are the ones that meet ordinary track.
+- **Solid to a flat base**, like a ramp, so it prints flat and stands on its
+  own. There is a T-slot under every lane at each end. Raised, it takes support
+  clips like any other piece.
+- **Banking physics in the simulator and the rolling preview.** The car sits
+  on the road at its height and leans in with the bank wherever it is across
+  the track. Along the surface, the turn pushes it outward and gravity pulls
+  it back down the slope. Its tyres hold it while the difference stays within
+  their grip. Beyond that, too fast and it slides up the bank, too slow and it
+  slides down. A wall stops the slide. At v = √(r·g·tan θ) the two balance
+  exactly and it needs no grip at all. The Bank angle card shows that speed
+  for the steepest part of the bank. The tyres' sideways grip is 0.35 of the
+  load on them, so a car stopped on a bank steeper than about 19° slides down.
+
+### Audit
+
+- Banked curves left and right, with and without flat lanes, at 1 to 3 lanes
+  either side, at angles from 15° up to the 75° limit and at the tightest
+  radius allowed, are all watertight. Each one's height is as worked out and
+  its volume is within 0.03% of the exact value, under, as on a curve.
+- The flat lanes have the same width, floor and slot positions as an ordinary
+  straight of that many lanes.
+- A project check builds straight, banked curve, straight and confirms:
+  - The joint widths match.
+  - The banked curve's clips land exactly on the straights' slots.
+  - Two matching banked curves clip across their full width, and mismatched
+    ones only on the flat lanes.
+  - At the balanced speed the car holds its line. Stopped on a 26° stretch it
+    slides down. Fast on the flat lanes it drifts out, and slow it holds.
+
+### Still to confirm
+
+1. **The sideways grip of 0.35** is a first guess for plastic wheels. Check it
+   against a real car on a printed bank.
+2. **The simulator uses scaled gravity**, as it does on ramps, so its balanced
+   speed is the square root of the car's scale lower than the rolling
+   preview's. That is about 8× lower for a 1:64 car. The card shows the rolling
+   preview's figure.
+3. **How a steep bank prints.** A 60° bank on a solid base is a lot of
+   plastic. A version that follows the bank, like the CAD drafts, could be an
+   option later.
+
+---
+
 ## [1.4.9] — 2026-11-19
 
 Parts Library only. No part, dimension or tool changed.
